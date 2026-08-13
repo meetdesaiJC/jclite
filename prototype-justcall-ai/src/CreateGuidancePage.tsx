@@ -529,7 +529,7 @@ export function CreateGuidancePage({
       <Modal
         open={Boolean(viewingResource)}
         onClose={() => setViewingResource(null)}
-        size={viewingResource?.type === "image" ? "lg" : "md"}
+        size="lg"
         title={viewingResource?.name}
       >
         {viewingResource?.type === "image" ? (
@@ -544,17 +544,6 @@ export function CreateGuidancePage({
               <BattlecardVisual className="w-full" />
             )}
           </div>
-        ) : viewingResource?.url ? (
-          <p className="text-paragraph-md text-foreground">
-            <a
-              href={viewingResource.url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-brand hover:text-brand-hover"
-            >
-              {viewingResource.url}
-            </a>
-          </p>
         ) : null}
       </Modal>
     </main>

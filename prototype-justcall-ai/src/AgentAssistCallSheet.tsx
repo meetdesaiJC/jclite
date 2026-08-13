@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { cn } from "@/lib/utils";
 import { Dropdown } from "@/components/Dropdown";
-import { IconCircleCheckFilled, IconCircleDashed } from "@/components/Icon";
 import { IconJcaiAgentAssist } from "./icons/JustCallAiNavIcons";
 import {
   CALL_SCENARIOS,
@@ -10,21 +9,52 @@ import {
   type CallScenario,
   type GuidanceSuggestion,
   type ScriptStep,
+  type SimulationSnapshot,
   type TranscriptTurn,
 } from "./callSimulation";
-import { SEED_GUIDANCE, type GuidanceItem, type GuidanceResource } from "./guidanceData";
 import {
-  CriticalPin,
-  formatQuoteTime,
-  LiveGuidanceCard,
-  ResourceOverlay,
-} from "./LiveGuidance";
+  SEED_GUIDANCE,
+  type GuidanceItem,
+  type GuidancePriority,
+  type GuidanceResource,
+} from "./guidanceData";
+import { InCallGuidanceSlot, ResourceOverlay } from "./LiveGuidance";
 
 /**
  * In-call Agent Assist — one stream. The full script stays open so any
  * spoken line can check off. Guidance cards insert under the step they
- * belong to and stay until the agent dismisses them with X.
+ * belong to. Only one card is expanded; the rest sit as compact
+ * suggestions. Cards stay until the agent dismisses them — never on a
+ * timer, and never because the script moved on.
  */
+
+const PRIORITY_RANK: Record<GuidancePriority, number> = {
+  critical: 0,
+  high: 1,
+  normal: 2,
+};
+
+const CARD_ENTER_MS = 250;
+const CARD_EXIT_MS = 160;
+const CARD_ATTENTION_MS = 700;
+const AGENT_SCROLL_IDLE_MS = 2000;
+
+const CHECKLIST_MOTION = {
+  detectMs: 160,
+  completeMs: 200,
+  glowMs: 360,
+  staggerMs: 120,
+  nextMs: 500,
+} as const;
+
+type CheckPhase = "idle" | "detecting" | "completing" | "done";
+
+function formatQuoteTime(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 
 function IconScript(props: SVGProps<SVGSVGElement>) {
   return (
@@ -79,58 +109,14 @@ export function AgentAssistCallSheet({
   className,
 }: AgentAssistCallSheetProps) {
   const [view, setView] = useState<"assist" | "transcript">("assist");
-  const [userAdvanced, setUserAdvanced] = useState(0);
-  const [dismissed, setDismissed] = useState<string[]>([]);
-  const [placements, setPlacements] = useState<Record<string, number>>({});
   const [viewingResource, setViewingResource] = useState<GuidanceResource | null>(
     null
   );
   const snapshot = simulationAt(scenario, elapsedMs, guidanceItems);
   const reduced = prefersReducedMotion();
-
-  const playhead = Math.min(
-    Math.max(snapshot.scriptIndex, userAdvanced),
-    scenario.steps.length
-  );
-
-  const visibleCards = snapshot.suggestions
-    .filter((item) => !dismissed.includes(item.id))
-    .sort((a, b) => a.atMs - b.atMs);
-  const latestCard = visibleCards[visibleCards.length - 1] ?? null;
-  const visibleIds = visibleCards.map((item) => item.id).join(",");
-
-  useEffect(() => {
-    setDismissed([]);
-    setPlacements({});
-    setUserAdvanced(0);
-    setViewingResource(null);
-  }, [scenario.id]);
-
-  useEffect(() => {
-    if (visibleCards.length === 0) return;
-    setPlacements((current) => {
-      let next = current;
-      for (const card of visibleCards) {
-        if (current[card.id] !== undefined) continue;
-        if (next === current) next = { ...current };
-        next[card.id] = insertAfterIndex(scenario.steps, playhead, card);
-      }
-      return next;
-    });
-  }, [visibleIds, playhead, scenario.steps]);
-
-  const options = useMemo(
-    () => CALL_SCENARIOS.map((item) => ({ value: item.id, label: item.scriptName })),
-    []
-  );
-
-  const placedCards = visibleCards.map((card) => ({
-    card,
-    insertAfter:
-      placements[card.id] ?? insertAfterIndex(scenario.steps, playhead, card),
-  }));
-
-  const lastChecked = playhead > 0 ? scenario.steps[playhead - 1] : null;
+  const latestCard = snapshot.suggestions[snapshot.suggestions.length - 1] ?? null;
+  const lastChecked =
+    snapshot.scriptIndex > 0 ? scenario.steps[snapshot.scriptIndex - 1] : null;
   const liveAnnouncement = ended
     ? "Writing the call summary and action items."
     : snapshot.wrapped
@@ -140,6 +126,15 @@ export function AgentAssistCallSheet({
         : lastChecked
           ? `${lastChecked.title} checked.`
           : "";
+
+  useEffect(() => {
+    setViewingResource(null);
+  }, [scenario.id]);
+
+  const options = useMemo(
+    () => CALL_SCENARIOS.map((item) => ({ value: item.id, label: item.scriptName })),
+    []
+  );
 
   return (
     <aside
@@ -195,21 +190,13 @@ export function AgentAssistCallSheet({
       ) : view === "transcript" ? (
         <TranscriptPane turns={snapshot.transcript} reduced={reduced} />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3">
-          <FullScriptList
-            scenario={scenario}
-            playhead={playhead}
-            reduced={reduced}
-            placedCards={placedCards}
-            latestCardId={latestCard?.id ?? null}
-            onDismissCard={(id) => {
-              setDismissed((current) =>
-                current.includes(id) ? current : [...current, id]
-              );
-            }}
-            onViewResource={setViewingResource}
-          />
-        </div>
+        <AssistStream
+          key={scenario.id}
+          scenario={scenario}
+          snapshot={snapshot}
+          reduced={reduced}
+          onViewResource={setViewingResource}
+        />
       )}
 
       {viewingResource && !ended ? (
@@ -225,6 +212,215 @@ export function AgentAssistCallSheet({
         </p>
       )}
     </aside>
+  );
+}
+
+function AssistStream({
+  scenario,
+  snapshot,
+  reduced,
+  onViewResource,
+}: {
+  scenario: CallScenario;
+  snapshot: SimulationSnapshot;
+  reduced: boolean;
+  onViewResource: (resource: GuidanceResource) => void;
+}) {
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const [exiting, setExiting] = useState<string[]>([]);
+  const [pinned, setPinned] = useState<
+    { suggestion: GuidanceSuggestion; insertAfter: number }[]
+  >([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [arrivingIds, setArrivingIds] = useState<Set<string>>(new Set());
+  const [attentionIds, setAttentionIds] = useState<Set<string>>(new Set());
+  const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
+
+  const paneRef = useRef<HTMLDivElement>(null);
+  const cardEls = useRef(new Map<string, HTMLElement>());
+  const pinnedIdsRef = useRef(new Set<string>());
+  const dismissedRef = useRef(dismissed);
+  const expandedIdRef = useRef(expandedId);
+  const pinnedRef = useRef(pinned);
+  const suggestionsRef = useRef(snapshot.suggestions);
+  const pointerInCard = useRef(false);
+  const lastUserScrollAt = useRef(0);
+  const programmaticScroll = useRef(false);
+  const exitTimers = useRef<number[]>([]);
+
+  dismissedRef.current = dismissed;
+  expandedIdRef.current = expandedId;
+  pinnedRef.current = pinned;
+  suggestionsRef.current = snapshot.suggestions;
+
+  const playhead = Math.min(snapshot.scriptIndex, scenario.steps.length);
+  const suggestionSig = snapshot.suggestions.map((item) => item.id).join("|");
+
+  const isReadingCard = () => {
+    if (pointerInCard.current) return true;
+    const active = document.activeElement;
+    return Boolean(
+      active &&
+        [...cardEls.current.values()].some((node) => node.contains(active))
+    );
+  };
+
+  const shouldHoldScroll = () =>
+    isReadingCard() || Date.now() - lastUserScrollAt.current < AGENT_SCROLL_IDLE_MS;
+
+  useEffect(() => {
+    const extras = suggestionsRef.current.filter(
+      (item) =>
+        !pinnedIdsRef.current.has(item.id) && !dismissedRef.current.includes(item.id)
+    );
+    if (extras.length === 0) return;
+
+    extras.forEach((item) => pinnedIdsRef.current.add(item.id));
+    const additions = extras.map((item) => ({
+      suggestion: item,
+      insertAfter: insertAfterIndex(scenario.steps, playhead, item),
+    }));
+    setPinned((current) => [...current, ...additions]);
+    setArrivingIds((current) => new Set([...current, ...extras.map((item) => item.id)]));
+
+    const reading = isReadingCard();
+    const catalog = [...pinnedRef.current, ...additions];
+    let nextExpanded = expandedIdRef.current;
+
+    for (const extra of extras) {
+      if (!nextExpanded) {
+        nextExpanded = extra.id;
+        continue;
+      }
+      const currentCard = catalog.find((entry) => entry.suggestion.id === nextExpanded)
+        ?.suggestion;
+      if (!currentCard) {
+        nextExpanded = extra.id;
+        continue;
+      }
+      const higher =
+        PRIORITY_RANK[extra.priority] < PRIORITY_RANK[currentCard.priority];
+      if (higher || !reading) {
+        nextExpanded = extra.id;
+      }
+    }
+
+    if (nextExpanded !== expandedIdRef.current) {
+      setExpandedId(nextExpanded);
+      if (!shouldHoldScroll() && nextExpanded) {
+        setScrollTargetId(nextExpanded);
+      }
+      if (nextExpanded && extras.some((item) => item.id === nextExpanded)) {
+        setAttentionIds((current) => new Set([...current, nextExpanded]));
+      }
+    }
+  }, [suggestionSig, playhead, scenario.steps]);
+
+  useEffect(() => {
+    if (arrivingIds.size === 0) return;
+    const timer = window.setTimeout(
+      () => setArrivingIds(new Set()),
+      reduced ? 0 : CARD_ENTER_MS + 10
+    );
+    return () => window.clearTimeout(timer);
+  }, [arrivingIds, reduced]);
+
+  useEffect(() => {
+    if (attentionIds.size === 0) return;
+    const timer = window.setTimeout(
+      () => setAttentionIds(new Set()),
+      reduced ? 0 : CARD_ATTENTION_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [attentionIds, reduced]);
+
+  useEffect(() => {
+    if (!scrollTargetId) return;
+    const el = cardEls.current.get(scrollTargetId);
+    setScrollTargetId(null);
+    if (!el || shouldHoldScroll()) return;
+    programmaticScroll.current = true;
+    el.scrollIntoView({
+      behavior: reduced ? "auto" : "smooth",
+      block: "nearest",
+    });
+    const timer = window.setTimeout(() => {
+      programmaticScroll.current = false;
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [scrollTargetId, reduced]);
+
+  useEffect(
+    () => () => {
+      exitTimers.current.forEach((timer) => window.clearTimeout(timer));
+    },
+    []
+  );
+
+  const visibleCards = pinned
+    .filter((entry) => !dismissed.includes(entry.suggestion.id))
+    .sort((a, b) => a.suggestion.atMs - b.suggestion.atMs);
+
+  const dismissCard = (id: string) => {
+    if (dismissed.includes(id) || exiting.includes(id)) return;
+    if (reduced) {
+      setDismissed((current) => (current.includes(id) ? current : [...current, id]));
+      setExpandedId((current) => (current === id ? null : current));
+      return;
+    }
+    setExiting((current) => (current.includes(id) ? current : [...current, id]));
+    const timer = window.setTimeout(() => {
+      setDismissed((current) => (current.includes(id) ? current : [...current, id]));
+      setExiting((current) => current.filter((item) => item !== id));
+      setExpandedId((current) => (current === id ? null : current));
+    }, CARD_EXIT_MS);
+    exitTimers.current.push(timer);
+  };
+
+  return (
+    <div
+      ref={paneRef}
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3"
+      onPointerDown={() => {
+        lastUserScrollAt.current = Date.now();
+      }}
+      onWheel={() => {
+        if (!programmaticScroll.current) lastUserScrollAt.current = Date.now();
+      }}
+      onScroll={() => {
+        if (!programmaticScroll.current) lastUserScrollAt.current = Date.now();
+      }}
+    >
+      <FullScriptList
+        scenario={scenario}
+        playhead={playhead}
+        reduced={reduced}
+        placedCards={visibleCards.map((entry) => ({
+          card: entry.suggestion,
+          insertAfter: entry.insertAfter,
+        }))}
+        expandedId={expandedId}
+        arrivingIds={arrivingIds}
+        attentionIds={attentionIds}
+        exitingIds={exiting}
+        onExpandCard={(id) => {
+          pointerInCard.current = true;
+          setExpandedId(id);
+        }}
+        onDismissCard={dismissCard}
+        onEngage={() => {
+          pointerInCard.current = true;
+        }}
+        onDisengage={() => {
+          pointerInCard.current = false;
+        }}
+        registerCard={(id, node) => {
+          if (node) cardEls.current.set(id, node);
+          else cardEls.current.delete(id);
+        }}
+        onViewResource={onViewResource}
+      />
+    </div>
   );
 }
 
@@ -452,27 +648,224 @@ function ActionItemRow({
   );
 }
 
+function useScriptChecklistMotion({
+  playhead,
+  stepCount,
+  reduced,
+}: {
+  playhead: number;
+  stepCount: number;
+  reduced: boolean;
+}) {
+  const [phases, setPhases] = useState<CheckPhase[]>(() =>
+    Array.from({ length: stepCount }, () => "idle")
+  );
+  const [glowing, setGlowing] = useState<Set<number>>(() => new Set());
+  const [emphasizeIndex, setEmphasizeIndex] = useState<number | null>(null);
+
+  const settledRef = useRef<Set<number>>(new Set());
+  const itemTimers = useRef<Map<number, number[]>>(new Map());
+  const emphasisTimers = useRef<number[]>([]);
+
+  const cancelItem = (index: number) => {
+    const timers = itemTimers.current.get(index);
+    if (!timers) return;
+    timers.forEach((id) => window.clearTimeout(id));
+    itemTimers.current.delete(index);
+  };
+
+  const cancelEmphasis = () => {
+    emphasisTimers.current.forEach((id) => window.clearTimeout(id));
+    emphasisTimers.current = [];
+  };
+
+  useEffect(
+    () => () => {
+      itemTimers.current.forEach((timers) =>
+        timers.forEach((id) => window.clearTimeout(id))
+      );
+      itemTimers.current.clear();
+      emphasisTimers.current.forEach((id) => window.clearTimeout(id));
+      settledRef.current = new Set();
+    },
+    []
+  );
+
+  useEffect(() => {
+    const target = new Set<number>();
+    for (let index = 0; index < playhead; index += 1) {
+      target.add(index);
+    }
+
+    const toRevert: number[] = [];
+    for (const index of settledRef.current) {
+      if (!target.has(index)) toRevert.push(index);
+    }
+
+    const toComplete: number[] = [];
+    for (const index of target) {
+      if (!settledRef.current.has(index)) toComplete.push(index);
+    }
+    toComplete.sort((a, b) => a - b);
+
+    if (toRevert.length > 0) {
+      for (const index of toRevert) {
+        cancelItem(index);
+        settledRef.current.delete(index);
+      }
+      setPhases((current) => {
+        const next =
+          current.length === stepCount
+            ? [...current]
+            : Array.from({ length: stepCount }, (_, i) => current[i] ?? "idle");
+        toRevert.forEach((index) => {
+          next[index] = "idle";
+        });
+        return next;
+      });
+      setGlowing((current) => {
+        const next = new Set(current);
+        toRevert.forEach((index) => next.delete(index));
+        return next;
+      });
+    }
+
+    if (toComplete.length === 0) return;
+
+    let nextIncomplete: number | null = null;
+    for (let index = 0; index < stepCount; index += 1) {
+      if (!target.has(index)) {
+        nextIncomplete = index;
+        break;
+      }
+    }
+
+    if (reduced) {
+      toComplete.forEach((index) => settledRef.current.add(index));
+      setPhases((current) => {
+        const next =
+          current.length === stepCount
+            ? [...current]
+            : Array.from({ length: stepCount }, (_, i) => current[i] ?? "idle");
+        toComplete.forEach((index) => {
+          next[index] = "done";
+        });
+        return next;
+      });
+      return;
+    }
+
+    toComplete.forEach((index, order) => {
+      settledRef.current.add(index);
+      const start = order * CHECKLIST_MOTION.staggerMs;
+      const timers: number[] = [];
+
+      timers.push(
+        window.setTimeout(() => {
+          setPhases((current) => {
+            const next = [...current];
+            next[index] = "detecting";
+            return next;
+          });
+        }, start)
+      );
+
+      timers.push(
+        window.setTimeout(() => {
+          setPhases((current) => {
+            const next = [...current];
+            next[index] = "completing";
+            return next;
+          });
+        }, start + CHECKLIST_MOTION.detectMs)
+      );
+
+      timers.push(
+        window.setTimeout(() => {
+          setPhases((current) => {
+            const next = [...current];
+            next[index] = "done";
+            return next;
+          });
+          setGlowing((current) => new Set(current).add(index));
+        }, start + CHECKLIST_MOTION.detectMs + CHECKLIST_MOTION.completeMs)
+      );
+
+      timers.push(
+        window.setTimeout(() => {
+          setGlowing((current) => {
+            const next = new Set(current);
+            next.delete(index);
+            return next;
+          });
+        }, start + CHECKLIST_MOTION.detectMs + CHECKLIST_MOTION.completeMs + CHECKLIST_MOTION.glowMs)
+      );
+
+      itemTimers.current.set(index, timers);
+    });
+
+    if (nextIncomplete == null) {
+      cancelEmphasis();
+      setEmphasizeIndex(null);
+      return;
+    }
+
+    const lastDoneAt =
+      (toComplete.length - 1) * CHECKLIST_MOTION.staggerMs +
+      CHECKLIST_MOTION.detectMs +
+      CHECKLIST_MOTION.completeMs;
+    cancelEmphasis();
+    emphasisTimers.current.push(
+      window.setTimeout(() => setEmphasizeIndex(nextIncomplete), lastDoneAt)
+    );
+    emphasisTimers.current.push(
+      window.setTimeout(() => {
+        setEmphasizeIndex((current) =>
+          current === nextIncomplete ? null : current
+        );
+      }, lastDoneAt + CHECKLIST_MOTION.nextMs)
+    );
+  }, [playhead, stepCount, reduced]);
+
+  return { phases, glowing, emphasizeIndex };
+}
+
 function FullScriptList({
   scenario,
   playhead,
   reduced,
   placedCards,
-  latestCardId,
+  expandedId,
+  arrivingIds,
+  attentionIds,
+  exitingIds,
+  onExpandCard,
   onDismissCard,
+  onEngage,
+  onDisengage,
+  registerCard,
   onViewResource,
 }: {
   scenario: CallScenario;
   playhead: number;
   reduced: boolean;
   placedCards: { card: GuidanceSuggestion; insertAfter: number }[];
-  latestCardId: string | null;
+  expandedId: string | null;
+  arrivingIds: Set<string>;
+  attentionIds: Set<string>;
+  exitingIds: string[];
+  onExpandCard: (id: string) => void;
   onDismissCard: (id: string) => void;
+  onEngage: () => void;
+  onDisengage: () => void;
+  registerCard: (id: string, node: HTMLElement | null) => void;
   onViewResource: (resource: GuidanceResource) => void;
 }) {
-  const cardRef = useRef<HTMLDivElement | null>(null);
-  const lastSeenCardAtMs = useRef(0);
-  const latestAtMs =
-    placedCards.find((item) => item.card.id === latestCardId)?.card.atMs ?? 0;
+  const { phases, glowing, emphasizeIndex } = useScriptChecklistMotion({
+    playhead,
+    stepCount: scenario.steps.length,
+    reduced,
+  });
 
   const cardsByStep = new Map<number, GuidanceSuggestion[]>();
   for (const { card, insertAfter } of placedCards) {
@@ -481,50 +874,37 @@ function FullScriptList({
     cardsByStep.set(insertAfter, list);
   }
 
-  useEffect(() => {
-    lastSeenCardAtMs.current = 0;
-  }, [scenario.id]);
-
-  useEffect(() => {
-    const isNewCard = Boolean(latestCardId && latestAtMs > lastSeenCardAtMs.current);
-    if (!isNewCard) return;
-    lastSeenCardAtMs.current = latestAtMs;
-    cardRef.current?.scrollIntoView({
-      behavior: reduced ? "auto" : "smooth",
-      block: "nearest",
-    });
-  }, [latestCardId, latestAtMs, reduced, scenario.id]);
-
   return (
     <ol className="flex flex-col" aria-label="Call script">
       {scenario.steps.map((step, index) => {
-        const checked = index < playhead;
         const stepCards = cardsByStep.get(index) ?? [];
+        const phase = phases[index] ?? "idle";
 
         return (
           <li key={`${scenario.id}-${step.title}`} className="flex flex-col">
-            <ScriptStepRow step={step} checked={checked} reduced={reduced} />
+            <ScriptStepRow
+              step={step}
+              phase={phase}
+              glow={glowing.has(index)}
+              emphasize={emphasizeIndex === index}
+              reduced={reduced}
+            />
             {stepCards.map((card) => (
-              <div
+              <InCallGuidanceSlot
                 key={card.id}
-                ref={card.id === latestCardId ? cardRef : undefined}
-                className="scroll-mt-2 py-1.5"
-              >
-                {card.priority === "critical" ? (
-                  <CriticalPin
-                    item={card}
-                    reduced={reduced}
-                    onDismiss={() => onDismissCard(card.id)}
-                  />
-                ) : (
-                  <LiveGuidanceCard
-                    item={card}
-                    reduced={reduced}
-                    onDismiss={() => onDismissCard(card.id)}
-                    onViewResource={onViewResource}
-                  />
-                )}
-              </div>
+                item={card}
+                reduced={reduced}
+                expanded={expandedId === card.id}
+                arriving={arrivingIds.has(card.id)}
+                exiting={exitingIds.includes(card.id)}
+                attention={attentionIds.has(card.id)}
+                onExpand={() => onExpandCard(card.id)}
+                onDismiss={() => onDismissCard(card.id)}
+                onViewResource={onViewResource}
+                onEngage={onEngage}
+                onDisengage={onDisengage}
+                cardRef={(node) => registerCard(card.id, node)}
+              />
             ))}
           </li>
         );
@@ -533,39 +913,90 @@ function FullScriptList({
   );
 }
 
+function ScriptCheckMark({
+  phase,
+  glow,
+}: {
+  phase: CheckPhase;
+  glow: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "relative flex size-4 shrink-0 items-center justify-center",
+        glow && "script-check-glow"
+      )}
+    >
+      <svg
+        viewBox="0 0 16 16"
+        width={16}
+        height={16}
+        fill="none"
+        aria-hidden="true"
+        data-phase={phase}
+        className={cn(
+          "script-check size-4 overflow-visible",
+          phase === "completing" || phase === "done"
+            ? "text-success"
+            : "text-disabled-fg"
+        )}
+      >
+        <circle className="script-check-fill" cx="8" cy="8" r="6" />
+        <circle
+          className="script-check-dash"
+          cx="8"
+          cy="8"
+          r="6"
+          stroke="currentColor"
+          strokeWidth="1.15"
+          strokeDasharray="1.55 2.4"
+          strokeLinecap="round"
+        />
+        <path
+          className="script-check-mark"
+          d="M5.15 8.2 L7.1 10.15 L10.95 5.85"
+          stroke="white"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
 function ScriptStepRow({
   step,
-  checked,
+  phase,
+  glow,
+  emphasize,
   reduced,
 }: {
   step: ScriptStep;
-  checked: boolean;
+  phase: CheckPhase;
+  glow: boolean;
+  emphasize: boolean;
   reduced: boolean;
 }) {
+  const complete = phase === "completing" || phase === "done";
+
   return (
-    <div className="rounded-[6px] px-1 py-1.5">
+    <div
+      className={cn(
+        "rounded-[6px] px-1 py-1.5",
+        emphasize && !reduced && "script-next-emphasis"
+      )}
+    >
       <div className="flex items-start gap-2">
-        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-          {checked ? (
-            <IconCircleCheckFilled
-              size={16}
-              className="size-4 text-success"
-              aria-hidden="true"
-            />
-          ) : (
-            <IconCircleDashed
-              size={16}
-              className="size-4 text-disabled-fg"
-              aria-hidden="true"
-            />
-          )}
+        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center overflow-visible">
+          <ScriptCheckMark phase={phase} glow={glow} />
         </span>
         <div className="min-w-0 flex-1">
           <p
             className={cn(
-              "min-w-0 text-pretty text-paragraph-sm",
-              reduced ? "transition-none" : "transition-colors duration-150",
-              checked ? "text-muted-foreground line-through" : "text-foreground"
+              "script-step-title min-w-0 text-pretty text-paragraph-sm",
+              complete ? "is-complete text-muted-foreground" : "text-foreground",
+              reduced && "transition-none"
             )}
           >
             {step.title}
