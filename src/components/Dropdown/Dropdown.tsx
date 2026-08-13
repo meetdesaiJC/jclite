@@ -476,11 +476,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
 
     const triggerTextClass = cn(
       filled
-        ? variant === "borderless"
-          ? "text-brand"
-          : disabled
-            ? "text-disabled-fg"
-            : "text-foreground"
+        ? "text-foreground"
         : "text-disabled-fg",
       disabled && "text-disabled-fg"
     );

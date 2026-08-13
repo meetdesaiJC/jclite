@@ -3,6 +3,7 @@ import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
 import { flattenSteps, spokenLineFor, type PlaybookStep, type ScriptPlaybook } from "./scriptPlaybook";
+import { SpeakProgressHint } from "./SpeakProgressHint";
 
 const STEP_HOLD_MS = 2400;
 const COMPLETE_HOLD_MS = 1600;
@@ -95,25 +96,28 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
           Add steps in the editor to preview this script.
         </p>
       ) : (
-        <ol className="flex flex-col gap-1.5 rounded-lg bg-secondary-bg p-2" aria-label="Script preview">
-          {steps.map((step, index) => {
-            const state = complete
-              ? "done"
-              : index < activeIndex
+        <div className="flex flex-col gap-1.5 rounded-lg bg-secondary-bg p-2">
+          <SpeakProgressHint className="px-3 py-1.5" />
+          <ol className="flex flex-col gap-1.5" aria-label="Script preview">
+            {steps.map((step, index) => {
+              const state = complete
                 ? "done"
-                : index === activeIndex
-                  ? "active"
-                  : "upcoming";
-            return (
-              <PreviewStep
-                key={step.id}
-                ref={state === "active" ? activeRef : undefined}
-                step={step}
-                state={state}
-              />
-            );
-          })}
-        </ol>
+                : index < activeIndex
+                  ? "done"
+                  : index === activeIndex
+                    ? "active"
+                    : "upcoming";
+              return (
+                <PreviewStep
+                  key={step.id}
+                  ref={state === "active" ? activeRef : undefined}
+                  step={step}
+                  state={state}
+                />
+              );
+            })}
+          </ol>
+        </div>
       )}
 
       <p className="sr-only" aria-live="polite">

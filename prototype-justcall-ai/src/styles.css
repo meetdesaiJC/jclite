@@ -1,6 +1,24 @@
 @import "../../src/styles/globals.css";
 
-@keyframes assist-faq-in {
+/* JustCall AI — shared guidance-card tone. Same wash + accent on every card. */
+@theme {
+  --color-ai: #673bff;
+  --color-ai-surface: #f4f3ff;
+  --color-ai-border: #d9d6fe;
+}
+
+@keyframes assist-now-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes assist-queue-in {
   from {
     opacity: 0;
     transform: translateY(4px);
@@ -11,8 +29,75 @@
   }
 }
 
+@keyframes assist-handled {
+  from {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes assist-new-row {
+  from {
+    background-color: var(--color-brand-subtle);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+@keyframes assist-faq-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes assist-wrap-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes assist-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes assist-caret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .assist-faq-card {
+    animation: none !important;
+  }
+
+  .assist-shimmer-bar,
+  .assist-wrap-card {
     animation: none !important;
   }
 }

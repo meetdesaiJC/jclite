@@ -1,8 +1,9 @@
 import * as React from "react";
 import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
-import { IconCheck, IconClose, IconPencil } from "@/components/Icon";
+import { IconClose } from "@/components/Icon";
 import { Modal } from "@/components/Modal";
+import { HeaderEditableTitle } from "./HeaderEditableTitle";
 import { PlaybookEditor } from "./PlaybookEditor";
 import { ScriptPreviewModal } from "./ScriptTestPanel";
 import { ScriptUploadWizard } from "./ScriptUploadWizard";
@@ -22,8 +23,6 @@ export type BuilderLaunch =
   | { type: "template"; templateId: ScriptTemplateId }
   | { type: "edit"; playbook: ScriptPlaybook };
 
-type BuilderPhase = "upload" | "edit";
-
 export interface ScriptBuilderPageProps {
   launch: BuilderLaunch;
   onClose: () => void;
@@ -31,22 +30,19 @@ export interface ScriptBuilderPageProps {
 }
 
 export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderPageProps) {
-  const [phase, setPhase] = React.useState<BuilderPhase>(
-    launch.type === "upload" ? "upload" : "edit"
-  );
-  const [playbook, setPlaybook] = React.useState<ScriptPlaybook | null>(() => {
+  const [playbook, setPlaybook] = React.useState<ScriptPlaybook>(() => {
     if (launch.type === "edit") return launch.playbook;
     if (launch.type === "template") return createPlaybookFromTemplate(launch.templateId);
-    if (launch.type === "blank") return createBlankPlaybook();
-    return null;
+    return createBlankPlaybook();
   });
+  const [uploadOpen, setUploadOpen] = React.useState(launch.type === "upload");
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [publishOpen, setPublishOpen] = React.useState(false);
-  const canPublish = Boolean(playbook && playbook.stages.some((stage) => stage.steps.length > 0));
-  const stepCount = playbook ? countSteps(playbook) : 0;
+  const canPublish = playbook.stages.some((stage) => stage.steps.length > 0);
+  const stepCount = countSteps(playbook);
 
   const updatePlaybook = (patch: Partial<ScriptPlaybook>) => {
-    setPlaybook((current) => (current ? { ...current, ...patch } : current));
+    setPlaybook((current) => ({ ...current, ...patch }));
   };
 
   return (
@@ -61,50 +57,30 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
           >
             <IconClose size={20} />
           </button>
-          {phase === "edit" && playbook ? (
-            <HeaderEditableTitle
-              value={playbook.name}
-              onChange={(name) => setPlaybook({ ...playbook, name })}
-            />
-          ) : (
-            <p className="min-w-0 truncate text-heading-lg text-foreground">Create a script</p>
-          )}
+          <HeaderEditableTitle
+            value={playbook.name}
+            onChange={(name) => setPlaybook({ ...playbook, name })}
+          />
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {phase === "edit" ? (
-            <Button
-              variant="grey-outline"
-              size="sm"
-              onClick={() => setPreviewOpen(true)}
-              disabled={!playbook}
-            >
-              Preview
-            </Button>
-          ) : null}
-          {phase === "edit" ? (
-            <Button
-              size="sm"
-              disabled={!canPublish}
-              onClick={() => setPublishOpen(true)}
-            >
-              Publish
-            </Button>
-          ) : null}
+          <Button
+            variant="grey-outline"
+            size="sm"
+            onClick={() => setPreviewOpen(true)}
+          >
+            Preview
+          </Button>
+          <Button
+            size="sm"
+            disabled={!canPublish}
+            onClick={() => setPublishOpen(true)}
+          >
+            Publish
+          </Button>
         </div>
       </header>
 
-      {phase === "upload" ? (
-        <ScriptUploadWizard
-          onCancel={onClose}
-          onImport={(next) => {
-            setPlaybook(next);
-            setPhase("edit");
-          }}
-        />
-      ) : null}
-
-      {phase === "edit" && playbook ? (
-        <div className="flex min-h-0 flex-1 gap-6 overflow-hidden bg-white px-6 py-6">
+      <div className="flex min-h-0 flex-1 gap-6 overflow-hidden bg-white px-6 py-6">
           <aside className="flex w-[300px] shrink-0 flex-col">
             <div className="flex flex-col gap-4 rounded-lg border border-line bg-white p-4">
               <p className="text-label-md-semi text-foreground">Assign this script</p>
@@ -144,18 +120,28 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
             </div>
           </aside>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <PlaybookEditor playbook={playbook} onChange={setPlaybook} />
+            <PlaybookEditor
+              playbook={playbook}
+              onChange={setPlaybook}
+              onImportDocument={() => setUploadOpen(true)}
+            />
           </div>
         </div>
-      ) : null}
 
-      {playbook ? (
-        <ScriptPreviewModal
-          open={previewOpen}
-          playbook={playbook}
-          onClose={() => setPreviewOpen(false)}
-        />
-      ) : null}
+      <ScriptUploadWizard
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onImport={(next) => {
+          setPlaybook(next);
+          setUploadOpen(false);
+        }}
+      />
+
+      <ScriptPreviewModal
+        open={previewOpen}
+        playbook={playbook}
+        onClose={() => setPreviewOpen(false)}
+      />
 
       <Modal
         open={publishOpen}
@@ -173,7 +159,7 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
             <Button
               size="sm"
               onClick={() => {
-                if (!playbook || !canPublish) return;
+                if (!canPublish) return;
                 onPublish(playbook);
               }}
             >
@@ -182,8 +168,7 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
           </>
         }
       >
-        {playbook ? (
-          <dl className="flex flex-col gap-3">
+        <dl className="flex flex-col gap-3">
             <SummaryRow label="Script" value={playbook.name} />
             <SummaryRow
               label="Steps"
@@ -228,122 +213,8 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
               </dd>
             </div>
           </dl>
-        ) : null}
       </Modal>
     </main>
-  );
-}
-
-export function HeaderEditableTitle({
-  value,
-  onChange,
-  placeholder = "Untitled script",
-  nameLabel = "Script name",
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  nameLabel?: string;
-}) {
-  const [editing, setEditing] = React.useState(false);
-  const [draft, setDraft] = React.useState(value);
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const rootRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    if (!editing) return;
-    setDraft(value);
-    const id = window.requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-    return () => window.cancelAnimationFrame(id);
-  }, [editing, value]);
-
-  const commit = () => {
-    const next = draft.trim() || placeholder;
-    if (next !== value) onChange(next);
-    setEditing(false);
-  };
-
-  const cancel = () => {
-    setDraft(value);
-    setEditing(false);
-  };
-
-  if (editing) {
-    return (
-      <div
-        ref={rootRef}
-        className="inline-flex max-w-full items-center gap-0.5 rounded-[4px] border border-brand bg-white pl-2.5 pr-1 ring-2 ring-brand/16"
-      >
-        <span className="grid min-w-[4ch] max-w-[min(28rem,calc(100vw-18rem))]">
-          <span
-            aria-hidden
-            className="invisible col-start-1 row-start-1 whitespace-pre py-1 text-heading-lg"
-          >
-            {draft || placeholder}
-            {"\u2008"}
-          </span>
-          <input
-            ref={inputRef}
-            value={draft}
-            size={1}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={(event) => {
-              if (rootRef.current?.contains(event.relatedTarget as Node)) return;
-              commit();
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commit();
-              }
-              if (event.key === "Escape") {
-                event.preventDefault();
-                cancel();
-              }
-            }}
-            aria-label={nameLabel}
-            className="col-start-1 row-start-1 w-full min-w-0 border-0 bg-transparent py-1 text-heading-lg text-foreground outline-none"
-          />
-        </span>
-        <button
-          type="button"
-          aria-label="Save name"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={commit}
-          className="flex size-7 shrink-0 items-center justify-center rounded-[4px] text-brand hover:bg-brand-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-        >
-          <IconCheck size={16} />
-        </button>
-        <button
-          type="button"
-          aria-label="Cancel renaming"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={cancel}
-          className="flex size-7 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground hover:bg-secondary-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-        >
-          <IconClose size={16} />
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => setEditing(true)}
-      aria-label={`Rename ${nameLabel.toLowerCase()}`}
-      className="group/title inline-flex min-w-0 max-w-full items-center rounded-[4px] py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-    >
-      <span className="truncate text-heading-lg text-foreground">
-        {value.trim() || placeholder}
-      </span>
-      <span className="ml-1.5 hidden group-hover/title:inline-flex group-focus-visible/title:inline-flex">
-        <IconPencil size={16} className="text-brand" />
-      </span>
-    </button>
   );
 }
 

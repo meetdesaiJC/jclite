@@ -82,7 +82,7 @@ function InCallFlow() {
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidenav activeKey="dashboard" />
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <Dashboard />
+        <Dashboard autoOpenDialer autoStartCall />
       </div>
     </div>
   );

@@ -8,7 +8,7 @@ import { IconClose, IconFile, IconSparkles, IconWebToDevice } from "@/components
 import { cn } from "@/lib/utils";
 import { FaqEditor } from "./FaqEditor";
 import { KnowledgeImportWizard } from "./KnowledgeImportWizard";
-import { HeaderEditableTitle } from "./ScriptBuilderPage";
+import { HeaderEditableTitle } from "./HeaderEditableTitle";
 import {
   ACCEPTED_KNOWLEDGE_FILES,
   createEmptyFaq,

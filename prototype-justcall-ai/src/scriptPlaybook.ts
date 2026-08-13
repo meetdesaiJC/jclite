@@ -492,13 +492,88 @@ export function createPlaybookFromTemplate(templateId: ScriptTemplateId): Script
   return TEMPLATES[templateId]();
 }
 
+function seedPlaybook(
+  templateId: ScriptTemplateId,
+  extras: {
+    id: string;
+    assignedGroups?: string[];
+    assignedMembers?: string[];
+  }
+): ScriptPlaybook {
+  const playbook = createPlaybookFromTemplate(templateId);
+  playbook.id = extras.id;
+  playbook.assignedGroups = extras.assignedGroups ?? [];
+  playbook.assignedMembers = extras.assignedMembers ?? [];
+  return playbook;
+}
+
+export interface SeedScript {
+  playbook: ScriptPlaybook;
+  status: "live" | "draft";
+  updated: string;
+}
+
+/** Default library shown on the Scripts tab — sales and support playbooks. */
+export const SEED_SCRIPTS: SeedScript[] = [
+  {
+    playbook: seedPlaybook("sales-discovery", {
+      id: "script-discovery",
+      assignedGroups: ["sales"],
+    }),
+    status: "live",
+    updated: "2 days ago",
+  },
+  {
+    playbook: seedPlaybook("sales-qualification", {
+      id: "script-qualification",
+      assignedGroups: ["sales"],
+      assignedMembers: ["phoenix"],
+    }),
+    status: "live",
+    updated: "1 week ago",
+  },
+  {
+    playbook: seedPlaybook("sales-demo", {
+      id: "script-demo",
+      assignedGroups: ["sales", "success"],
+    }),
+    status: "live",
+    updated: "3 days ago",
+  },
+  {
+    playbook: seedPlaybook("support-login", {
+      id: "script-account-access",
+      assignedGroups: ["support"],
+      assignedMembers: ["olivia", "lana"],
+    }),
+    status: "live",
+    updated: "Yesterday",
+  },
+  {
+    playbook: seedPlaybook("support-billing", {
+      id: "script-billing",
+      assignedGroups: ["billing", "support"],
+    }),
+    status: "live",
+    updated: "5 days ago",
+  },
+  {
+    playbook: seedPlaybook("support-tech", {
+      id: "script-tech",
+      assignedGroups: ["support"],
+    }),
+    status: "draft",
+    updated: "4 days ago",
+  },
+];
+
 export function createBlankPlaybook(): ScriptPlaybook {
   return playbook({
     name: "Untitled script",
     description: "",
     category: "custom",
     source: "blank",
-    stages: [stage("Script", [step("")])],
+    stages: [stage("Script", [])],
   });
 }
 

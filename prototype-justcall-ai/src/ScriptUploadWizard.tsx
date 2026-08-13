@@ -2,6 +2,8 @@ import * as React from "react";
 import { Button } from "@/components/Button";
 import { Banner } from "@/components/Banner";
 import { IconFile } from "@/components/Icon";
+import { Modal } from "@/components/Modal";
+import { cn } from "@/lib/utils";
 import {
   SAMPLE_SCRIPT_DOCUMENT,
   createPlaybookFromDocument,
@@ -12,13 +14,26 @@ const ACCEPTED =
   ".txt,.md,.csv,.docx,.doc,.pdf,text/plain,text/markdown,text/csv,application/pdf";
 
 export interface ScriptUploadWizardProps {
-  onCancel: () => void;
+  open: boolean;
+  onClose: () => void;
   onImport: (playbook: ScriptPlaybook) => void;
 }
 
-export function ScriptUploadWizard({ onCancel, onImport }: ScriptUploadWizardProps) {
+export function ScriptUploadWizard({
+  open,
+  onClose,
+  onImport,
+}: ScriptUploadWizardProps) {
   const [error, setError] = React.useState("");
+  const [isDragging, setIsDragging] = React.useState(false);
   const fileRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (!open) {
+      setError("");
+      setIsDragging(false);
+    }
+  }, [open]);
 
   const importText = (text: string, fileName: string) => {
     const playbook = createPlaybookFromDocument(text, fileName);
@@ -66,69 +81,86 @@ export function ScriptUploadWizard({ onCancel, onImport }: ScriptUploadWizardPro
   };
 
   return (
-    <div className="flex min-h-0 flex-1 justify-center overflow-auto px-6 py-8">
-      <div className="flex w-full max-w-[720px] flex-col gap-6">
-        <div>
-          <h2 className="text-heading-xxl text-foreground">Upload a script</h2>
-          <p className="mt-1 text-paragraph-sm text-muted-foreground">
-            We’ll turn headings, lists, or CSV rows into steps you can edit. AI is only used later to rephrase wording.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              const file = event.dataTransfer.files[0];
-              if (file) void handleFile(file);
-            }}
-            className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-brand/40 bg-brand-subtle/20 px-6 py-10 text-center hover:border-brand hover:bg-brand-subtle/40"
-          >
-            <span className="flex size-10 items-center justify-center rounded-[8px] bg-white text-brand shadow-[0_0_0_1px_rgba(0,76,230,0.12)]">
-              <IconFile size={20} />
-            </span>
-            <span>
-              <span className="block text-label-md-semi text-foreground">
-                Upload TXT, Markdown, or CSV
-              </span>
-              <span className="mt-1 block text-paragraph-sm text-muted-foreground">
-                Drop a file or click to browse. PDF and Word files import as a sample in this prototype.
-              </span>
-            </span>
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept={ACCEPTED}
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void handleFile(file);
-              event.target.value = "";
-            }}
-          />
-          {error ? (
-            <Banner variant="error" width="page">
-              {error}
-            </Banner>
-          ) : null}
-          <Button
-            size="sm"
-            onClick={() => importText(SAMPLE_SCRIPT_DOCUMENT, "account-access-recovery.txt")}
-          >
-            Use sample account-access script
-          </Button>
-        </div>
-
-        <div>
-          <Button variant="grey-outline" size="sm" onClick={onCancel}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="md"
+      title="Upload a script"
+      description="We’ll turn headings, lists, or CSV rows into steps you can edit. AI is only used later to rephrase wording."
+      footer={
+        <div className="flex w-full justify-start">
+          <Button variant="grey-outline" size="sm" onClick={onClose}>
             Cancel
           </Button>
         </div>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <input
+          ref={fileRef}
+          type="file"
+          accept={ACCEPTED}
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void handleFile(file);
+            event.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={(event) => {
+            event.preventDefault();
+            if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+              setIsDragging(false);
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            setIsDragging(false);
+            const file = event.dataTransfer.files[0];
+            if (file) void handleFile(file);
+          }}
+          className={cn(
+            "flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center transition-colors",
+            isDragging
+              ? "border-brand bg-brand-subtle/60"
+              : "border-brand/40 bg-brand-subtle/20 hover:border-brand hover:bg-brand-subtle/40"
+          )}
+        >
+          <span className="flex size-10 items-center justify-center rounded-[8px] bg-white text-brand shadow-[0_0_0_1px_rgba(0,76,230,0.12)]">
+            <IconFile size={20} />
+          </span>
+          <span>
+            <span className="block text-label-md-semi text-foreground">
+              Upload TXT, Markdown, or CSV
+            </span>
+            <span className="mt-1 block text-paragraph-sm text-muted-foreground">
+              Drop a file or click to browse. PDF and Word files import as a sample in this prototype.
+            </span>
+          </span>
+        </button>
+        {error ? (
+          <Banner variant="error" width="page">
+            {error}
+          </Banner>
+        ) : null}
+        <Button
+          size="sm"
+          onClick={() => importText(SAMPLE_SCRIPT_DOCUMENT, "account-access-recovery.txt")}
+        >
+          Use sample account-access script
+        </Button>
       </div>
-    </div>
+    </Modal>
   );
 }
