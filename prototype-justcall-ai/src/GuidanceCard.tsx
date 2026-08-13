@@ -230,6 +230,53 @@ function ExpandHint() {
   );
 }
 
+export function GuidanceResourceLink({
+  resource,
+  className,
+}: {
+  resource: GuidanceResource;
+  className?: string;
+}) {
+  const content = (
+    <>
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-[6px] border border-line bg-white text-muted-foreground">
+        <IconFile size={16} />
+      </span>
+      <span className="inline-flex min-w-0 items-center gap-0.5 text-label-md text-brand">
+        <span className="truncate">{resource.name}</span>
+        <IconChevronRight size={16} className="size-4 shrink-0" />
+      </span>
+    </>
+  );
+
+  if (!resource.url) {
+    return (
+      <span
+        className={cn(
+          "flex items-center gap-2 rounded-[4px] bg-white/70 py-0.5",
+          className
+        )}
+      >
+        {content}
+      </span>
+    );
+  }
+
+  return (
+    <a
+      href={resource.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(
+        "flex min-w-0 cursor-pointer items-center gap-2 rounded-[4px] bg-white/70 py-0.5 text-left hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+        className
+      )}
+    >
+      {content}
+    </a>
+  );
+}
+
 function ResourceImage({
   resource,
   compact,
@@ -401,20 +448,11 @@ export function GuidanceCard({
         ) : null}
 
         {links.map((resource) => (
-          <button
+          <GuidanceResourceLink
             key={resource.id}
-            type="button"
-            onClick={() => onViewResource?.(resource)}
-            className="flex items-center gap-2 rounded-[4px] bg-white/70 py-0.5 pr-1 pl-0.5 text-left hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-          >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-[6px] border border-line bg-white text-muted-foreground">
-              <IconFile size={16} />
-            </span>
-            <span className="inline-flex min-w-0 items-center gap-0.5 text-label-md text-brand">
-              <span className="truncate">{resource.name}</span>
-              <IconChevronRight size={16} className="size-4 shrink-0" />
-            </span>
-          </button>
+            resource={resource}
+            className="pr-1 pl-0.5"
+          />
         ))}
       </div>
 
