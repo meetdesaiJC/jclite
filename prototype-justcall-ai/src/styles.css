@@ -310,6 +310,197 @@
   text-decoration-color: currentColor;
 }
 
+/* Post-call recap — generate, shimmer, reveal, then settle. */
+@keyframes recap-sparkle-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes recap-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes recap-status-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes recap-status-collapse {
+  from {
+    grid-template-rows: 1fr;
+  }
+  to {
+    grid-template-rows: 0fr;
+  }
+}
+
+@keyframes recap-section-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes recap-skeleton-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes recap-summary-reveal {
+  from {
+    opacity: 0;
+    filter: blur(5px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes recap-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes recap-sparkle-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+}
+
+@keyframes recap-check-in {
+  from {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes recap-check-draw {
+  from {
+    stroke-dashoffset: 16;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.recap-sparkle-pulse {
+  animation: recap-sparkle-pulse 1.4s cubic-bezier(0.77, 0, 0.175, 1) infinite;
+}
+
+.recap-sparkle-out {
+  animation: recap-sparkle-out 180ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.recap-check-in {
+  animation: recap-check-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.recap-check-mark {
+  stroke-dasharray: 16;
+  stroke-dashoffset: 16;
+}
+
+.recap-check-in .recap-check-mark {
+  animation: recap-check-draw 220ms cubic-bezier(0.23, 1, 0.32, 1) 40ms both;
+}
+
+.recap-status-in {
+  animation: recap-status-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.recap-status-slot {
+  display: grid;
+  grid-template-rows: 1fr;
+}
+
+.recap-status-slot.is-leaving {
+  animation: recap-status-collapse 200ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.recap-status-slot.is-leaving > * {
+  animation: recap-status-out 180ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.recap-section-in {
+  animation: recap-section-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.recap-skeleton-in {
+  animation: recap-section-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.recap-skeleton-line {
+  position: relative;
+  display: block;
+  height: 0.75rem;
+  overflow: hidden;
+  border-radius: 4px;
+  background-color: var(--color-muted);
+}
+
+.recap-skeleton-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.72),
+    transparent
+  );
+  animation: recap-skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+.recap-summary-reveal {
+  animation: recap-summary-reveal 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.recap-item-in {
+  animation: recap-item-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .assist-faq-card {
     animation: none !important;
@@ -344,6 +535,25 @@
   .script-check-glow,
   .script-next-emphasis {
     animation: none !important;
+  }
+
+  .recap-sparkle-pulse,
+  .recap-sparkle-out,
+  .recap-check-in,
+  .recap-check-in .recap-check-mark,
+  .recap-status-in,
+  .recap-status-slot.is-leaving,
+  .recap-status-slot.is-leaving > *,
+  .recap-section-in,
+  .recap-skeleton-in,
+  .recap-skeleton-line::after,
+  .recap-summary-reveal,
+  .recap-item-in {
+    animation: none !important;
+  }
+
+  .recap-check-mark {
+    stroke-dashoffset: 0;
   }
 }
 
