@@ -778,6 +778,16 @@ function WrapUpPhone({
         <div className="mt-auto flex flex-col gap-2">
           <Button
             type="button"
+            variant="primary"
+            size="md"
+            className="w-full"
+            leftIcon={saved ? <IconCheck size={16} /> : undefined}
+            onClick={() => setSaved(true)}
+          >
+            {saved ? "Saved" : "Save"}
+          </Button>
+          <Button
+            type="button"
             variant="primary-outline"
             size="sm"
             leftIcon={<IconMessages size={16} />}
@@ -793,16 +803,6 @@ function WrapUpPhone({
             className="w-full"
           >
             Schedule a follow up
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            size="md"
-            className="w-full"
-            leftIcon={saved ? <IconCheck size={16} /> : undefined}
-            onClick={() => setSaved(true)}
-          >
-            {saved ? "Saved" : "Save"}
           </Button>
         </div>
       </div>

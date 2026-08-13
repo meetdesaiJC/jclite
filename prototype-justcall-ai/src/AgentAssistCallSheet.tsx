@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { cn } from "@/lib/utils";
 import { Dropdown } from "@/components/Dropdown";
+import { IconSparkles } from "@/components/Icon";
 import { IconJcaiAgentAssist } from "./icons/JustCallAiNavIcons";
 import {
   CALL_SCENARIOS,
@@ -118,7 +119,7 @@ export function AgentAssistCallSheet({
   const lastChecked =
     snapshot.scriptIndex > 0 ? scenario.steps[snapshot.scriptIndex - 1] : null;
   const liveAnnouncement = ended
-    ? "Writing the call summary and action items."
+    ? "Generating call recap."
     : snapshot.wrapped
       ? "Script complete."
       : latestCard
@@ -186,7 +187,7 @@ export function AgentAssistCallSheet({
       </header>
 
       {ended ? (
-        <PostCallAssist scenario={scenario} reduced={reduced} />
+        <PostCallAssist key={scenario.id} scenario={scenario} reduced={reduced} />
       ) : view === "transcript" ? (
         <TranscriptPane turns={snapshot.transcript} reduced={reduced} />
       ) : (
@@ -424,96 +425,150 @@ function AssistStream({
   );
 }
 
-function splitSentences(text: string): string[] {
-  return (
-    text.match(/[^.!?]+[.!?]+(?:\s|$)/g)?.map((part) => part.trim()) ?? [text]
-  );
-}
+type RecapPhase = "generating" | "skeleton" | "summary" | "items" | "complete";
+type RecapStatus = "generating" | "ready" | "leaving" | "gone";
 
-function usePostCallReveal(
-  sentenceCount: number,
-  itemCount: number,
-  reduced: boolean
-) {
-  const [phase, setPhase] = useState<"thinking" | "writing" | "ready">(
-    reduced ? "ready" : "thinking"
-  );
-  const [visibleSentences, setVisibleSentences] = useState(
-    reduced ? sentenceCount : 0
-  );
+const RECAP_MOTION = {
+  generatingMs: 820,
+  skeletonMs: 980,
+  summaryRevealMs: 220,
+  itemStaggerMs: 150,
+  completeBeatMs: 180,
+  readyHoldMs: 1600,
+  statusOutMs: 200,
+} as const;
+
+function usePostCallReveal(itemCount: number, reduced: boolean) {
+  const [phase, setPhase] = useState<RecapPhase>(reduced ? "complete" : "generating");
+  const [status, setStatus] = useState<RecapStatus>(reduced ? "gone" : "generating");
   const [visibleItems, setVisibleItems] = useState(reduced ? itemCount : 0);
 
   useEffect(() => {
     if (reduced) {
-      setPhase("ready");
-      setVisibleSentences(sentenceCount);
+      setPhase("complete");
+      setStatus("gone");
       setVisibleItems(itemCount);
       return;
     }
 
+    setPhase("generating");
+    setStatus("generating");
+    setVisibleItems(0);
+
     const timers: number[] = [];
-    const thinkMs = 720;
-    const sentenceMs = 220;
-    const itemMs = 70;
+    const skeletonAt = RECAP_MOTION.generatingMs;
+    const summaryAt = skeletonAt + RECAP_MOTION.skeletonMs;
+    const itemsAt = summaryAt + RECAP_MOTION.summaryRevealMs;
+    const completeAt =
+      itemsAt + itemCount * RECAP_MOTION.itemStaggerMs + RECAP_MOTION.completeBeatMs;
+    const leaveAt = completeAt + RECAP_MOTION.readyHoldMs;
 
-    timers.push(
-      window.setTimeout(() => {
-        setPhase("writing");
-        setVisibleSentences(1);
-      }, thinkMs)
-    );
-
-    for (let index = 1; index < sentenceCount; index += 1) {
-      timers.push(
-        window.setTimeout(() => {
-          setVisibleSentences(index + 1);
-        }, thinkMs + index * sentenceMs)
-      );
-    }
-
-    const itemsStart = thinkMs + Math.max(sentenceCount, 1) * sentenceMs;
-    timers.push(
-      window.setTimeout(() => {
-        setPhase("ready");
-      }, itemsStart)
-    );
+    timers.push(window.setTimeout(() => setPhase("skeleton"), skeletonAt));
+    timers.push(window.setTimeout(() => setPhase("summary"), summaryAt));
+    timers.push(window.setTimeout(() => setPhase("items"), itemsAt));
 
     for (let index = 0; index < itemCount; index += 1) {
       timers.push(
         window.setTimeout(() => {
           setVisibleItems(index + 1);
-        }, itemsStart + 80 + index * itemMs)
+        }, itemsAt + index * RECAP_MOTION.itemStaggerMs)
       );
     }
+
+    timers.push(
+      window.setTimeout(() => {
+        setPhase("complete");
+        setStatus("ready");
+      }, completeAt)
+    );
+    timers.push(window.setTimeout(() => setStatus("leaving"), leaveAt));
+    timers.push(
+      window.setTimeout(() => setStatus("gone"), leaveAt + RECAP_MOTION.statusOutMs)
+    );
 
     return () => {
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [sentenceCount, itemCount, reduced]);
+  }, [itemCount, reduced]);
 
-  return { phase, visibleSentences, visibleItems };
+  return { phase, status, visibleItems };
 }
 
-function ShimmerLine({
-  className,
+function RecapSparkleCheck({ ready }: { ready: boolean }) {
+  return (
+    <span className="relative flex size-4 shrink-0 items-center justify-center">
+      <IconSparkles
+        size={16}
+        aria-hidden="true"
+        className={cn(
+          "absolute inset-0 size-4 text-ai",
+          ready ? "recap-sparkle-out" : "recap-sparkle-pulse"
+        )}
+      />
+      <svg
+        viewBox="0 0 16 16"
+        width={16}
+        height={16}
+        fill="none"
+        aria-hidden="true"
+        className={cn(
+          "absolute inset-0 size-4 text-success",
+          ready ? "recap-check-in" : "opacity-0"
+        )}
+      >
+        <path
+          className="recap-check-mark"
+          d="M3.4 8.15 L6.55 11.2 L12.6 4.7"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
+function RecapStatusRow({
+  status,
   reduced,
 }: {
-  className?: string;
+  status: RecapStatus;
   reduced: boolean;
 }) {
+  if (status === "gone") return null;
+
+  const ready = status === "ready" || status === "leaving";
+
+  return (
+    <div className={cn("recap-status-slot", status === "leaving" && "is-leaving")}>
+      <div className="overflow-hidden">
+        <div
+          className={cn(
+            "flex items-center gap-1.5",
+            !reduced && status === "generating" && "recap-status-in"
+          )}
+          aria-live="polite"
+        >
+          <RecapSparkleCheck ready={ready} />
+          <p className="text-label-sm text-muted-foreground">
+            {ready ? "Recap ready" : "Generating call recap..."}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecapSkeleton({ reduced }: { reduced: boolean }) {
   return (
     <div
-      className={cn(
-        "relative h-3 overflow-hidden rounded-[4px] bg-muted",
-        className
-      )}
+      className={cn("flex flex-col gap-2", !reduced && "recap-skeleton-in")}
+      aria-hidden="true"
     >
-      {reduced ? null : (
-        <span
-          aria-hidden="true"
-          className="absolute inset-0 animate-[assist-shimmer_1.1s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white to-transparent"
-        />
-      )}
+      <span className="recap-skeleton-line w-full" />
+      <span className="recap-skeleton-line w-[90%]" />
+      <span className="recap-skeleton-line w-[72%]" />
     </div>
   );
 }
@@ -525,16 +580,12 @@ function PostCallAssist({
   scenario: CallScenario;
   reduced: boolean;
 }) {
-  const sentences = useMemo(
-    () => splitSentences(scenario.wrapUp.summary),
-    [scenario.wrapUp.summary]
-  );
   const items = scenario.wrapUp.actionItems;
-  const { phase, visibleSentences, visibleItems } = usePostCallReveal(
-    sentences.length,
-    items.length,
-    reduced
-  );
+  const { phase, status, visibleItems } = usePostCallReveal(items.length, reduced);
+  const showSummary = phase !== "generating";
+  const showText = phase === "summary" || phase === "items" || phase === "complete";
+  const showItems = phase === "items" || phase === "complete";
+
   return (
     <div
       className={cn(
@@ -543,58 +594,52 @@ function PostCallAssist({
           "animate-[assist-wrap-in_220ms_cubic-bezier(0.23,1,0.32,1)_both]"
       )}
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4">
-        <section aria-labelledby="call-summary-heading" className="flex flex-col gap-2">
-          <h2
-            id="call-summary-heading"
-            className="text-label-md-semi text-foreground"
-          >
-            Call summary
-          </h2>
-          {phase === "thinking" ? (
-            <div className="flex flex-col gap-2" aria-hidden="true">
-              <ShimmerLine reduced={reduced} className="w-full" />
-              <ShimmerLine reduced={reduced} className="w-[92%]" />
-              <ShimmerLine reduced={reduced} className="w-[76%]" />
-            </div>
-          ) : (
-            <p className="text-pretty text-[13px] leading-5 text-foreground">
-              {sentences.slice(0, visibleSentences).map((sentence, index) => (
-                <span
-                  key={sentence}
-                  className={cn(
-                    "inline",
-                    !reduced &&
-                      "animate-[assist-wrap-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]"
-                  )}
-                >
-                  {index > 0 ? " " : ""}
-                  {sentence}
-                </span>
-              ))}
-              {phase === "writing" && !reduced ? (
-                <span
-                  aria-hidden="true"
-                  className="ml-0.5 inline-block h-3.5 w-px translate-y-0.5 bg-brand align-middle animate-[assist-caret_800ms_steps(1)_infinite]"
-                />
-              ) : null}
-            </p>
-          )}
-        </section>
+      <div
+        className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4"
+        aria-busy={status === "generating"}
+      >
+        <RecapStatusRow status={status} reduced={reduced} />
 
-        <section aria-labelledby="action-items-heading" className="flex flex-col gap-2">
-          <h2
-            id="action-items-heading"
-            className="text-label-md-semi text-foreground"
+        {showSummary ? (
+          <section
+            aria-labelledby="call-summary-heading"
+            className={cn(
+              "flex flex-col gap-2",
+              !reduced && phase === "skeleton" && "recap-section-in"
+            )}
           >
-            Action items
-          </h2>
-          {phase === "thinking" ? (
-            <div className="flex flex-col gap-2" aria-hidden="true">
-              <ShimmerLine reduced={reduced} className="h-8 w-full" />
-              <ShimmerLine reduced={reduced} className="h-8 w-[88%]" />
-            </div>
-          ) : (
+            <h2
+              id="call-summary-heading"
+              className="text-label-md-semi text-foreground"
+            >
+              Call summary
+            </h2>
+            {showText ? (
+              <p
+                className={cn(
+                  "text-pretty text-[13px] leading-5 text-foreground",
+                  !reduced && "recap-summary-reveal"
+                )}
+              >
+                {scenario.wrapUp.summary}
+              </p>
+            ) : (
+              <RecapSkeleton reduced={reduced} />
+            )}
+          </section>
+        ) : null}
+
+        {showItems ? (
+          <section
+            aria-labelledby="action-items-heading"
+            className={cn("flex flex-col gap-2", !reduced && "recap-section-in")}
+          >
+            <h2
+              id="action-items-heading"
+              className="text-label-md-semi text-foreground"
+            >
+              Action items
+            </h2>
             <ol className="flex flex-col gap-2">
               {items.slice(0, visibleItems).map((item, index) => (
                 <ActionItemRow
@@ -605,14 +650,14 @@ function PostCallAssist({
                 />
               ))}
             </ol>
-          )}
-        </section>
+          </section>
+        ) : null}
       </div>
 
       <p className="sr-only" aria-live="polite">
-        {phase === "ready"
-          ? "Call summary and action items are ready."
-          : "Writing the call summary and action items."}
+        {status === "ready" || status === "leaving" || status === "gone"
+          ? "Recap ready. Call summary and action items are ready."
+          : "Generating call recap."}
       </p>
     </div>
   );
@@ -631,8 +676,7 @@ function ActionItemRow({
     <li
       className={cn(
         "flex items-start gap-2.5 rounded-lg border border-line bg-white px-3 py-2.5",
-        !reduced &&
-          "animate-[assist-wrap-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]"
+        !reduced && "recap-item-in"
       )}
     >
       <span
