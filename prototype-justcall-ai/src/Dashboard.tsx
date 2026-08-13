@@ -11,6 +11,7 @@ import {
 } from "@/components/Icon";
 import { ProfileMenu } from "../../prototype-add-ons-flow/src/ProfileMenu";
 import { IconCalendarTime, IconMailShare } from "../../prototype-add-ons-flow/src/icons/DashboardToolbarIcons";
+import { DialerPanel } from "./DialerPanel";
 
 /**
  * Dashboard — landing content for the JustCall AI prototype.
@@ -254,19 +255,35 @@ export interface DashboardProps {
 
 export function Dashboard({ profileName = "Sarah Johnson" }: DashboardProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [dialerOpen, setDialerOpen] = useState(false);
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {profileMenuOpen && (
-        <div className="fixed inset-0 z-40" onClick={() => setProfileMenuOpen(false)} />
+        <div
+          className="fixed inset-x-0 top-[60px] bottom-0 z-40"
+          onClick={() => setProfileMenuOpen(false)}
+        />
       )}
       <GlobalHeader
-        title="Dashboard"
+        title={dialerOpen ? "Dialer" : "Dashboard"}
+        dialerOpen={dialerOpen}
+        onDialerClick={() => {
+          setProfileMenuOpen(false);
+          setDialerOpen((open) => !open);
+        }}
         profileMenuOpen={profileMenuOpen}
-        onProfileClick={() => setProfileMenuOpen((open) => !open)}
+        onProfileClick={() => {
+          setDialerOpen(false);
+          setProfileMenuOpen((open) => !open);
+        }}
         profileMenuPanel={<ProfileMenu userName={profileName} />}
       />
 
+      {dialerOpen ? (
+        <DialerPanel onClose={() => setDialerOpen(false)} />
+      ) : (
+        <>
       <div className="flex items-center gap-8 border-b border-line px-6">
         <span className="flex cursor-not-allowed items-center gap-1.5 py-2.5" aria-disabled="true">
           <span className="text-paragraph-md text-muted-foreground">Overview</span>
@@ -349,6 +366,8 @@ export function Dashboard({ profileName = "Sarah Johnson" }: DashboardProps) {
           </div>
         </div>
       </main>
+        </>
+      )}
     </div>
   );
 }

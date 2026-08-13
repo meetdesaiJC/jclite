@@ -306,7 +306,7 @@ export function TableCellText({
         </div>
       )}
       <div className="flex min-w-0 flex-col">
-        <span className="truncate text-paragraph-md text-foreground">{primary}</span>
+        <span className="truncate text-label-md text-foreground">{primary}</span>
         {supporting != null && (
           <span className="truncate text-paragraph-md text-muted-foreground">
             {supporting}

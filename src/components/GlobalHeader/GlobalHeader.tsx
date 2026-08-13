@@ -62,6 +62,8 @@ export interface GlobalHeaderProps
   liveCallSupportAvatarSrc?: string;
   onLiveCallSupportClick?: () => void;
   onDialerClick?: () => void;
+  /** Marks the Dialer button as active while the Dialer page is open. */
+  dialerOpen?: boolean;
   onMessagesClick?: () => void;
   onNotificationsClick?: () => void;
   /** Unread count shown on the bell icon. Renders "99+" above 99; hidden at 0. */
@@ -96,6 +98,7 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
       liveCallSupportAvatarSrc = liveCallSupportAvatar,
       onLiveCallSupportClick,
       onDialerClick,
+      dialerOpen = false,
       onMessagesClick,
       onNotificationsClick,
       notificationCount = 0,
@@ -221,7 +224,12 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
               </TooltipTrigger>
             )}
 
-            <Button size="xs" leftIcon={<IconPhone size={16} />} onClick={onDialerClick}>
+            <Button
+              size="xs"
+              leftIcon={<IconPhone size={16} />}
+              aria-pressed={dialerOpen}
+              onClick={onDialerClick}
+            >
               Dialer
             </Button>
 

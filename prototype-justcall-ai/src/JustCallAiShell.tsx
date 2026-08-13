@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { type SidenavItem } from "@/components/Sidenav";
 import { GlobalHeader } from "@/components/GlobalHeader";
 import { ProfileMenu } from "../../prototype-add-ons-flow/src/ProfileMenu";
 import { AgentAssistPage } from "./AgentAssistPage";
+import { DialerPanel } from "./DialerPanel";
 import {
   IconJcaiHome,
   IconJcaiAnalytics,
@@ -62,20 +63,38 @@ export function JustCallAiShell({
   profileName = "Sarah Johnson",
 }: JustCallAiShellProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [dialerOpen, setDialerOpen] = useState(false);
+
+  useEffect(() => {
+    setDialerOpen(false);
+  }, [activeKey]);
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {profileMenuOpen && (
-        <div className="fixed inset-0 z-40" onClick={() => setProfileMenuOpen(false)} />
+        <div
+          className="fixed inset-x-0 top-[60px] bottom-0 z-40"
+          onClick={() => setProfileMenuOpen(false)}
+        />
       )}
       <GlobalHeader
-        title={JUSTCALL_AI_PAGE_TITLES[activeKey]}
+        title={dialerOpen ? "Dialer" : JUSTCALL_AI_PAGE_TITLES[activeKey]}
+        dialerOpen={dialerOpen}
+        onDialerClick={() => {
+          setProfileMenuOpen(false);
+          setDialerOpen((open) => !open);
+        }}
         profileMenuOpen={profileMenuOpen}
-        onProfileClick={() => setProfileMenuOpen((open) => !open)}
+        onProfileClick={() => {
+          setDialerOpen(false);
+          setProfileMenuOpen((open) => !open);
+        }}
         profileMenuPanel={<ProfileMenu userName={profileName} />}
       />
 
-      {activeKey === "agent-assist" ? (
+      {dialerOpen ? (
+        <DialerPanel onClose={() => setDialerOpen(false)} />
+      ) : activeKey === "agent-assist" ? (
         <AgentAssistPage />
       ) : (
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-white" />
