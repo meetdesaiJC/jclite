@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Modal } from "@/components/Modal";
 import { Tabs, type TabItem } from "@/components/Tabs";
-import { IconChevronRight, IconFile, IconPencil } from "@/components/Icon";
+import { IconChevronRight } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import {
   SALES_TEMPLATES,
@@ -14,7 +14,7 @@ export type { ScriptTemplateId };
 
 export type ScriptStartChoice =
   | { type: "template"; templateId: ScriptTemplateId }
-  | { type: "scratch"; method: "manual" | "upload" };
+  | { type: "scratch" };
 
 type TemplateCategory = "sales" | "support";
 
@@ -27,6 +27,23 @@ const TEMPLATES_BY_CATEGORY: Record<TemplateCategory, TemplateCatalogItem[]> = {
   sales: SALES_TEMPLATES,
   support: SUPPORT_TEMPLATES,
 };
+
+function PlusIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
 
 const choiceCardClass =
   "rounded-lg border border-line bg-white text-left transition-[border-color,background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-brand/40 hover:bg-brand-subtle/40 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24";
@@ -140,28 +157,18 @@ export function ScriptTemplatesModal({
           </div>
         </section>
 
-        <section className="flex flex-col gap-2">
-          <div className="px-1">
-            <p className="text-label-md-semi text-foreground">Create your own</p>
-            <p className="mt-0.5 text-pretty text-paragraph-sm text-muted-foreground">
-              Start from scratch. AI can rephrase wording after you add a line.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <ScratchOption
-              title="Add manually"
-              description="Write the steps and suggested wording yourself."
-              icon={<IconPencil size={20} />}
-              onSelect={() => onSelect({ type: "scratch", method: "manual" })}
-            />
-            <ScratchOption
-              title="Upload document"
-              description="Import an existing script or process doc as steps."
-              icon={<IconFile size={20} />}
-              onSelect={() => onSelect({ type: "scratch", method: "upload" })}
-            />
-          </div>
-        </section>
+        <div className="flex items-center gap-3" role="separator" aria-label="or">
+          <span className="h-px flex-1 bg-line" />
+          <span className="text-label-sm tracking-[0.12em] text-muted-foreground">OR</span>
+          <span className="h-px flex-1 bg-line" />
+        </div>
+
+        <ScratchOption
+          title="Create custom script"
+          description="Add your first step, or import a document you already have."
+          icon={<PlusIcon size={20} />}
+          onSelect={() => onSelect({ type: "scratch" })}
+        />
       </div>
     </Modal>
   );

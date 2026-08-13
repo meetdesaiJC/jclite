@@ -39,24 +39,28 @@ import {
   countSteps,
   playbookAssignees,
   playbookAssignmentLabel,
+  SEED_SCRIPTS,
   type AssignmentPerson,
   type ScriptPlaybook,
 } from "./scriptPlaybook";
-import { KnowledgeCreateModal } from "./KnowledgeCreateModal";
+import { CreateGuidancePage } from "./CreateGuidancePage";
 import {
-  KnowledgeBuilderPage,
-  type KnowledgeLaunch,
-} from "./KnowledgeBuilderPage";
+  GuidanceTemplatesModal,
+  type GuidanceStartChoice,
+} from "./GuidanceTemplatesModal";
 import {
-  cloneRepository,
-  type KnowledgeCreateMethod,
-  type KnowledgeRepository,
-} from "./knowledgeRepository";
+  SEED_GUIDANCE,
+  createEmptyGuidance,
+  createGuidanceFromTemplate,
+  formatAssignment,
+  guidanceAssignees,
+  type GuidanceItem,
+  type GuidanceTemplateId,
+} from "./guidanceData";
 
 /**
- * Agent Assist admin — Scripts agents follow on calls, and the FAQ
- * repository that surfaces suggestions from live conversation.
- * Defaults to Figma empty states (Scripts 30:8261, FAQs 30:8574).
+ * Agent Assist admin — Scripts agents follow on calls, and Guidance
+ * that surfaces contextual answers from live conversation.
  */
 
 type PublishStatus = "live" | "draft";
@@ -73,17 +77,21 @@ interface ScriptRow {
 
 const TABS: TabItem[] = [
   { key: "scripts", label: "Scripts" },
-  { key: "faqs", label: "FAQs" },
+  { key: "guidance", label: "Guidance" },
 ];
 
-function toScriptRow(playbook: ScriptPlaybook, status: PublishStatus = "live"): ScriptRow {
+function toScriptRow(
+  playbook: ScriptPlaybook,
+  status: PublishStatus = "live",
+  updated = "Just now"
+): ScriptRow {
   return {
     id: playbook.id,
     name: playbook.name,
     team: playbookAssignmentLabel(playbook) || "Unassigned",
     steps: countSteps(playbook),
     status,
-    updated: "Just now",
+    updated,
     playbook,
   };
 }
@@ -254,14 +262,6 @@ function AssignmentAvatarStack({ people }: { people: AssignmentPerson[] }) {
   );
 }
 
-function repositoryAssignees(repo: KnowledgeRepository): AssignmentPerson[] {
-  return repo.assignedTeams.map((team) => ({
-    id: team,
-    name: team,
-    kind: "group" as const,
-  }));
-}
-
 function IconTrash({ size = 20 }: { size?: number }) {
   return (
     <svg
@@ -289,7 +289,7 @@ function ActionButtonGroup({
   onDuplicate,
   onDelete,
 }: {
-  entity: "script" | "faq";
+  entity: "script" | "guidance";
   onEdit?: () => void;
   onDuplicate?: () => void;
   onDelete?: () => void;
@@ -381,16 +381,22 @@ function AgentAssistEmptyState({
 }
 
 export function AgentAssistPage() {
-  const [tab, setTab] = React.useState("scripts");
+  const [tab, setTab] = React.useState("guidance");
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(25);
   const [templatesOpen, setTemplatesOpen] = React.useState(false);
-  const [knowledgeCreateOpen, setKnowledgeCreateOpen] = React.useState(false);
+  const [guidanceTemplatesOpen, setGuidanceTemplatesOpen] = React.useState(false);
   const [builder, setBuilder] = React.useState<BuilderLaunch | null>(null);
-  const [knowledgeBuilder, setKnowledgeBuilder] = React.useState<KnowledgeLaunch | null>(null);
-  const [scripts, setScripts] = React.useState<ScriptRow[]>([]);
-  const [repositories, setRepositories] = React.useState<KnowledgeRepository[]>([]);
+  const [scripts, setScripts] = React.useState<ScriptRow[]>(() =>
+    SEED_SCRIPTS.map((item) => toScriptRow(item.playbook, item.status, item.updated))
+  );
+  const [guidanceItems, setGuidanceItems] = React.useState<GuidanceItem[]>(SEED_GUIDANCE);
+  const [guidanceLaunch, setGuidanceLaunch] = React.useState<{
+    mode: "create" | "edit";
+    item: GuidanceItem;
+    templateId?: GuidanceTemplateId | null;
+  } | null>(null);
   const isScripts = tab === "scripts";
 
   const query = search.trim().toLowerCase();
@@ -400,27 +406,29 @@ export function AgentAssistPage() {
       row.name.toLowerCase().includes(query) ||
       row.team.toLowerCase().includes(query)
   );
-  const filteredFaqs = repositories.filter(
-    (row) =>
-      !query ||
+  const filteredGuidance = guidanceItems.filter((row) => {
+    if (!query) return true;
+    return (
       row.name.toLowerCase().includes(query) ||
-      row.assignedTeams.join(" ").toLowerCase().includes(query)
-  );
-  const filtered = isScripts ? filteredScripts : filteredFaqs;
+      row.trigger.toLowerCase().includes(query) ||
+      formatAssignment(row).toLowerCase().includes(query)
+    );
+  });
+  const filtered = isScripts ? filteredScripts : filteredGuidance;
   const isEmpty = filtered.length === 0 && !query;
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
   const start = (currentPage - 1) * pageSize;
   const visibleScripts = filteredScripts.slice(start, start + pageSize);
-  const visibleFaqs = filteredFaqs.slice(start, start + pageSize);
+  const visibleGuidance = filteredGuidance.slice(start, start + pageSize);
 
   const openScriptTemplates = () => setTemplatesOpen(true);
 
   const handleTemplateSelect = (choice: ScriptStartChoice) => {
     setTemplatesOpen(false);
     if (choice.type === "scratch") {
-      setBuilder({ type: choice.method === "manual" ? "blank" : "upload" });
+      setBuilder({ type: "blank" });
       return;
     }
     setBuilder({ type: "template", templateId: choice.templateId });
@@ -438,34 +446,51 @@ export function AgentAssistPage() {
     setBuilder(null);
   };
 
-  const upsertRepository = (repository: KnowledgeRepository) => {
-    setRepositories((current) => {
-      const index = current.findIndex((item) => item.id === repository.id);
-      if (index === -1) return [repository, ...current];
-      const next = [...current];
-      next[index] = repository;
-      return next;
+  const openGuidanceTemplates = () => setGuidanceTemplatesOpen(true);
+
+  const handleGuidanceTemplateSelect = (choice: GuidanceStartChoice) => {
+    setGuidanceTemplatesOpen(false);
+    if (choice.type === "scratch") {
+      setGuidanceLaunch({ mode: "create", item: createEmptyGuidance() });
+      return;
+    }
+    setGuidanceLaunch({
+      mode: "create",
+      item: createGuidanceFromTemplate(choice.templateId),
+      templateId: choice.templateId,
     });
   };
 
-  const openKnowledgeMethod = (method: KnowledgeCreateMethod) => {
-    setKnowledgeCreateOpen(false);
-    setKnowledgeBuilder({ type: method });
+  const saveGuidance = (item: GuidanceItem) => {
+    setGuidanceItems((current) => {
+      const exists = current.some((row) => row.id === item.id);
+      if (exists) return current.map((row) => (row.id === item.id ? item : row));
+      return [item, ...current];
+    });
+    setGuidanceLaunch(null);
   };
 
-  if (knowledgeBuilder) {
+  const duplicateGuidance = (item: GuidanceItem) => {
+    setGuidanceItems((current) => [
+      {
+        ...item,
+        id: `g-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: `${item.name} (copy)`,
+        status: "draft",
+        updated: "Just now",
+      },
+      ...current,
+    ]);
+  };
+
+  if (guidanceLaunch) {
     return (
-      <KnowledgeBuilderPage
-        launch={knowledgeBuilder}
-        onClose={() => setKnowledgeBuilder(null)}
-        onPublish={(repository) => {
-          upsertRepository(repository);
-          setKnowledgeBuilder(null);
-          setTab("faqs");
-        }}
-        onDelete={(id) =>
-          setRepositories((current) => current.filter((item) => item.id !== id))
-        }
+      <CreateGuidancePage
+        initial={guidanceLaunch.item}
+        mode={guidanceLaunch.mode}
+        templateId={guidanceLaunch.templateId}
+        onClose={() => setGuidanceLaunch(null)}
+        onSave={saveGuidance}
       />
     );
   }
@@ -508,10 +533,10 @@ export function AgentAssistPage() {
           <AgentAssistEmptyState
             illustrationSrc={faqsEmptyIllustration}
             illustrationAlt=""
-            title="Give agents answers exactly when they need them"
-            description="Add the questions and information your agents commonly need during customer conversations. Agent Assist will automatically surface relevant answers during calls."
-            actionLabel="Add FAQ repository"
-            onAction={() => setKnowledgeCreateOpen(true)}
+            title="No guidance yet"
+            description="Surface relevant answers, talking points, and resources to agents based on what's being discussed during calls."
+            actionLabel="Create guidance"
+            onAction={openGuidanceTemplates}
           />
         )
       ) : (
@@ -519,7 +544,7 @@ export function AgentAssistPage() {
           <div className="flex items-center justify-between px-6 py-3">
             <div className="flex h-9 items-center gap-3">
               <InputField
-                placeholder={isScripts ? "Search scripts" : "Search repositories"}
+                placeholder={isScripts ? "Search scripts" : "Search guidance"}
                 leadingIcon={<IconSearch size={16} />}
                 value={search}
                 onChange={(e) => {
@@ -536,12 +561,15 @@ export function AgentAssistPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <Button
-                size="sm"
-                onClick={isScripts ? openScriptTemplates : () => setKnowledgeCreateOpen(true)}
-              >
-                {isScripts ? "New script" : "New repository"}
-              </Button>
+              {isScripts ? (
+                <Button size="sm" onClick={openScriptTemplates}>
+                  New script
+                </Button>
+              ) : (
+                <Button size="sm" onClick={openGuidanceTemplates}>
+                  Create guidance
+                </Button>
+              )}
             </div>
           </div>
 
@@ -571,17 +599,17 @@ export function AgentAssistPage() {
                     }
                   />
                 ) : (
-                  <RepositoriesTable
-                    rows={visibleFaqs}
-                    onEdit={(row) => setKnowledgeBuilder({ type: "edit", repository: row })}
-                    onDuplicate={(row) => {
-                      setRepositories((current) => [cloneRepository(row), ...current]);
-                    }}
+                  <GuidanceTable
+                    rows={visibleGuidance}
+                    onEdit={(row) =>
+                      setGuidanceLaunch({ mode: "edit", item: row })
+                    }
+                    onDuplicate={duplicateGuidance}
                     onDelete={(row) =>
-                      setRepositories((current) => current.filter((item) => item.id !== row.id))
+                      setGuidanceItems((current) => current.filter((item) => item.id !== row.id))
                     }
                     onStatusChange={(row, live) =>
-                      setRepositories((current) =>
+                      setGuidanceItems((current) =>
                         current.map((item) =>
                           item.id === row.id
                             ? { ...item, status: live ? "live" : "draft", updated: "Just now" }
@@ -615,10 +643,10 @@ export function AgentAssistPage() {
         onClose={() => setTemplatesOpen(false)}
         onSelect={handleTemplateSelect}
       />
-      <KnowledgeCreateModal
-        open={knowledgeCreateOpen}
-        onClose={() => setKnowledgeCreateOpen(false)}
-        onSelect={openKnowledgeMethod}
+      <GuidanceTemplatesModal
+        open={guidanceTemplatesOpen}
+        onClose={() => setGuidanceTemplatesOpen(false)}
+        onSelect={handleGuidanceTemplateSelect}
       />
     </main>
   );
@@ -682,41 +710,53 @@ function ScriptsTable({
   );
 }
 
-function RepositoriesTable({
+function GuidanceTable({
   rows,
   onEdit,
   onDuplicate,
   onDelete,
   onStatusChange,
 }: {
-  rows: KnowledgeRepository[];
-  onEdit: (row: KnowledgeRepository) => void;
-  onDuplicate: (row: KnowledgeRepository) => void;
-  onDelete: (row: KnowledgeRepository) => void;
-  onStatusChange: (row: KnowledgeRepository, live: boolean) => void;
+  rows: GuidanceItem[];
+  onEdit: (row: GuidanceItem) => void;
+  onDuplicate: (row: GuidanceItem) => void;
+  onDelete: (row: GuidanceItem) => void;
+  onStatusChange: (row: GuidanceItem, live: boolean) => void;
 }) {
   return (
     <Table className="table-fixed">
       <TableHeader className="[&_tr]:border-b-0">
         <TableRow>
-          <TableHead className="sticky top-0 z-10 w-[280px]">Name</TableHead>
-          <TableHead className="sticky top-0 z-10 w-[160px]">Assigned</TableHead>
-          <TableHead className="sticky top-0 z-10 w-[100px]">FAQs</TableHead>
+          <TableHead className="sticky top-0 z-10 w-[220px]">Guidance name</TableHead>
+          <TableHead className="sticky top-0 z-10">Trigger</TableHead>
+          <TableHead className="sticky top-0 z-10 w-[160px]">Assigned to</TableHead>
           <TableHead className="sticky top-0 z-10 w-[120px]">Status</TableHead>
-          <TableHead className="sticky top-0 z-10 w-[120px]">Updated</TableHead>
-          <TableHead className="sticky top-0 z-10 w-[148px] text-center">Actions</TableHead>
+          <TableHead className="sticky top-0 z-10 w-[120px]">Last updated</TableHead>
+          <TableHead className="sticky top-0 z-10 w-[148px] text-center">
+            More actions
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {rows.map((row) => (
           <TableRow key={row.id} className="border-b-0">
             <TableCell>
-              <TableCellText primary={row.name} />
+              <button
+                type="button"
+                onClick={() => onEdit(row)}
+                className="max-w-full min-w-0 bg-transparent p-0 text-left font-medium hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+              >
+                <TableCellText primary={row.name} />
+              </button>
             </TableCell>
             <TableCell>
-              <AssignmentAvatarStack people={repositoryAssignees(row)} />
+              <span className="block truncate text-paragraph-md text-muted-foreground" title={row.trigger}>
+                {row.trigger}
+              </span>
             </TableCell>
-            <TableCell className="text-paragraph-md">{row.faqs.length}</TableCell>
+            <TableCell>
+              <AssignmentAvatarStack people={guidanceAssignees(row)} />
+            </TableCell>
             <TableCell>
               <StatusToggle
                 name={row.name}
@@ -727,7 +767,7 @@ function RepositoriesTable({
             <TableCell className="text-paragraph-md">{row.updated}</TableCell>
             <TableCell className="text-center">
               <ActionButtonGroup
-                entity="faq"
+                entity="guidance"
                 onEdit={() => onEdit(row)}
                 onDuplicate={() => onDuplicate(row)}
                 onDelete={() => onDelete(row)}

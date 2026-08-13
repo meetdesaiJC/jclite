@@ -1,15 +1,19 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
-import { InputField } from "@/components/InputField";
-import { AvatarIndicator } from "@/components/Avatar";
+import { Button } from "@/components/Button";
+import { Dropdown } from "@/components/Dropdown";
+import { InputField, TextArea } from "@/components/InputField";
+import { Avatar, AvatarIndicator } from "@/components/Avatar";
 import {
   IconCallLogs,
+  IconCheck,
   IconChevronDown,
   IconClose,
   IconContacts,
   IconMessages,
   IconOtherApps,
+  IconScheduler,
   IconVoicemailDrop,
 } from "@/components/Icon";
 import { IconJcaiSettings } from "./icons/JustCallAiNavIcons";
@@ -28,11 +32,25 @@ import noteIcon from "./assets/dialer/note.svg";
 
 /**
  * Dialer page — compact 360px webphone, pinned top-center.
- * Once the callee picks up, the panel expands with Agent Assist + script.
+ * Once the callee picks up, Agent Assist opens to the right at the same
+ * height as the phone. Hangup keeps the panel open: the phone takes notes
+ * and disposition, the panel writes the recap.
  */
 
 type DialerTab = "dialer" | "call-logs" | "contacts" | "messages" | "settings";
-type CallPhase = "idle" | "ringing" | "talking";
+type CallPhase = "idle" | "ringing" | "talking" | "wrapup";
+
+const NOTES_MAX = 1500;
+
+const CALL_OUTCOMES = [
+  { value: "interested", label: "Interested" },
+  { value: "follow-up", label: "Follow-up scheduled" },
+  { value: "meeting", label: "Meeting booked" },
+  { value: "not-interested", label: "Not interested" },
+  { value: "no-answer", label: "No answer" },
+  { value: "voicemail", label: "Left voicemail" },
+  { value: "wrong-number", label: "Wrong number" },
+];
 
 const RINGING_MS = 2400;
 const DEFAULT_NUMBER = "919773110910";
@@ -136,13 +154,27 @@ function prefersReducedMotion(): boolean {
   );
 }
 
+function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts[parts.length - 1]?.[0] ?? ""}`.toUpperCase();
+}
+
 export interface DialerPanelProps {
   className?: string;
   onCall?: (number: string) => void;
   onClose?: () => void;
+  /** Jump straight into a live call — used by the in-call prototype. */
+  autoStartCall?: boolean;
 }
 
-export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
+export function DialerPanel({
+  className,
+  onCall,
+  onClose,
+  autoStartCall = false,
+}: DialerPanelProps) {
   const inputId = useId();
   const [number, setNumber] = useState("");
   const [tab, setTab] = useState<DialerTab>("dialer");
@@ -156,6 +188,7 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
   const pausedMs = useRef(0);
   const inCall = phase !== "idle";
   const talking = phase === "talking";
+  const wrapping = phase === "wrapup";
   const scenario = scenarioById(scenarioId);
 
   useEffect(() => {
@@ -180,7 +213,7 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
   }, []);
 
   useEffect(() => {
-    if (!inCall) return;
+    if (phase !== "ringing" && phase !== "talking") return;
     const tick = () => {
       const started = callStartedAt.current;
       if (!started) return;
@@ -194,7 +227,7 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
     tick();
     const timer = window.setInterval(tick, 200);
     return () => window.clearInterval(timer);
-  }, [inCall]);
+  }, [phase]);
 
   useEffect(() => {
     if (!talking || !onHold) return;
@@ -210,20 +243,41 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
     setNumber((current) => `${current}${digit}`);
   };
 
-  const startCall = () => {
+  const startCall = (opts?: {
+    skipRinging?: boolean;
+    scenarioId?: string;
+    elapsedMs?: number;
+  }) => {
     const digits = number.replace(/\D/g, "") || DEFAULT_NUMBER;
+    const seek = opts?.elapsedMs ?? 0;
     setMuted(false);
     setOnHold(false);
-    setElapsedMs(0);
-    setScenarioId(CALL_SCENARIOS[0].id);
+    setElapsedMs(seek);
+    setScenarioId(opts?.scenarioId ?? CALL_SCENARIOS[0].id);
     holdStartedAt.current = null;
     pausedMs.current = 0;
-    callStartedAt.current = Date.now();
-    setPhase("ringing");
+    if (opts?.skipRinging) {
+      callStartedAt.current = Date.now() - RINGING_MS - seek;
+      setPhase("talking");
+    } else {
+      callStartedAt.current = Date.now();
+      setPhase("ringing");
+    }
     onCall?.(digits);
   };
 
-  const endCall = () => {
+  const didAutoStart = useRef(false);
+  useEffect(() => {
+    if (!autoStartCall || didAutoStart.current) return;
+    didAutoStart.current = true;
+    startCall({
+      skipRinging: true,
+      scenarioId: "discovery",
+      elapsedMs: 0,
+    });
+  }, [autoStartCall]);
+
+  const resetToIdle = () => {
     callStartedAt.current = null;
     holdStartedAt.current = null;
     pausedMs.current = 0;
@@ -234,13 +288,35 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
     setScenarioId(CALL_SCENARIOS[0].id);
   };
 
+  const hangup = () => {
+    callStartedAt.current = null;
+    holdStartedAt.current = null;
+    pausedMs.current = 0;
+    setMuted(false);
+    setOnHold(false);
+    if (phase === "talking") {
+      setPhase("wrapup");
+      return;
+    }
+    resetToIdle();
+  };
+
+  const resetCallClock = () => {
+    if (callStartedAt.current == null) return;
+    pausedMs.current = 0;
+    holdStartedAt.current = null;
+    if (onHold) setOnHold(false);
+    callStartedAt.current = Date.now() - RINGING_MS;
+    setElapsedMs(0);
+  };
+
   return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-label="Dialer"
       className={cn(
-        "fixed inset-0 z-[100] flex flex-col items-center overflow-y-auto bg-white pt-8",
+        "fixed inset-0 z-[100] flex flex-col items-center overflow-hidden bg-white pt-8 pb-8",
         className
       )}
     >
@@ -249,29 +325,36 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
           type="button"
           aria-label="Close dialer"
           onClick={onClose}
-          className="absolute top-4 right-4 flex size-8 items-center justify-center rounded-[4px] text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+          className="absolute top-4 right-4 z-10 flex size-8 items-center justify-center rounded-[4px] text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
         >
           <IconClose size={20} />
         </button>
       ) : null}
 
       {inCall ? (
-        <InCallShell
-          phase={phase}
-          talking={talking}
-          elapsedMs={elapsedMs}
-          contactName={scenario.contactName}
-          contactMeta={scenario.contactMeta}
-          muted={muted}
-          onHold={onHold}
-          tab={tab}
-          scenario={scenario}
-          onScenarioChange={setScenarioId}
-          onTabChange={setTab}
-          onMute={() => setMuted((value) => !value)}
-          onHoldToggle={() => setOnHold((value) => !value)}
-          onHangup={endCall}
-        />
+        <div className="flex h-full min-h-0 w-full flex-1 justify-center">
+          <InCallShell
+            phase={phase}
+            talking={talking}
+            wrapping={wrapping}
+            elapsedMs={elapsedMs}
+            contactName={scenario.contactName}
+            contactMeta={scenario.contactMeta}
+            muted={muted}
+            onHold={onHold}
+            tab={tab}
+            scenario={scenario}
+            onScenarioChange={(id) => {
+              setScenarioId(id);
+              resetCallClock();
+            }}
+            onTabChange={setTab}
+            onMute={() => setMuted((value) => !value)}
+            onHoldToggle={() => setOnHold((value) => !value)}
+            onHangup={hangup}
+            onCloseWrapUp={resetToIdle}
+          />
+        </div>
       ) : (
         <IdleDialer
           inputId={inputId}
@@ -403,6 +486,7 @@ function IdleDialer({
 function InCallShell({
   phase,
   talking,
+  wrapping,
   elapsedMs,
   contactName,
   contactMeta,
@@ -415,9 +499,11 @@ function InCallShell({
   onMute,
   onHoldToggle,
   onHangup,
+  onCloseWrapUp,
 }: {
   phase: CallPhase;
   talking: boolean;
+  wrapping: boolean;
   elapsedMs: number;
   contactName: string;
   contactMeta: string;
@@ -430,23 +516,33 @@ function InCallShell({
   onMute: () => void;
   onHoldToggle: () => void;
   onHangup: () => void;
+  onCloseWrapUp: () => void;
 }) {
   const reduced = prefersReducedMotion();
   const localTime = formatLocalTime(new Date());
+  const showAssist = talking || wrapping;
+
+  const stageHeight =
+    talking || wrapping
+      ? "h-[640px] max-h-[calc(100%-9.5rem)]"
+      : "h-[640px] max-h-full";
 
   return (
-    <div
-      className={cn(
-        "flex h-[588px] overflow-hidden rounded-[16px] bg-[#071532] shadow-600",
-        reduced
-          ? ""
-          : "transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]"
-      )}
-    >
+    <div className="flex h-full min-h-0 items-start gap-3">
+      {wrapping ? (
+        <WrapUpPhone
+          contactName={contactName}
+          contactMeta={contactMeta}
+          tab={tab}
+          onTabChange={onTabChange}
+          onClose={onCloseWrapUp}
+          className={stageHeight}
+        />
+      ) : (
       <div
         className={cn(
-          "flex h-full w-[360px] shrink-0 flex-col overflow-hidden bg-[#071532]",
-          talking ? "rounded-l-[16px]" : "rounded-[16px]"
+          "flex w-[360px] shrink-0 flex-col overflow-hidden rounded-[16px] bg-[#071532] shadow-600",
+          stageHeight
         )}
       >
         <div className="flex w-full items-center justify-center px-4">
@@ -562,23 +658,208 @@ function InCallShell({
 
         <DialerNav tab={tab} onTabChange={onTabChange} />
       </div>
+      )}
 
       <div
         className={cn(
-          "h-full overflow-hidden bg-white",
+          "min-h-0 shrink-0 overflow-hidden rounded-[16px] bg-white shadow-600",
+          stageHeight,
           reduced ? "" : "transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
-          talking ? "w-[480px]" : "w-0"
+          showAssist ? "w-[680px]" : "w-0"
         )}
-        aria-hidden={!talking}
-        inert={!talking ? true : undefined}
+        aria-hidden={!showAssist}
+        inert={!showAssist ? true : undefined}
       >
         <AgentAssistCallSheet
+          key={scenario.id}
           elapsedMs={elapsedMs}
           scenario={scenario}
           onScenarioChange={onScenarioChange}
+          ended={wrapping}
+          className="h-full"
         />
       </div>
     </div>
+  );
+}
+
+function WrapUpPhone({
+  contactName,
+  contactMeta,
+  tab,
+  onTabChange,
+  onClose,
+  className,
+}: {
+  contactName: string;
+  contactMeta: string;
+  tab: DialerTab;
+  onTabChange: (tab: DialerTab) => void;
+  onClose: () => void;
+  className?: string;
+}) {
+  const reduced = prefersReducedMotion();
+  const [rating, setRating] = useState(0);
+  const [outcome, setOutcome] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setSaved(false);
+  }, [rating, outcome, notes]);
+
+  return (
+    <div
+      className={cn(
+        "flex w-[360px] shrink-0 flex-col rounded-[16px] bg-white shadow-600",
+        reduced
+          ? ""
+          : "animate-[assist-wrap-in_220ms_cubic-bezier(0.23,1,0.32,1)_both]",
+        className
+      )}
+    >
+      <div className="relative flex w-full items-center justify-center">
+        <div className="flex h-5 w-24 items-center justify-center gap-1.5 rounded-b-lg bg-badge-beta px-2">
+          <AvatarIndicator
+            status="available"
+            size="xs"
+            className="static size-2 shrink-0 border-0"
+          />
+          <span className="text-[10px] leading-3 font-normal whitespace-nowrap text-white">
+            Available
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-1 right-3 text-label-sm text-brand outline-none hover:text-brand-hover focus-visible:ring-2 focus-visible:ring-brand/24"
+        >
+          Close
+        </button>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <div className="flex items-center gap-3">
+          <Avatar size="lg" color="indigo" initials={initialsFromName(contactName)} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-label-md text-foreground">{contactName}</p>
+            <p className="truncate text-paragraph-sm text-muted-foreground">
+              {contactMeta}
+            </p>
+          </div>
+        </div>
+
+        <CallRating value={rating} onChange={setRating} />
+
+        <Dropdown
+          searchable={false}
+          placeholder="Select call outcome"
+          options={CALL_OUTCOMES}
+          value={outcome}
+          onValueChange={(value) =>
+            setOutcome(Array.isArray(value) ? value[0] ?? "" : value)
+          }
+          aria-label="Call outcome"
+        />
+
+        <div className="flex flex-col gap-1">
+          <TextArea
+            placeholder="Notes"
+            maxLength={NOTES_MAX}
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            className="h-28 resize-none"
+          />
+          <p className="text-right text-label-sm text-muted-foreground tabular-nums">
+            {notes.length}/{NOTES_MAX}
+          </p>
+        </div>
+
+        <div className="mt-auto flex flex-col gap-2">
+          <Button
+            type="button"
+            variant="primary-outline"
+            size="sm"
+            leftIcon={<IconMessages size={16} />}
+            className="w-full"
+          >
+            Send a message
+          </Button>
+          <Button
+            type="button"
+            variant="primary-outline"
+            size="sm"
+            leftIcon={<IconScheduler size={16} />}
+            className="w-full"
+          >
+            Schedule a follow up
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            className="w-full"
+            leftIcon={saved ? <IconCheck size={16} /> : undefined}
+            onClick={() => setSaved(true)}
+          >
+            {saved ? "Saved" : "Save"}
+          </Button>
+        </div>
+      </div>
+
+      <DialerNav
+        tab={tab}
+        onTabChange={onTabChange}
+        className="rounded-b-[16px]"
+      />
+    </div>
+  );
+}
+
+function CallRating({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <p className="text-label-md text-foreground">Rate this call</p>
+      <div role="radiogroup" aria-label="Call rating" className="flex items-center">
+        {[1, 2, 3, 4, 5].map((star) => {
+          const filled = value >= star;
+          return (
+            <button
+              key={star}
+              type="button"
+              role="radio"
+              aria-checked={value === star}
+              aria-label={`${star} star${star === 1 ? "" : "s"}`}
+              onClick={() => onChange(value === star ? 0 : star)}
+              className="flex size-8 items-center justify-center rounded-[4px] text-muted-foreground outline-none hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/24 active:scale-[0.97]"
+            >
+              <StarIcon filled={filled} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" className="size-5" aria-hidden="true">
+      <path
+        d="M10 2.6l2.09 4.24 4.68.68-3.38 3.3.8 4.66L10 13.28 5.81 15.48l.8-4.66-3.38-3.3 4.68-.68L10 2.6z"
+        fill={filled ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+        className={filled ? "text-brand" : "text-disabled-fg"}
+      />
+    </svg>
   );
 }
 
@@ -635,12 +916,17 @@ function SignalBars() {
 function DialerNav({
   tab,
   onTabChange,
+  className,
 }: {
   tab: DialerTab;
   onTabChange: (tab: DialerTab) => void;
+  className?: string;
 }) {
   return (
-    <nav aria-label="Dialer" className="flex w-full items-start bg-brand">
+    <nav
+      aria-label="Dialer"
+      className={cn("flex w-full items-start bg-brand", className)}
+    >
       {NAV_ITEMS.map((item) => {
         const active = tab === item.id;
         return (

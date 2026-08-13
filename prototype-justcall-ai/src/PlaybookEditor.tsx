@@ -7,6 +7,7 @@ import {
   IconSparkles,
 } from "@/components/Icon";
 import { cn } from "@/lib/utils";
+import { HeaderEditableTitle } from "./HeaderEditableTitle";
 import {
   flattenSteps,
   newId,
@@ -77,7 +78,7 @@ function withSteps(playbook: ScriptPlaybook, steps: PlaybookStep[]): ScriptPlayb
 }
 
 const inputClass =
-  "w-full rounded-[4px] border border-line bg-white px-3 py-2 text-paragraph-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/16";
+  "w-full rounded-[4px] border border-line bg-white px-3 py-2 text-paragraph-md text-foreground placeholder:text-muted-foreground outline-none transition-colors focus:border-brand focus:ring-2 focus:ring-brand/16";
 
 interface RephraseDraft {
   stepId: string;
@@ -91,9 +92,14 @@ interface RephraseDraft {
 export interface PlaybookEditorProps {
   playbook: ScriptPlaybook;
   onChange: (playbook: ScriptPlaybook) => void;
+  onImportDocument?: () => void;
 }
 
-export function PlaybookEditor({ playbook, onChange }: PlaybookEditorProps) {
+export function PlaybookEditor({
+  playbook,
+  onChange,
+  onImportDocument,
+}: PlaybookEditorProps) {
   const [aiBusyStepId, setAiBusyStepId] = React.useState<string | null>(null);
   const [draft, setDraft] = React.useState<RephraseDraft | null>(null);
   const dragRef = React.useRef<number | null>(null);
@@ -158,8 +164,41 @@ export function PlaybookEditor({ playbook, onChange }: PlaybookEditorProps) {
     }, 380);
   };
 
+  const isEmpty = steps.length === 0;
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-line bg-white">
+      {isEmpty ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
+          <div className="flex max-w-[280px] flex-col items-center gap-6">
+            <div className="flex flex-col items-center gap-1.5">
+              <h3 className="text-balance text-label-md-semi text-foreground">
+                Build your script
+              </h3>
+              <p className="text-pretty text-paragraph-sm text-muted-foreground">
+                Add your first step to get started.
+              </p>
+            </div>
+            <div className="flex flex-col items-center gap-3">
+              <Button size="sm" onClick={addStep}>
+                + Add first step
+              </Button>
+              {onImportDocument ? (
+                <p className="text-paragraph-sm text-muted-foreground">
+                  or{" "}
+                  <button
+                    type="button"
+                    onClick={onImportDocument}
+                    className="font-medium text-brand underline underline-offset-2 hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+                  >
+                    Import document
+                  </button>
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-5 py-5">
         {steps.map((item, stepIndex) => {
           const isOver = overIndex === stepIndex && dragRef.current !== null && dragRef.current !== stepIndex;
@@ -202,12 +241,17 @@ export function PlaybookEditor({ playbook, onChange }: PlaybookEditorProps) {
                 >
                   <DragHandleIcon />
                 </button>
-                <input
+                <HeaderEditableTitle
                   value={item.title}
-                  onChange={(event) => updateStep(item.id, { title: event.target.value })}
-                  placeholder="Title"
-                  aria-label="Step title"
-                  className={cn(inputClass, "min-w-0 flex-1")}
+                  onChange={(title) => updateStep(item.id, { title })}
+                  placeholder="Untitled step"
+                  nameLabel="Step title"
+                  size="compact"
+                  autoEdit={
+                    !item.title &&
+                    !item.suggestedWording &&
+                    stepIndex === steps.length - 1
+                  }
                 />
                 <button
                   type="button"
@@ -277,6 +321,7 @@ export function PlaybookEditor({ playbook, onChange }: PlaybookEditorProps) {
           + Add step
         </button>
       </div>
+      )}
     </div>
   );
 }
@@ -362,7 +407,7 @@ function RephraseCard({
       <div className="rounded-[6px] bg-[#673BFF]/10 px-3 py-2.5">
         <p
           className={cn(
-            "text-pretty text-paragraph-sm text-foreground",
+            "text-pretty text-paragraph-md text-foreground",
             busy && "animate-pulse text-muted-foreground"
           )}
         >

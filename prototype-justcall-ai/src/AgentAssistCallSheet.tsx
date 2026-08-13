@@ -1,25 +1,47 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { cn } from "@/lib/utils";
 import { Dropdown } from "@/components/Dropdown";
 import {
   IconCircleCheckFilled,
   IconCircleDashed,
-  IconFile,
   IconSparkles,
 } from "@/components/Icon";
-import progressIcon from "./assets/dialer/progress.svg";
 import {
   CALL_SCENARIOS,
   simulationAt,
+  type CallActionItem,
   type CallScenario,
-  type FaqSuggestion,
+  type GuidanceSuggestion,
   type ScriptStep,
+  type TranscriptTurn,
 } from "./callSimulation";
+import { SEED_GUIDANCE, type GuidanceItem, type GuidanceResource } from "./guidanceData";
+import {
+  CriticalPin,
+  formatQuoteTime,
+  LiveGuidanceCard,
+  ResourceOverlay,
+} from "./LiveGuidance";
 
 /**
- * In-call Agent Assist side sheet — Figma Dialer 46:3694 (script) and 46:3876 (FAQ cards).
- * A choreographed conversation drives script progress and FAQ surfacing together.
+ * In-call Agent Assist — one stream. The full script stays open so any
+ * spoken line can check off; guidance cards insert under the step they
+ * belong to and stay in the timeline until the agent dismisses them.
  */
+
+function IconScript(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M12.5 17.5H5C4.33696 17.5 3.70107 17.2366 3.23223 16.7678C2.76339 16.2989 2.5 15.663 2.5 15V14.1667H10.8333V15.8333C10.8333 16.2754 11.0089 16.6993 11.3215 17.0118C11.6341 17.3244 12.058 17.5 12.5 17.5ZM12.5 17.5C12.942 17.5 13.366 17.3244 13.6785 17.0118C13.9911 16.6993 14.1667 16.2754 14.1667 15.8333V4.16667C14.1667 3.83703 14.2644 3.5148 14.4476 3.24072C14.6307 2.96664 14.891 2.75301 15.1955 2.62687C15.5001 2.50072 15.8352 2.46772 16.1585 2.53203C16.4818 2.59633 16.7788 2.75507 17.0118 2.98816C17.2449 3.22124 17.4037 3.51822 17.468 3.84152C17.5323 4.16482 17.4993 4.49993 17.3731 4.80447C17.247 5.10902 17.0334 5.36931 16.7593 5.55245C16.4852 5.73559 16.163 5.83333 15.8333 5.83333H14.1667M15.8333 2.5H6.66667C6.00363 2.5 5.36774 2.76339 4.8989 3.23223C4.43006 3.70107 4.16667 4.33696 4.16667 5V14.1667M7.5 5.83333H10.8333M7.5 9.16667H10.8333"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function prefersReducedMotion(): boolean {
   return (
@@ -28,17 +50,26 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-function formatQuoteTime(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+function insertAfterIndex(
+  steps: ScriptStep[],
+  playhead: number,
+  card: GuidanceSuggestion
+): number {
+  const related = steps.findIndex((step) =>
+    step.relatedGuidanceIds?.includes(card.item.id)
+  );
+  if (related >= 0) return related;
+  if (steps.length === 0) return 0;
+  return Math.min(Math.max(playhead, 0), steps.length - 1);
 }
 
 export interface AgentAssistCallSheetProps {
   elapsedMs: number;
   scenario: CallScenario;
   onScenarioChange: (id: string) => void;
+  guidanceItems?: GuidanceItem[];
+  /** Hangup — script and transcript yield to the generated recap. */
+  ended?: boolean;
   className?: string;
 }
 
@@ -46,362 +77,573 @@ export function AgentAssistCallSheet({
   elapsedMs,
   scenario,
   onScenarioChange,
+  guidanceItems = SEED_GUIDANCE,
+  ended = false,
   className,
 }: AgentAssistCallSheetProps) {
-  const [userIndex, setUserIndex] = useState(0);
-  const snapshot = simulationAt(scenario, elapsedMs);
-  const activeIndex = Math.min(
-    Math.max(snapshot.scriptIndex, userIndex),
-    scenario.steps.length
+  const [view, setView] = useState<"assist" | "transcript">("assist");
+  const [userAdvanced, setUserAdvanced] = useState(0);
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const [placements, setPlacements] = useState<Record<string, number>>({});
+  const [viewingResource, setViewingResource] = useState<GuidanceResource | null>(
+    null
   );
-  const completed = Math.min(activeIndex, scenario.steps.length);
-  const suggestions = snapshot.suggestions;
-  const showSuggestions = suggestions.length > 0;
-  const latestFaq = suggestions[suggestions.length - 1];
-  const liveQuote =
-    snapshot.latestQuote && snapshot.latestQuote.quote !== latestFaq?.quote
-      ? snapshot.latestQuote
-      : null;
-  const latestRef = useRef<HTMLDivElement | null>(null);
+  const snapshot = simulationAt(scenario, elapsedMs, guidanceItems);
   const reduced = prefersReducedMotion();
 
+  const playhead = Math.min(
+    Math.max(snapshot.scriptIndex, userAdvanced),
+    scenario.steps.length
+  );
+
+  const visibleCards = snapshot.suggestions
+    .filter((item) => !dismissed.includes(item.id))
+    .sort((a, b) => a.atMs - b.atMs);
+  const latestCard = visibleCards[visibleCards.length - 1] ?? null;
+  const visibleIds = visibleCards.map((item) => item.id).join(",");
+
   useEffect(() => {
-    setUserIndex(0);
+    setDismissed([]);
+    setPlacements({});
+    setUserAdvanced(0);
+    setViewingResource(null);
   }, [scenario.id]);
 
   useEffect(() => {
-    if (!showSuggestions) return;
-    latestRef.current?.scrollIntoView({
-      behavior: reduced ? "auto" : "smooth",
-      block: "nearest",
+    if (visibleCards.length === 0) return;
+    setPlacements((current) => {
+      let next = current;
+      for (const card of visibleCards) {
+        if (current[card.id] !== undefined) continue;
+        if (next === current) next = { ...current };
+        next[card.id] = insertAfterIndex(scenario.steps, playhead, card);
+      }
+      return next;
     });
-  }, [suggestions.length, showSuggestions, reduced]);
+  }, [visibleIds, playhead, scenario.steps]);
 
   const options = useMemo(
     () => CALL_SCENARIOS.map((item) => ({ value: item.id, label: item.scriptName })),
     []
   );
 
-  const advance = (index: number) => {
-    if (index !== activeIndex) return;
-    setUserIndex((current) => Math.max(current, index + 1));
-  };
+  const placedCards = visibleCards.map((card) => ({
+    card,
+    insertAfter:
+      placements[card.id] ?? insertAfterIndex(scenario.steps, playhead, card),
+  }));
 
-  const liveAnnouncement = suggestions.length > 0
-    ? `FAQ: ${suggestions[suggestions.length - 1].question}. Customer said ${suggestions[suggestions.length - 1].quote}.`
-    : snapshot.latestQuote
-      ? `Customer said ${snapshot.latestQuote.quote}`
-      : `Now: ${scenario.steps[Math.min(activeIndex, scenario.steps.length - 1)]?.title ?? ""}`;
+  const lastChecked = playhead > 0 ? scenario.steps[playhead - 1] : null;
+  const liveAnnouncement = ended
+    ? "Writing the call summary and action items."
+    : snapshot.wrapped
+      ? "Script complete."
+      : latestCard
+        ? `${latestCard.stance}: ${latestCard.item.name}. ${latestCard.item.suggestedResponse}`
+        : lastChecked
+          ? `${lastChecked.title} checked.`
+          : "";
 
   return (
     <aside
       aria-label="Agent Assist"
       className={cn(
-        "relative flex h-full w-[480px] shrink-0 flex-col bg-white",
+        "relative flex h-full min-h-0 w-[680px] shrink-0 flex-col overflow-hidden bg-white",
         className
       )}
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pb-4">
-        <div className="flex shrink-0 items-start gap-1">
+      <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-4">
+        <div className="flex min-w-0 items-center gap-1.5">
           <IconSparkles
-            size={20}
-            className="size-5 shrink-0 text-[#6d4dff]"
+            size={16}
+            className="size-4 shrink-0 text-brand"
             aria-hidden="true"
           />
-          <p
-            className="bg-clip-text text-[14px] leading-5 font-medium text-transparent"
-            style={{
-              backgroundImage:
-                "linear-gradient(110deg, #3318ff 30.4%, #b46dff 148.8%)",
-            }}
-          >
-            Agent Assist
-          </p>
+          <p className="text-label-md-semi text-foreground">Agent Assist</p>
         </div>
-
-        {liveQuote ? (
-          <p
-            key={`${liveQuote.atMs}-${liveQuote.quote}`}
-            className={cn(
-              "text-paragraph-md text-muted-foreground",
-              !reduced && "animate-[assist-faq-in_220ms_cubic-bezier(0.23,1,0.32,1)_both]"
-            )}
-          >
-            {`Customer (${formatQuoteTime(liveQuote.atMs)}): “${liveQuote.quote}”`}
-          </p>
-        ) : null}
-
-        {showSuggestions ? (
-          <div className="flex flex-col gap-3">
-            <p className="text-label-md text-foreground">FAQs</p>
-            {suggestions.map((item, index) => (
-              <FaqCard
-                key={item.id}
-                cardRef={index === suggestions.length - 1 ? latestRef : undefined}
-                item={item}
-                reduced={reduced}
-              />
-            ))}
-          </div>
-        ) : null}
-
-        {showSuggestions ? <div className="h-px w-full shrink-0 bg-line" /> : null}
-
-        {showSuggestions ? (
-          <div className="flex items-center justify-between">
-            <p className="text-label-md-semi text-foreground">Script</p>
-            <p className="text-paragraph-md text-muted-foreground">
-              {completed}/{scenario.steps.length} completed
-            </p>
-          </div>
-        ) : null}
-
-        <Dropdown
-          searchable={false}
-          leftIcon={<IconFile size={20} />}
-          options={options}
-          value={scenario.id}
-          onValueChange={(value) =>
-            onScenarioChange(Array.isArray(value) ? value[0] : value)
-          }
-          aria-label="Call script"
-        />
-
-        <ol className="flex flex-col gap-2" aria-label="Call script">
-          {scenario.steps.map((step, index) => {
-            const state =
-              index < activeIndex
-                ? "done"
-                : index === activeIndex
-                  ? "active"
-                  : "upcoming";
-            return (
-              <ScriptStepRow
-                key={`${scenario.id}-${step.title}`}
-                step={step}
-                state={state}
-                reduced={reduced}
-                onSelect={() => advance(index)}
-              />
-            );
-          })}
-        </ol>
-      </div>
-
-      {!showSuggestions ? (
-        <div className="shrink-0 border-t border-line bg-surface-hover px-4 py-3">
-          <div className="flex items-center justify-between">
-            <p className="text-label-md text-foreground">Script compliance</p>
-            <p className="text-paragraph-md text-muted-foreground">
-              {completed}/{scenario.steps.length}
-            </p>
-          </div>
-          <div className="mt-3 h-1.5 overflow-hidden rounded bg-muted">
-            <div
-              className="h-full rounded bg-brand"
-              style={{
-                width: `${scenario.steps.length === 0 ? 0 : (completed / scenario.steps.length) * 100}%`,
-                transition: reduced ? "none" : "width 280ms cubic-bezier(0.23, 1, 0.32, 1)",
-              }}
+        {ended ? null : (
+          <div className="flex min-w-0 items-center gap-1">
+            <Dropdown
+              searchable={false}
+              variant="borderless"
+              leftIcon={<IconScript />}
+              options={options}
+              value={scenario.id}
+              onValueChange={(value) =>
+                onScenarioChange(Array.isArray(value) ? value[0] : value)
+              }
+              aria-label="Call script"
+              triggerClassName="h-7 min-w-0 max-w-[200px] px-1.5 text-paragraph-sm text-muted-foreground"
             />
+            <button
+              type="button"
+              aria-pressed={view === "transcript"}
+              onClick={() =>
+                setView((current) => (current === "transcript" ? "assist" : "transcript"))
+              }
+              className={cn(
+                "inline-flex h-7 cursor-pointer items-center rounded-[4px] px-2 text-label-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+                view === "transcript"
+                  ? "bg-secondary-bg text-foreground"
+                  : "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+              )}
+            >
+              Transcript
+            </button>
           </div>
+        )}
+      </header>
+
+      {ended ? (
+        <PostCallAssist scenario={scenario} reduced={reduced} />
+      ) : view === "transcript" ? (
+        <TranscriptPane turns={snapshot.transcript} reduced={reduced} />
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3">
+          <FullScriptList
+            scenario={scenario}
+            playhead={playhead}
+            reduced={reduced}
+            placedCards={placedCards}
+            latestCardId={latestCard?.id ?? null}
+            onDismissCard={(id) => {
+              setDismissed((current) =>
+                current.includes(id) ? current : [...current, id]
+              );
+            }}
+            onViewResource={setViewingResource}
+          />
         </div>
+      )}
+
+      {viewingResource && !ended ? (
+        <ResourceOverlay
+          resource={viewingResource}
+          onClose={() => setViewingResource(null)}
+        />
       ) : null}
 
-      <p className="sr-only" aria-live="polite">
-        {liveAnnouncement}
-      </p>
+      {ended ? null : (
+        <p className="sr-only" aria-live="polite">
+          {liveAnnouncement}
+        </p>
+      )}
     </aside>
   );
 }
 
-function FaqCard({
-  item,
-  reduced,
-  cardRef,
-}: {
-  item: FaqSuggestion;
-  reduced: boolean;
-  cardRef?: Ref<HTMLDivElement>;
-}) {
-  const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
+function splitSentences(text: string): string[] {
+  return (
+    text.match(/[^.!?]+[.!?]+(?:\s|$)/g)?.map((part) => part.trim()) ?? [text]
+  );
+}
 
+function usePostCallReveal(
+  sentenceCount: number,
+  itemCount: number,
+  reduced: boolean
+) {
+  const [phase, setPhase] = useState<"thinking" | "writing" | "ready">(
+    reduced ? "ready" : "thinking"
+  );
+  const [visibleSentences, setVisibleSentences] = useState(
+    reduced ? sentenceCount : 0
+  );
+  const [visibleItems, setVisibleItems] = useState(reduced ? itemCount : 0);
+
+  useEffect(() => {
+    if (reduced) {
+      setPhase("ready");
+      setVisibleSentences(sentenceCount);
+      setVisibleItems(itemCount);
+      return;
+    }
+
+    const timers: number[] = [];
+    const thinkMs = 720;
+    const sentenceMs = 220;
+    const itemMs = 70;
+
+    timers.push(
+      window.setTimeout(() => {
+        setPhase("writing");
+        setVisibleSentences(1);
+      }, thinkMs)
+    );
+
+    for (let index = 1; index < sentenceCount; index += 1) {
+      timers.push(
+        window.setTimeout(() => {
+          setVisibleSentences(index + 1);
+        }, thinkMs + index * sentenceMs)
+      );
+    }
+
+    const itemsStart = thinkMs + Math.max(sentenceCount, 1) * sentenceMs;
+    timers.push(
+      window.setTimeout(() => {
+        setPhase("ready");
+      }, itemsStart)
+    );
+
+    for (let index = 0; index < itemCount; index += 1) {
+      timers.push(
+        window.setTimeout(() => {
+          setVisibleItems(index + 1);
+        }, itemsStart + 80 + index * itemMs)
+      );
+    }
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [sentenceCount, itemCount, reduced]);
+
+  return { phase, visibleSentences, visibleItems };
+}
+
+function ShimmerLine({
+  className,
+  reduced,
+}: {
+  className?: string;
+  reduced: boolean;
+}) {
   return (
     <div
-      ref={cardRef}
       className={cn(
-        "assist-faq-card flex flex-col gap-2",
-        !reduced && "animate-[assist-faq-in_220ms_cubic-bezier(0.23,1,0.32,1)_both]"
+        "relative h-3 overflow-hidden rounded-[4px] bg-muted",
+        className
       )}
     >
-      <p className="text-paragraph-md text-muted-foreground">
-        {`Customer (${formatQuoteTime(item.atMs)}): “${item.quote}”`}
-      </p>
-      <article className="overflow-hidden rounded-lg shadow-200 ring-1 ring-warning-border">
-        <header className="bg-warning-border px-3 py-2.5">
-          <p className="text-pretty text-label-md-semi text-foreground">{item.question}</p>
-        </header>
-        <div className="bg-warning-secondary px-3 py-2.5">
-          <p className="text-pretty text-paragraph-md text-foreground">{item.answer}</p>
-        </div>
-        <footer className="flex items-center justify-between gap-3 bg-white px-3 py-2">
-          <p className="text-paragraph-md text-foreground">
-            {feedback === "up"
-              ? "Thanks for the feedback"
-              : feedback === "down"
-                ? "We’ll use this to improve"
-                : "Was this helpful?"}
-          </p>
-          <div className="flex shrink-0 gap-1.5">
-            <FeedbackButton
-              label="Helpful"
-              pressed={feedback === "up"}
-              onClick={() => setFeedback((value) => (value === "up" ? null : "up"))}
-            >
-              <ThumbUpIcon />
-            </FeedbackButton>
-            <FeedbackButton
-              label="Not helpful"
-              pressed={feedback === "down"}
-              onClick={() => setFeedback((value) => (value === "down" ? null : "down"))}
-            >
-              <ThumbDownIcon />
-            </FeedbackButton>
-          </div>
-        </footer>
-      </article>
+      {reduced ? null : (
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 animate-[assist-shimmer_1.1s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white to-transparent"
+        />
+      )}
     </div>
   );
 }
 
-function FeedbackButton({
-  label,
-  pressed,
-  onClick,
-  children,
+function PostCallAssist({
+  scenario,
+  reduced,
 }: {
-  label: string;
-  pressed: boolean;
-  onClick: () => void;
-  children: ReactNode;
+  scenario: CallScenario;
+  reduced: boolean;
 }) {
+  const sentences = useMemo(
+    () => splitSentences(scenario.wrapUp.summary),
+    [scenario.wrapUp.summary]
+  );
+  const items = scenario.wrapUp.actionItems;
+  const { phase, visibleSentences, visibleItems } = usePostCallReveal(
+    sentences.length,
+    items.length,
+    reduced
+  );
   return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={pressed}
-      onClick={onClick}
+    <div
       className={cn(
-        "flex size-6 items-center justify-center rounded-[4px] border outline-none transition-colors",
-        pressed
-          ? "border-brand bg-brand-subtle text-brand"
-          : "border-line bg-white text-foreground hover:bg-surface-hover",
-        "focus-visible:ring-2 focus-visible:ring-brand/24 active:scale-[0.97]"
+        "flex min-h-0 flex-1 flex-col",
+        !reduced &&
+          "animate-[assist-wrap-in_220ms_cubic-bezier(0.23,1,0.32,1)_both]"
       )}
     >
-      {children}
-    </button>
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4">
+        <section aria-labelledby="call-summary-heading" className="flex flex-col gap-2">
+          <h2
+            id="call-summary-heading"
+            className="text-label-md-semi text-foreground"
+          >
+            Call summary
+          </h2>
+          {phase === "thinking" ? (
+            <div className="flex flex-col gap-2" aria-hidden="true">
+              <ShimmerLine reduced={reduced} className="w-full" />
+              <ShimmerLine reduced={reduced} className="w-[92%]" />
+              <ShimmerLine reduced={reduced} className="w-[76%]" />
+            </div>
+          ) : (
+            <p className="text-pretty text-[13px] leading-5 text-foreground">
+              {sentences.slice(0, visibleSentences).map((sentence, index) => (
+                <span
+                  key={sentence}
+                  className={cn(
+                    "inline",
+                    !reduced &&
+                      "animate-[assist-wrap-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]"
+                  )}
+                >
+                  {index > 0 ? " " : ""}
+                  {sentence}
+                </span>
+              ))}
+              {phase === "writing" && !reduced ? (
+                <span
+                  aria-hidden="true"
+                  className="ml-0.5 inline-block h-3.5 w-px translate-y-0.5 bg-brand align-middle animate-[assist-caret_800ms_steps(1)_infinite]"
+                />
+              ) : null}
+            </p>
+          )}
+        </section>
+
+        <section aria-labelledby="action-items-heading" className="flex flex-col gap-2">
+          <h2
+            id="action-items-heading"
+            className="text-label-md-semi text-foreground"
+          >
+            Action items
+          </h2>
+          {phase === "thinking" ? (
+            <div className="flex flex-col gap-2" aria-hidden="true">
+              <ShimmerLine reduced={reduced} className="h-8 w-full" />
+              <ShimmerLine reduced={reduced} className="h-8 w-[88%]" />
+            </div>
+          ) : (
+            <ol className="flex flex-col gap-2">
+              {items.slice(0, visibleItems).map((item, index) => (
+                <ActionItemRow
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  reduced={reduced}
+                />
+              ))}
+            </ol>
+          )}
+        </section>
+      </div>
+
+      <p className="sr-only" aria-live="polite">
+        {phase === "ready"
+          ? "Call summary and action items are ready."
+          : "Writing the call summary and action items."}
+      </p>
+    </div>
   );
 }
 
-function ThumbUpIcon() {
+function ActionItemRow({
+  item,
+  index,
+  reduced,
+}: {
+  item: CallActionItem;
+  index: number;
+  reduced: boolean;
+}) {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M5.333 13.333H3.2c-.737 0-1.333-.597-1.333-1.333V8.667c0-.737.596-1.334 1.333-1.334h2.133M5.333 7.333 7.067 3.6A1.467 1.467 0 0 1 8.4 2.667h.133c.86 0 1.534.747 1.4 1.593L9.6 6.667h2.933c.88 0 1.54.813 1.36 1.673l-.8 3.867a1.333 1.333 0 0 1-1.307 1.06H5.333V7.333Z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <li
+      className={cn(
+        "flex items-start gap-2.5 rounded-lg border border-line bg-white px-3 py-2.5",
+        !reduced &&
+          "animate-[assist-wrap-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]"
+      )}
+    >
+      <span
+        className="flex size-5 shrink-0 items-center justify-center rounded-[4px] bg-brand-subtle text-[11px] leading-5 font-medium text-brand tabular-nums"
+        aria-hidden="true"
+      >
+        {index + 1}
+      </span>
+      <p className="min-w-0 flex-1 text-pretty text-paragraph-sm leading-5 font-medium text-foreground">
+        {item.title}
+      </p>
+    </li>
   );
 }
 
-function ThumbDownIcon() {
+function FullScriptList({
+  scenario,
+  playhead,
+  reduced,
+  placedCards,
+  latestCardId,
+  onDismissCard,
+  onViewResource,
+}: {
+  scenario: CallScenario;
+  playhead: number;
+  reduced: boolean;
+  placedCards: { card: GuidanceSuggestion; insertAfter: number }[];
+  latestCardId: string | null;
+  onDismissCard: (id: string) => void;
+  onViewResource: (resource: GuidanceResource) => void;
+}) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const lastSeenCardAtMs = useRef(0);
+  const latestAtMs =
+    placedCards.find((item) => item.card.id === latestCardId)?.card.atMs ?? 0;
+
+  const cardsByStep = new Map<number, GuidanceSuggestion[]>();
+  for (const { card, insertAfter } of placedCards) {
+    const list = cardsByStep.get(insertAfter) ?? [];
+    list.push(card);
+    cardsByStep.set(insertAfter, list);
+  }
+
+  useEffect(() => {
+    lastSeenCardAtMs.current = 0;
+  }, [scenario.id]);
+
+  useEffect(() => {
+    const isNewCard = Boolean(latestCardId && latestAtMs > lastSeenCardAtMs.current);
+    if (!isNewCard) return;
+    lastSeenCardAtMs.current = latestAtMs;
+    cardRef.current?.scrollIntoView({
+      behavior: reduced ? "auto" : "smooth",
+      block: "nearest",
+    });
+  }, [latestCardId, latestAtMs, reduced, scenario.id]);
+
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M10.667 2.667H12.8c.737 0 1.333.596 1.333 1.333v3.333c0 .737-.596 1.334-1.333 1.334h-2.133M10.667 8.667 8.933 12.4a1.467 1.467 0 0 1-1.333.933h-.133c-.86 0-1.534-.747-1.4-1.593L6.4 9.333H3.467c-.88 0-1.54-.813-1.36-1.673l.8-3.867A1.333 1.333 0 0 1 4.213 2.733h6.454V8.667Z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <ol className="flex flex-col" aria-label="Call script">
+      {scenario.steps.map((step, index) => {
+        const checked = index < playhead;
+        const stepCards = cardsByStep.get(index) ?? [];
+
+        return (
+          <li key={`${scenario.id}-${step.title}`} className="flex flex-col">
+            <ScriptStepRow step={step} checked={checked} reduced={reduced} />
+            {stepCards.map((card) => (
+              <div
+                key={card.id}
+                ref={card.id === latestCardId ? cardRef : undefined}
+                className="scroll-mt-2 py-1.5"
+              >
+                {card.priority === "critical" ? (
+                  <CriticalPin
+                    item={card}
+                    reduced={reduced}
+                    onDismiss={() => onDismissCard(card.id)}
+                  />
+                ) : (
+                  <LiveGuidanceCard
+                    item={card}
+                    reduced={reduced}
+                    onDismiss={() => onDismissCard(card.id)}
+                    onViewResource={onViewResource}
+                  />
+                )}
+              </div>
+            ))}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
 function ScriptStepRow({
   step,
-  state,
+  checked,
   reduced,
-  onSelect,
 }: {
   step: ScriptStep;
-  state: "done" | "active" | "upcoming";
+  checked: boolean;
   reduced: boolean;
-  onSelect: () => void;
 }) {
-  const clickable = state === "active";
-
   return (
-    <li>
-      <button
-        type="button"
-        disabled={!clickable}
-        onClick={onSelect}
-        className={cn(
-          "flex w-full flex-col items-start rounded-lg text-left outline-none",
-          reduced
-            ? "transition-none"
-            : "transition-[background-color,border-color,padding] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
-          state === "active" &&
-            "gap-1.5 border border-info-border bg-avatar-indigo-bg p-3",
-          state === "done" && "flex-row items-start gap-1.5 bg-surface-hover p-3",
-          state === "upcoming" && "flex-row items-start gap-1.5 bg-surface-hover p-2",
-          clickable && "cursor-pointer hover:brightness-[0.99] focus-visible:ring-2 focus-visible:ring-brand/24",
-          !clickable && "cursor-default"
-        )}
-      >
-        {state === "active" ? (
-          <>
-            <span className="flex items-center gap-1.5">
-              <span className="relative size-5 shrink-0 overflow-clip">
-                <img src={progressIcon} alt="" className="size-full object-contain" />
-              </span>
-              <span className="text-paragraph-md text-foreground">{step.title}</span>
-            </span>
-            {step.wording ? (
-              <p className="text-pretty text-[14px] leading-5 font-medium text-brand">
-                “{step.wording}”
-              </p>
-            ) : null}
-          </>
-        ) : (
-          <>
-            {state === "done" ? (
-              <IconCircleCheckFilled
-                size={20}
-                className="size-5 shrink-0 text-disabled-fg"
-                aria-hidden="true"
-              />
-            ) : (
-              <IconCircleDashed
-                size={20}
-                className="size-5 shrink-0 text-disabled-fg"
-                aria-hidden="true"
-              />
+    <div className="rounded-[6px] px-1 py-1.5">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+          {checked ? (
+            <IconCircleCheckFilled
+              size={16}
+              className="size-4 text-success"
+              aria-hidden="true"
+            />
+          ) : (
+            <IconCircleDashed
+              size={16}
+              className="size-4 text-disabled-fg"
+              aria-hidden="true"
+            />
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p
+            className={cn(
+              "min-w-0 text-pretty text-paragraph-sm",
+              reduced ? "transition-none" : "transition-colors duration-150",
+              checked ? "text-muted-foreground line-through" : "text-foreground"
             )}
-            <span
-              className={cn(
-                "min-w-0 flex-1 text-paragraph-md",
-                state === "done" ? "text-muted-foreground" : "text-muted-foreground"
-              )}
-            >
-              {step.title}
-            </span>
-          </>
-        )}
-      </button>
-    </li>
+          >
+            {step.title}
+          </p>
+          {step.wording ? (
+            <p className="mt-0.5 text-pretty text-[13px] leading-5 text-muted-foreground">
+              “{step.wording}”
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
+
+function TranscriptPane({
+  turns,
+  reduced,
+}: {
+  turns: TranscriptTurn[];
+  reduced: boolean;
+}) {
+  const endRef = useRef<HTMLLIElement | null>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({
+      behavior: reduced ? "auto" : "smooth",
+      block: "end",
+    });
+  }, [turns.length, reduced]);
+
+  if (turns.length === 0) {
+    return (
+      <div className="flex flex-1 items-start px-4 py-4">
+        <p className="text-pretty text-paragraph-sm text-muted-foreground">
+          Nothing to replay yet. Open this if you miss a sentence — it won’t
+          sit beside you while you’re talking.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ol
+      className={cn(
+        "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3",
+        !reduced && "animate-[assist-now-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]"
+      )}
+      aria-label="Call transcript"
+    >
+      {turns.map((turn, index) => (
+        <li
+          key={`${turn.atMs}-${turn.quote}`}
+          ref={index === turns.length - 1 ? endRef : undefined}
+          className="flex flex-col gap-0.5"
+        >
+          <p className="text-label-sm text-muted-foreground tabular-nums">
+            {turn.speaker === "customer" ? "Customer" : "You"} ·{" "}
+            {formatQuoteTime(turn.atMs)}
+          </p>
+          <p
+            className={cn(
+              "text-pretty text-paragraph-sm",
+              turn.speaker === "customer"
+                ? "text-foreground"
+                : "text-muted-foreground"
+            )}
+          >
+            {turn.quote}
+          </p>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+export type { GuidanceSuggestion };
