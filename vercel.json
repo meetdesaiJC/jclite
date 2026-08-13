@@ -1,0 +1,5 @@
+{
+  "buildCommand": "npx vite build --config prototype-justcall-ai/vite.config.ts",
+  "outputDirectory": "prototype-justcall-ai/dist",
+  "installCommand": "npm install"
+}

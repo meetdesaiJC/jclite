@@ -1,0 +1,503 @@
+@import "tailwindcss";
+
+/* ================================================================== */
+/* PRIMITIVE COLOR TOKENS                                              */
+/* Synced from Figma — Design System 2.0.                             */
+/* These are the raw palette. Each generates Tailwind utilities,      */
+/* e.g. bg-blue-500, text-gray-900, border-bluegray-200.              */
+/* ================================================================== */
+@theme static {
+  --color-white: #ffffff;
+
+  /* Blue */
+  --color-blue-200: #b2ddff;
+  --color-blue-400: #53b1fd;
+  --color-blue-500: #2e90fa;
+  --color-blue-600: #1570ef;
+  --color-blue-700: #175cd3;
+  --color-blue-800: #1849a9;
+  --color-blue-900: #194185;
+
+  /* Indigo */
+  --color-indigo-25: #f5f8ff;
+  --color-indigo-50: #eef4ff;
+  --color-indigo-100: #e0eaff;
+  --color-indigo-200: #c7d7fe;
+  --color-indigo-300: #a4bcfd;
+  --color-indigo-400: #8098f9;
+  --color-indigo-500: #6172f3;
+  --color-indigo-600: #444ce7;
+  --color-indigo-700: #3538cd;
+  --color-indigo-800: #2d31a6;
+  --color-indigo-900: #2d3282;
+
+  /* Purple */
+  --color-purple-25: #fafaff;
+  --color-purple-50: #f4f3ff;
+  --color-purple-100: #ebe9fe;
+  --color-purple-200: #d9d6fe;
+  --color-purple-300: #bdb4fe;
+  --color-purple-400: #9b8afb;
+  --color-purple-500: #7a5af8;
+  --color-purple-600: #6938ef;
+  --color-purple-700: #5925dc;
+  --color-purple-800: #4a1fb8;
+  --color-purple-900: #3e1c96;
+
+  /* Pink */
+  --color-pink-50: #fdf2fa;
+  --color-pink-100: #fce7f6;
+  --color-pink-200: #fcceee;
+  --color-pink-300: #faa7e0;
+  --color-pink-400: #f670c7;
+  --color-pink-500: #dd2590; /* Figma: "Pink / Base" */
+  --color-pink-700: #c11574;
+  --color-pink-800: #9e165f;
+  --color-pink-900: #851651;
+
+  /* Blue Gray */
+  --color-bluegray-50: #f8f9fc;
+  --color-bluegray-100: #eaecf5;
+  --color-bluegray-200: #d5d9eb;
+  --color-bluegray-300: #afb5d9;
+  --color-bluegray-400: #717bbc;
+  --color-bluegray-500: #4e5ba6;
+  --color-bluegray-600: #3e4784;
+  --color-bluegray-700: #363f72;
+  --color-bluegray-800: #293056;
+  --color-bluegray-900: #101323;
+
+  /* Gray */
+  --color-gray-25: #fcfcfd;
+  --color-gray-100: #f2f4f7;
+  --color-gray-300: #d0d5dd;
+  --color-gray-500: #667085;
+  --color-gray-600: #475467;
+  --color-gray-700: #344054;
+  --color-gray-800: #1d2939;
+  --color-gray-900: #101828;
+
+  /* Neutral */
+  --color-neutral-100: #f4f6fa;
+  --color-neutral-700: #696f8c;
+  --color-neutral-800: #474d66;
+  --color-neutral-900: #101840;
+}
+
+/* ------------------------------------------------------------------ */
+/* SEMANTIC TOKENS                                                     */
+/* Role-based aliases the components reference (bg-primary,            */
+/* text-foreground, …). Point these at primitives above so the whole  */
+/* UI restyles when the palette changes.                              */
+/* ------------------------------------------------------------------ */
+@theme {
+  --color-background: var(--color-white);
+  --color-foreground: var(--color-gray-900);
+  --color-muted: var(--color-gray-100);
+  --color-muted-foreground: var(--color-gray-500);
+  --color-border: var(--color-gray-300);
+  --color-ring: var(--color-blue-500);
+
+  --color-primary: var(--color-gray-900);
+  --color-primary-foreground: var(--color-white);
+
+  --color-secondary-bg: #f9fafb; /* Figma: "Gray / Secondary bg" */
+
+  --color-destructive: #d92d20;
+  --color-destructive-foreground: var(--color-white);
+
+  /* ---------------------------------------------------------------- */
+  /* BUTTON / ACTION TOKENS                                            */
+  /* Synced from Figma — Design System 2.0 "Buttons".                 */
+  /* Brand = the primary action blue, shared across the 7 button      */
+  /* hierarchies (bg-brand, text-brand, border-brand, …).             */
+  /* ---------------------------------------------------------------- */
+  --color-brand: #004ce6; /* bg/brand-primary, text/brand, border/brand */
+  --color-brand-hover: #003bb3; /* bg/brand-primary-hover */
+  --color-brand-subtle: #eff8ff; /* bg/brand-secondary — outline hover fill */
+
+  --color-line: #e4e7ec; /* border/primary — grey outline border */
+  --color-surface-hover: #f9fafb; /* bg/primary-hover — grey outline hover */
+
+  --color-disabled-bg: #e4e7ec; /* bg/tertiary — disabled solid fill */
+  --color-disabled-fg: #98a2b3; /* text/disabled, icon/disabled */
+
+  --color-error: #d92d20; /* error/primary */
+  --color-error-hover: #b42318; /* error/primary-hover */
+  --color-error-subtle: #fef3f2; /* error/secondary — error outline hover fill */
+
+  --color-success: #12b76a; /* success/primary — "Saved" state */
+
+  /* ---------------------------------------------------------------- */
+  /* FORM CONTROL TOKENS                                               */
+  /* Synced from Figma — Design System 2.0 "Checkbox | Radio | Toggle" */
+  /* ---------------------------------------------------------------- */
+  --color-control-border: var(--color-disabled-fg); /* border/tertiary — resting checkbox/radio border, toggle off-track fill */
+  --color-control-disabled-bg: var(--color-gray-100); /* bg/disabled — disabled fill for checkbox/radio/toggle */
+
+  /* ---------------------------------------------------------------- */
+  /* STATUS / ALERT TOKENS                                             */
+  /* Synced from Figma — Design System 2.0 "Alerts".                  */
+  /* Each status has an icon colour (*-primary), a tinted surface      */
+  /* (*-secondary) and a matching border (*-border).                   */
+  /* ---------------------------------------------------------------- */
+  --color-info: #004ce6; /* info/primary */
+  --color-info-secondary: #e6eeff; /* info/secondary — alert surface */
+  --color-info-border: #ccdeff; /* info/border */
+
+  --color-success-secondary: #ecfdf3; /* success/secondary — alert surface */
+  --color-success-border: #a6f4c5; /* success/border */
+
+  --color-warning: #f79009; /* warning/primary */
+  --color-warning-secondary: #fffaeb; /* warning/secondary — alert surface */
+  --color-warning-border: #fef0c7; /* warning/border */
+
+  --color-error-secondary: #fef3f2; /* error/secondary — alert surface */
+  --color-error-border: #fee4e2; /* error/border */
+
+  /* ---------------------------------------------------------------- */
+  /* AVATAR TOKENS                                                     */
+  /* Synced from Figma — Design System 2.0 "Avatars".                 */
+  /* Soft tag-color pairs for initials / placeholder fills, plus      */
+  /* presence-indicator colours for agent status.                     */
+  /* ---------------------------------------------------------------- */
+  --color-avatar-indigo-bg: var(--color-indigo-50); /* #eef4ff */
+  --color-avatar-indigo-fg: var(--color-indigo-700); /* #3538cd */
+  --color-avatar-purple-bg: var(--color-purple-50); /* #f4f3ff */
+  --color-avatar-purple-fg: var(--color-purple-700); /* #5925dc */
+  --color-avatar-pink-bg: var(--color-pink-50); /* #fdf2fa */
+  --color-avatar-pink-fg: var(--color-pink-700); /* #c11574 */
+  --color-avatar-orange-bg: #fff6ed;
+  --color-avatar-orange-fg: #c4320a;
+  --color-avatar-grey-bg: #f4f4f4;
+  --color-avatar-grey-fg: var(--color-gray-700); /* #344054 */
+  --color-avatar-bluegrey-bg: var(--color-bluegray-100); /* #eaecf5 */
+  --color-avatar-bluegrey-fg: var(--color-bluegray-700); /* #363f72 */
+
+  --color-status-available: var(--color-success); /* Available for call */
+  --color-status-ooo: var(--color-disabled-fg); /* Disabled / OOO */
+  --color-status-on-call: #f04438; /* On call */
+  --color-status-wrap-up: var(--color-warning); /* Wrap-up time */
+  --color-status-dnd: #d92d20; /* DND */
+
+  /* ---------------------------------------------------------------- */
+  /* BADGE TOKENS                                                      */
+  /* Synced from Figma — Design System 2.0 "Badges".                  */
+  /* Solid states use primary fills; inverted/subtle states use the   */
+  /* tinted *-secondary surfaces with matching *-text colours.        */
+  /* ---------------------------------------------------------------- */
+  --color-success-text: #027a48; /* success/text — success badge label + indicator */
+  --color-warning-text: #b54708; /* warning/text — warning badge label + indicator */
+  --color-badge-grey-bg: var(--color-gray-100); /* accent/grey-bg — primary-inverted surface */
+  --color-badge-bluegrey-bg: var(--color-bluegray-100); /* accent/blue-grey-bg */
+  --color-badge-bluegrey-fg: var(--color-bluegray-700); /* indicator on blue-grey */
+  --color-badge-pink: #ee46bc; /* accent/pink-badge — "New" special badge */
+  --color-badge-beta: var(--color-gray-700); /* Inverse/Layer/02 — "Beta" special badge */
+  --color-badge-premium: #fec84b; /* icon/premium — crown icon fill */
+
+  /* ---------------------------------------------------------------- */
+  /* TAG TOKENS                                                        */
+  /* Synced from Figma — Design System 2.0 "Tags" (node 3464:126546). */
+  /* Soft fills for the documented color variants (Grey / Orange).    */
+  /* Other colors reuse avatar / status tokens.                       */
+  /* ---------------------------------------------------------------- */
+  --color-tag-grey-bg: #f4f4f4; /* accent/grey — user tags */
+  --color-tag-orange-bg: #fff6ed; /* accent/orange-bg */
+  --color-tag-orange-fg: #ec4a0a; /* accent/orange-text */
+
+  /* ---------------------------------------------------------------- */
+  /* TOOLTIP TOKENS                                                    */
+  /* Synced from Figma — Design System 2.0 "Tooltips" (3464:126547).  */
+  /* Dark surface reuses gray-900; inverse CTA is a lighter brand blue.*/
+  /* ---------------------------------------------------------------- */
+  --color-tooltip-dark-bg: var(--color-gray-900); /* Inverse/Layer/03 */
+  --color-tooltip-dark-fg: var(--color-white);
+  --color-tooltip-dark-muted: var(--color-disabled-fg); /* text/placeholder #98A2B3 */
+  --color-tooltip-dark-action: #4d8bff; /* Inverse/Button-primary */
+
+  /* Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ================================================================== */
+/* ELEVATION / SHADOW TOKENS                                          */
+/* Synced from Figma — Design System 2.0.                             */
+/* Two-layer drop shadows. Generates shadow-100…600 and               */
+/* shadow-ai-100…600 utilities.                                       */
+/* ================================================================== */
+@theme static {
+  /* Neutral elevation (#303133) */
+  --shadow-100: 0 0 1px 0 rgba(48, 49, 51, 0.05),
+    0 1px 1px 0 rgba(48, 49, 51, 0.1);
+  --shadow-200: 0 0 1px 0 rgba(48, 49, 51, 0.05),
+    0 2px 4px 0 rgba(48, 49, 51, 0.1);
+  --shadow-300: 0 0 1px 0 rgba(48, 49, 51, 0.05),
+    0 4px 8px 0 rgba(48, 49, 51, 0.1);
+  --shadow-400: 0 0 1px 0 rgba(48, 49, 51, 0.05),
+    0 8px 16px 0 rgba(48, 49, 51, 0.1);
+  --shadow-500: 0 0 1px 0 rgba(48, 49, 51, 0.05),
+    0 16px 24px 0 rgba(48, 49, 51, 0.09);
+  --shadow-600: 0 0 1px 0 rgba(48, 49, 51, 0.05),
+    0 24px 40px 0 rgba(48, 49, 51, 0.08);
+
+  /* AI elevation (#673BFF) */
+  --shadow-ai-100: 0 0 1px 0 rgba(103, 59, 255, 0.05),
+    0 1px 1px 0 rgba(103, 59, 255, 0.1);
+  --shadow-ai-200: 0 0 1px 0 rgba(103, 59, 255, 0.05),
+    0 2px 4px 0 rgba(103, 59, 255, 0.1);
+  --shadow-ai-300: 0 0 1px 0 rgba(103, 59, 255, 0.05),
+    0 4px 8px 0 rgba(103, 59, 255, 0.1);
+  --shadow-ai-400: 0 0 1px 0 rgba(103, 59, 255, 0.05),
+    0 8px 16px 0 rgba(103, 59, 255, 0.1);
+  --shadow-ai-500: 0 0 1px 0 rgba(103, 59, 255, 0.05),
+    0 16px 24px 0 rgba(103, 59, 255, 0.09);
+  --shadow-ai-600: 0 0 1px 0 rgba(103, 59, 255, 0.05),
+    0 24px 40px 0 rgba(103, 59, 255, 0.08);
+}
+
+/* ================================================================== */
+/* TYPOGRAPHY TOKENS                                                  */
+/* Synced from Figma — Design System 2.0. Family: Inter.              */
+/* Each generates one utility that sets font-size + line-height +     */
+/* font-weight together, e.g. text-heading-xxxl, text-paragraph-md.   */
+/* ================================================================== */
+@theme static {
+  /* Heading — Inter SemiBold (600) */
+  --text-heading-xxxl: 1.5rem; /* 24 / 32 */
+  --text-heading-xxxl--line-height: 2rem;
+  --text-heading-xxxl--font-weight: 600;
+
+  --text-heading-xxl: 1.25rem; /* 20 / 28 */
+  --text-heading-xxl--line-height: 1.75rem;
+  --text-heading-xxl--font-weight: 600;
+
+  --text-heading-xl: 1.125rem; /* 18 / 26 */
+  --text-heading-xl--line-height: 1.625rem;
+  --text-heading-xl--font-weight: 600;
+
+  --text-heading-lg: 1rem; /* 16 / 24 */
+  --text-heading-lg--line-height: 1.5rem;
+  --text-heading-lg--font-weight: 600;
+
+  /* Paragraph — Inter Regular (400) */
+  --text-paragraph-lg: 1rem; /* 16 / 24 */
+  --text-paragraph-lg--line-height: 1.5rem;
+  --text-paragraph-lg--font-weight: 400;
+
+  --text-paragraph-md: 0.875rem; /* 14 / 20 */
+  --text-paragraph-md--line-height: 1.25rem;
+  --text-paragraph-md--font-weight: 400;
+
+  --text-paragraph-sm: 0.75rem; /* 12 / 16 */
+  --text-paragraph-sm--line-height: 1rem;
+  --text-paragraph-sm--font-weight: 400;
+
+  /* Label — Inter Medium (500) / SemiBold (600) */
+  --text-label-md: 0.875rem; /* 14 / 20 — Medium */
+  --text-label-md--line-height: 1.25rem;
+  --text-label-md--font-weight: 500;
+
+  --text-label-md-semi: 0.875rem; /* 14 / 20 — SemiBold */
+  --text-label-md-semi--line-height: 1.25rem;
+  --text-label-md-semi--font-weight: 600;
+
+  --text-label-sm: 0.75rem; /* 12 / 16 — Medium */
+  --text-label-sm--line-height: 1rem;
+  --text-label-sm--font-weight: 500;
+
+  --text-label-xs: 0.625rem; /* 10 / 14 — Medium */
+  --text-label-xs--line-height: 0.875rem;
+  --text-label-xs--font-weight: 500;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ================================================================== */
+/* CURSOR BASE                                                        */
+/* Tailwind v4 preflight no longer sets cursor: pointer on buttons.   */
+/* Restore the hand cursor on every clickable element by default so   */
+/* individual components don't each need cursor-pointer added.       */
+/* ================================================================== */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href],
+select,
+summary,
+label[for],
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled) {
+  cursor: pointer;
+}
+
+/* ================================================================== */
+/* SKELETON / SHIMMER LOADING                                        */
+/* Use `.skeleton` on any placeholder bar shown while real data       */
+/* loads (e.g. a table row). Sizing comes from the element itself —   */
+/* set width/height with Tailwind utilities.                          */
+/* ================================================================== */
+@theme static {
+  --animate-shimmer: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 150% 0;
+  }
+  100% {
+    background-position: -50% 0;
+  }
+}
+
+.skeleton {
+  border-radius: 4px;
+  background-image: linear-gradient(
+    100deg,
+    var(--color-line) 40%,
+    var(--color-secondary-bg) 50%,
+    var(--color-line) 60%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* ================================================================== */
+/* SIDESHEET MOTION                                                    */
+/* Right-to-left slide + scrim fade. Open and close use different      */
+/* durations/easing, so the transition is declared on each target      */
+/* `data-state` rather than once on the base class — the timing        */
+/* that applies to a change is the one on the *new* computed style.    */
+/* ================================================================== */
+.sidesheet-panel[data-state="open"] {
+  transform: translateX(0);
+  transition: transform 240ms cubic-bezier(0, 0, 0.38, 0.9);
+}
+
+.sidesheet-panel[data-state="closed"] {
+  transform: translateX(100%);
+  transition: transform 190ms cubic-bezier(0.2, 0, 1, 0.9);
+}
+
+.sidesheet-scrim[data-state="open"] {
+  opacity: 1;
+  transition: opacity 180ms cubic-bezier(0, 0, 0.38, 0.9);
+}
+
+.sidesheet-scrim[data-state="closed"] {
+  opacity: 0;
+  transition: opacity 150ms cubic-bezier(0.2, 0, 1, 0.9);
+}
+
+/* ================================================================== */
+/* TOAST MOTION                                                        */
+/* Enter and exit land on different offsets (+8px settling to 0, then  */
+/* lifting to -4px) so this needs a distinct "entering" snapshot       */
+/* rather than reusing one end state for both directions, unlike the   */
+/* sidesheet's symmetric open/closed above.                            */
+/* ================================================================== */
+.toast-panel[data-state="entering"] {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.toast-panel[data-state="open"] {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 190ms cubic-bezier(0, 0, 0.38, 0.9),
+    transform 190ms cubic-bezier(0, 0, 0.38, 0.9);
+}
+
+.toast-panel[data-state="exiting"] {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 140ms cubic-bezier(0.2, 0, 1, 0.9),
+    transform 140ms cubic-bezier(0.2, 0, 1, 0.9);
+}
+
+.toast-check[data-state="entering"] {
+  transform: scale(0.85);
+}
+
+.toast-check[data-state="open"] {
+  transform: scale(1);
+  transition: transform 120ms cubic-bezier(0, 0, 0.38, 0.9);
+}
+
+/* ================================================================== */
+/* SIDENAV NAV-BODY SWAP (JustCall AI micro-interaction)               */
+/* Logo + footer stay fixed. Only the scrollable nav body moves.       */
+/* Exit: 150ms ease-in ~20px. Enter: 200ms ease-out ~20px.             */
+/* forward = exit left / enter from right; back = reverse.             */
+/* ================================================================== */
+.sidenav-body[data-motion="idle"] {
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out;
+}
+
+.sidenav-body[data-motion="exit-to-left"] {
+  opacity: 0;
+  transform: translateX(-20px);
+  transition:
+    opacity 150ms ease-in,
+    transform 150ms ease-in;
+  pointer-events: none;
+}
+
+.sidenav-body[data-motion="exit-to-right"] {
+  opacity: 0;
+  transform: translateX(20px);
+  transition:
+    opacity 150ms ease-in,
+    transform 150ms ease-in;
+  pointer-events: none;
+}
+
+.sidenav-body[data-motion="enter-from-right"] {
+  opacity: 0;
+  transform: translateX(20px);
+  pointer-events: none;
+}
+
+.sidenav-body[data-motion="enter-from-left"] {
+  opacity: 0;
+  transform: translateX(-20px);
+  pointer-events: none;
+}
+
+.sidenav-content-layer {
+  transition: opacity 200ms ease-in;
+}
+
+.sidenav-content-layer[data-active="true"] {
+  opacity: 1;
+  transition-timing-function: ease-out;
+  pointer-events: auto;
+}
+
+.sidenav-content-layer[data-active="false"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidenav-body[data-motion],
+  .sidenav-content-layer {
+    transition: none !important;
+    transform: none !important;
+  }
+}

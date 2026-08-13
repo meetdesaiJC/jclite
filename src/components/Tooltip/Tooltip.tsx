@@ -1,0 +1,495 @@
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+import { IconClose } from "@/components/Icon";
+import arrowLight from "./assets/arrow-light.svg";
+import arrowDark from "./assets/arrow-dark.svg";
+
+/**
+ * Tooltip — synced from Figma "Design System 2.0 / Tooltips" (node 3464:126547).
+ *
+ * Unobtrusive contextual labels that appear on hover / focus. Content can be
+ * a short label or a richer card (icon, badge, supporting text, media, CTA).
+ *
+ * Figma properties:
+ *   Theme → `theme`  (Light / Dark)
+ *   Arrow → `arrow`  (Bottom/Top × Left/Center/Right, Left, Right, None)
+ *   Icon / Badge / Media / Close / Button → optional slots
+ */
+
+const tooltipShellVariants = cva("inline-flex w-max max-w-80", {
+  variants: {
+    arrow: {
+      "top-center": "flex-col items-center",
+      "top-left": "flex-col items-start",
+      "top-right": "flex-col items-end",
+      "bottom-center": "flex-col items-center",
+      "bottom-left": "flex-col items-start",
+      "bottom-right": "flex-col items-end",
+      left: "flex-row items-center",
+      right: "flex-row items-center",
+      none: "flex-col items-stretch",
+    },
+  },
+  defaultVariants: { arrow: "top-center" },
+});
+
+const tooltipContentVariants = cva(
+  "relative flex w-full min-w-0 flex-col items-start rounded-[4px] shadow-400",
+  {
+    variants: {
+      theme: {
+        light: "bg-white text-foreground",
+        dark: "bg-tooltip-dark-bg text-tooltip-dark-fg",
+      },
+      padded: {
+        compact: "px-3 py-2",
+        comfortable: "p-3",
+      },
+    },
+    defaultVariants: {
+      theme: "dark",
+      padded: "compact",
+    },
+  }
+);
+
+export type TooltipTheme = NonNullable<
+  VariantProps<typeof tooltipContentVariants>["theme"]
+>;
+export type TooltipArrow = NonNullable<
+  VariantProps<typeof tooltipShellVariants>["arrow"]
+>;
+
+const ARROW_SRC: Record<TooltipTheme, string> = {
+  light: arrowLight,
+  dark: arrowDark,
+};
+
+function isTopArrow(arrow: TooltipArrow) {
+  return arrow.startsWith("top-");
+}
+function isBottomArrow(arrow: TooltipArrow) {
+  return arrow.startsWith("bottom-");
+}
+function isEdgeAligned(arrow: TooltipArrow) {
+  return arrow.endsWith("-left") || arrow.endsWith("-right");
+}
+
+/** Caret from Figma — 16×8.5 triangle, rotated per side. */
+function TooltipArrowMark({
+  theme,
+  arrow,
+}: {
+  theme: TooltipTheme;
+  arrow: Exclude<TooltipArrow, "none">;
+}) {
+  const src = ARROW_SRC[theme];
+  const edgeRail = isEdgeAligned(arrow);
+
+  if (arrow === "left" || arrow === "right") {
+    return (
+      <span
+        className={cn(
+          "inline-flex h-4 w-1.5 shrink-0 items-center justify-center overflow-visible",
+          arrow === "left" ? "-mr-px" : "-ml-px"
+        )}
+        aria-hidden="true"
+      >
+        <img
+          src={src}
+          alt=""
+          className={cn(
+            "block h-1.5 w-4 max-w-none",
+            arrow === "left" ? "rotate-90" : "-rotate-90"
+          )}
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center overflow-visible",
+        edgeRail ? "w-7" : "w-4",
+        isTopArrow(arrow) ? "-mb-px" : "-mt-px"
+      )}
+      aria-hidden="true"
+    >
+      <img
+        src={src}
+        alt=""
+        className={cn(
+          "block h-[8.515px] w-4 max-w-none",
+          isTopArrow(arrow) && "rotate-180"
+        )}
+      />
+    </span>
+  );
+}
+
+export interface TooltipProps
+  extends Omit<React.HTMLAttributes<HTMLDivElement>, "title">,
+    VariantProps<typeof tooltipShellVariants>,
+    VariantProps<typeof tooltipContentVariants> {
+  /** Primary label (medium 12/16). */
+  title?: React.ReactNode;
+  /** Supporting copy under the title. */
+  description?: React.ReactNode;
+  /** Optional leading icon (16px). */
+  icon?: React.ReactNode;
+  /** Optional badge beside the title (e.g. `<Badge variant="new" />`). */
+  badge?: React.ReactNode;
+  /** Optional media block above the text (illustrations / screenshots). */
+  media?: React.ReactNode;
+  /** Optional CTA slot (text button / link). */
+  action?: React.ReactNode;
+  /** Shows a dismiss control when provided. */
+  onClose?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  /** Accessible label for the dismiss control. */
+  closeLabel?: string;
+  /**
+   * Custom body — used for freeform content (e.g. avatar name lists).
+   * When set without `title` / `description`, replaces the text block.
+   */
+  children?: React.ReactNode;
+}
+
+export const Tooltip = React.forwardRef<HTMLDivElement, TooltipProps>(
+  (
+    {
+      className,
+      theme = "dark",
+      arrow = "top-center",
+      title,
+      description,
+      icon,
+      badge,
+      media,
+      action,
+      onClose,
+      closeLabel = "Dismiss",
+      children,
+      ...props
+    },
+    ref
+  ) => {
+    const resolvedTheme: TooltipTheme = theme ?? "dark";
+    const resolvedArrow: TooltipArrow = arrow ?? "top-center";
+    const hasClose = typeof onClose === "function";
+    const hasStructured =
+      title != null ||
+      description != null ||
+      Boolean(media) ||
+      Boolean(action) ||
+      Boolean(icon) ||
+      Boolean(badge) ||
+      hasClose;
+    const hasCustomOnly = children != null && !hasStructured;
+    const comfortable = Boolean(media || description);
+
+    const titleColor =
+      resolvedTheme === "dark" ? "text-tooltip-dark-fg" : "text-foreground";
+    const mutedColor =
+      resolvedTheme === "dark"
+        ? "text-tooltip-dark-muted"
+        : "text-muted-foreground";
+    const actionColor =
+      resolvedTheme === "dark" ? "text-tooltip-dark-action" : "text-brand";
+    const closeColor =
+      resolvedTheme === "dark"
+        ? "text-tooltip-dark-fg hover:opacity-80"
+        : "text-muted-foreground hover:text-foreground";
+
+    // Media variants put the badge before the title; text+badge puts it after.
+    const badgeFirst = Boolean(media);
+    // Figma: Medium for plain / rich titles; Regular when icon or badge
+    // shares a compact single-line row.
+    const titleClass =
+      description || (!icon && !badge) ? "text-label-sm" : "text-paragraph-sm";
+
+    const closeButton = hasClose ? (
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label={closeLabel}
+        className={cn(
+          "inline-flex size-4 shrink-0 items-center justify-center rounded-[2px] transition-opacity focus-visible:ring-2 focus-visible:ring-brand/24 focus-visible:outline-none",
+          closeColor
+        )}
+      >
+        <IconClose size={16} className="size-4" aria-hidden="true" />
+      </button>
+    ) : null;
+
+    const titleRow =
+      title != null || badge || hasClose ? (
+        <div className="flex w-full min-w-0 items-center gap-2 pr-1">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            {badgeFirst && badge}
+            {title != null && title !== "" && (
+              <p className={cn(titleClass, "min-w-0 break-words", titleColor)}>
+                {title}
+              </p>
+            )}
+            {!badgeFirst && badge}
+          </div>
+          {closeButton}
+        </div>
+      ) : null;
+
+    const textColumn = (
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 flex-col items-start",
+          (description || action) && "gap-1"
+        )}
+      >
+        {titleRow}
+        {description != null && description !== "" && (
+          <p className={cn("text-paragraph-sm w-full break-words", mutedColor)}>
+            {description}
+          </p>
+        )}
+        {action != null && (
+          <div
+            className={cn(
+              "text-label-sm inline-flex items-center",
+              actionColor,
+              "[&_a]:text-inherit [&_a]:no-underline hover:[&_a]:underline [&_button]:text-inherit"
+            )}
+          >
+            {action}
+          </div>
+        )}
+        {children != null && hasStructured && (
+          <div className={cn("text-paragraph-sm break-words", mutedColor)}>
+            {children}
+          </div>
+        )}
+      </div>
+    );
+
+    const body = hasCustomOnly ? (
+      <div
+        className={cn(
+          "text-paragraph-md w-full whitespace-pre-wrap break-words",
+          titleColor
+        )}
+      >
+        {children}
+      </div>
+    ) : (
+      <div className={cn("flex w-full min-w-0 flex-col", media && "gap-2")}>
+        {media && (
+          <div className="relative w-full overflow-hidden rounded-[4px] [&_img]:block [&_img]:h-auto [&_img]:w-full [&_img]:object-cover">
+            {media}
+          </div>
+        )}
+        <div
+          className={cn(
+            "flex w-full min-w-0",
+            icon ? "items-start gap-1" : "flex-col"
+          )}
+        >
+          {icon && (
+            <span
+              className={cn(
+                "inline-flex size-4 shrink-0 items-center justify-center overflow-hidden [&_img]:size-full [&_svg]:size-full",
+                titleColor
+              )}
+            >
+              {icon}
+            </span>
+          )}
+          {textColumn}
+        </div>
+      </div>
+    );
+
+    const showArrow = resolvedArrow !== "none";
+    const arrowNode = showArrow ? (
+      <TooltipArrowMark theme={resolvedTheme} arrow={resolvedArrow} />
+    ) : null;
+
+    return (
+      <div
+        ref={ref}
+        role="tooltip"
+        className={cn(
+          tooltipShellVariants({ arrow: resolvedArrow }),
+          className
+        )}
+        {...props}
+      >
+        {showArrow &&
+          (isTopArrow(resolvedArrow) || resolvedArrow === "left") &&
+          arrowNode}
+
+        <div
+          className={cn(
+            tooltipContentVariants({
+              theme: resolvedTheme,
+              padded: comfortable ? "comfortable" : "compact",
+            })
+          )}
+        >
+          {body}
+        </div>
+
+        {showArrow &&
+          (isBottomArrow(resolvedArrow) || resolvedArrow === "right") &&
+          arrowNode}
+      </div>
+    );
+  }
+);
+Tooltip.displayName = "Tooltip";
+
+/* ------------------------------------------------------------------ */
+/* Trigger — hover / focus wrapper with a brief open delay.           */
+/* Default placement is above the trigger (Figma: icon buttons).      */
+/* ------------------------------------------------------------------ */
+
+const TRIGGER_GAP_PX = 4;
+
+type TriggerPlacement =
+  | "top"
+  | "top-center"
+  | "top-left"
+  | "top-right"
+  | "bottom"
+  | "bottom-center"
+  | "bottom-left"
+  | "bottom-right"
+  | "left"
+  | "right";
+
+const placementClass: Record<TriggerPlacement, string> = {
+  top: "bottom-full left-1/2 -translate-x-1/2",
+  "top-center": "bottom-full left-1/2 -translate-x-1/2",
+  "top-left": "bottom-full left-0",
+  "top-right": "bottom-full right-0",
+  bottom: "top-full left-1/2 -translate-x-1/2",
+  "bottom-center": "top-full left-1/2 -translate-x-1/2",
+  "bottom-left": "top-full left-0",
+  "bottom-right": "top-full right-0",
+  left: "top-1/2 right-full -translate-y-1/2",
+  right: "top-1/2 left-full -translate-y-1/2",
+};
+
+function gapStyle(placement: TriggerPlacement): React.CSSProperties {
+  if (placement === "left") return { marginRight: TRIGGER_GAP_PX };
+  if (placement === "right") return { marginLeft: TRIGGER_GAP_PX };
+  if (placement.startsWith("bottom")) return { marginTop: TRIGGER_GAP_PX };
+  return { marginBottom: TRIGGER_GAP_PX };
+}
+
+export interface TooltipTriggerProps {
+  /** Tooltip content — typically a `<Tooltip />` bubble. */
+  content: React.ReactNode;
+  children: React.ReactElement<Record<string, unknown>>;
+  /** Where the bubble sits relative to the trigger. Default: above. */
+  placement?: TriggerPlacement;
+  /** Open delay in ms (Figma: brief delay on hover). */
+  delay?: number;
+  /** Controlled open state. */
+  open?: boolean;
+  /** Default open for uncontrolled usage. */
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  className?: string;
+  disabled?: boolean;
+}
+
+export function TooltipTrigger({
+  content,
+  children,
+  placement = "top",
+  delay = 200,
+  open: openProp,
+  defaultOpen = false,
+  onOpenChange,
+  className,
+  disabled = false,
+}: TooltipTriggerProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen);
+  const open = openProp ?? uncontrolledOpen;
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const setOpen = (next: boolean) => {
+    if (openProp === undefined) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
+
+  const clearTimer = () => {
+    if (timerRef.current != null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const scheduleOpen = () => {
+    if (disabled) return;
+    clearTimer();
+    timerRef.current = setTimeout(() => setOpen(true), delay);
+  };
+
+  const close = () => {
+    clearTimer();
+    setOpen(false);
+  };
+
+  React.useEffect(() => () => clearTimer(), []);
+
+  const child = React.cloneElement(children, {
+    onMouseEnter: (event: React.MouseEvent) => {
+      const prev = children.props.onMouseEnter as
+        | ((e: React.MouseEvent) => void)
+        | undefined;
+      prev?.(event);
+      scheduleOpen();
+    },
+    onMouseLeave: (event: React.MouseEvent) => {
+      const prev = children.props.onMouseLeave as
+        | ((e: React.MouseEvent) => void)
+        | undefined;
+      prev?.(event);
+      close();
+    },
+    onFocus: (event: React.FocusEvent) => {
+      const prev = children.props.onFocus as
+        | ((e: React.FocusEvent) => void)
+        | undefined;
+      prev?.(event);
+      scheduleOpen();
+    },
+    onBlur: (event: React.FocusEvent) => {
+      const prev = children.props.onBlur as
+        | ((e: React.FocusEvent) => void)
+        | undefined;
+      prev?.(event);
+      close();
+    },
+  });
+
+  return (
+    <span className={cn("relative inline-flex", className)}>
+      {child}
+      {open && !disabled && (
+        <span
+          className={cn(
+            "pointer-events-none absolute z-50",
+            placementClass[placement]
+          )}
+          style={gapStyle(placement)}
+        >
+          {content}
+        </span>
+      )}
+    </span>
+  );
+}
+
+export { tooltipShellVariants, tooltipContentVariants };
