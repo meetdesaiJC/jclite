@@ -1,5 +1,13 @@
 {
-  "buildCommand": "npx vite build --config prototype-justcall-ai/vite.config.ts",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
   "outputDirectory": "prototype-justcall-ai/dist",
-  "installCommand": "npm install"
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }
