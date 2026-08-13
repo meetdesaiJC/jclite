@@ -1,82 +1,98 @@
-import * as React from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Modal } from "@/components/Modal";
+import { Tabs, type TabItem } from "@/components/Tabs";
+import { IconChevronRight, IconFile, IconPencil } from "@/components/Icon";
 import { cn } from "@/lib/utils";
+import {
+  SALES_TEMPLATES,
+  SUPPORT_TEMPLATES,
+  type ScriptTemplateId,
+  type TemplateCatalogItem,
+} from "./scriptPlaybook";
 
-export type ScriptTemplateId =
-  | "scratch"
-  | "sales-discovery"
-  | "support-triage"
-  | "objection-handling"
-  | "product-demo"
-  | "retention-save"
-  | "onboarding-welcome";
+export type { ScriptTemplateId };
 
-interface ScriptTemplate {
-  id: Exclude<ScriptTemplateId, "scratch">;
-  name: string;
-  description: string;
-}
+export type ScriptStartChoice =
+  | { type: "template"; templateId: ScriptTemplateId }
+  | { type: "scratch"; method: "manual" | "upload" };
 
-const TEMPLATES: ScriptTemplate[] = [
-  {
-    id: "sales-discovery",
-    name: "Sales discovery call",
-    description:
-      "Qualify need, uncover pain, map stakeholders, agree next steps",
-  },
-  {
-    id: "support-triage",
-    name: "Support call triage",
-    description:
-      "Identify issue, assess severity, route or resolve, confirm outcome",
-  },
-  {
-    id: "objection-handling",
-    name: "Objection handling",
-    description:
-      "Acknowledge concern, reframe value, handle price, close commitment",
-  },
-  {
-    id: "product-demo",
-    name: "Product demo walkthrough",
-    description:
-      "Set agenda, show key workflows, handle questions, agree next steps",
-  },
-  {
-    id: "retention-save",
-    name: "Retention & save offer",
-    description:
-      "Understand churn reason, reinforce value, present offer, confirm save",
-  },
-  {
-    id: "onboarding-welcome",
-    name: "Onboarding welcome call",
-    description:
-      "Welcome & goals, walk through setup, answer questions, book follow-up",
-  },
+type TemplateCategory = "sales" | "support";
+
+const CATEGORY_TABS: TabItem[] = [
+  { key: "sales", label: "Sales" },
+  { key: "support", label: "Support" },
 ];
 
-function PlusIcon({ size = 28 }: { size?: number }) {
+const TEMPLATES_BY_CATEGORY: Record<TemplateCategory, TemplateCatalogItem[]> = {
+  sales: SALES_TEMPLATES,
+  support: SUPPORT_TEMPLATES,
+};
+
+const choiceCardClass =
+  "rounded-lg border border-line bg-white text-left transition-[border-color,background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-brand/40 hover:bg-brand-subtle/40 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24";
+
+function TemplateRow({
+  template,
+  onSelect,
+}: {
+  template: TemplateCatalogItem;
+  onSelect: (id: ScriptTemplateId) => void;
+}) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      aria-hidden="true"
+    <button
+      type="button"
+      onClick={() => onSelect(template.id)}
+      className={cn("flex w-full items-start gap-3 px-4 py-3", choiceCardClass)}
     >
-      <path d="M12 5v14M5 12h14" />
-    </svg>
+      <span className="min-w-0 flex-1">
+        <span className="block text-label-md-semi text-foreground">{template.name}</span>
+        <span className="mt-0.5 block text-pretty text-paragraph-sm text-muted-foreground">
+          {template.description}
+        </span>
+      </span>
+      <IconChevronRight
+        size={20}
+        className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
+function ScratchOption({
+  title,
+  description,
+  icon,
+  onSelect,
+}: {
+  title: string;
+  description: string;
+  icon: ReactNode;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn("flex items-start gap-3 px-4 py-3.5", choiceCardClass)}
+    >
+      <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[6px] bg-secondary-bg text-foreground">
+        {icon}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-label-md-semi text-foreground">{title}</span>
+        <span className="mt-0.5 block text-pretty text-paragraph-sm text-muted-foreground">
+          {description}
+        </span>
+      </span>
+    </button>
   );
 }
 
 export interface ScriptTemplatesModalProps {
   open: boolean;
   onClose: () => void;
-  onSelect: (templateId: ScriptTemplateId) => void;
+  onSelect: (choice: ScriptStartChoice) => void;
 }
 
 export function ScriptTemplatesModal({
@@ -84,49 +100,68 @@ export function ScriptTemplatesModal({
   onClose,
   onSelect,
 }: ScriptTemplatesModalProps) {
+  const [category, setCategory] = useState<TemplateCategory>("sales");
+  const templates = TEMPLATES_BY_CATEGORY[category];
+
+  useEffect(() => {
+    if (!open) setCategory("sales");
+  }, [open]);
+
   return (
-    <Modal open={open} onClose={onClose} size="md" title="Templates">
-      <div className="flex flex-col gap-3">
-        <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2">
-          {TEMPLATES.map((template) => (
-            <button
-              type="button"
-              key={template.id}
-              onClick={() => onSelect(template.id)}
-              className={cn(
-                "flex h-full min-h-[108px] flex-col items-start justify-start gap-1.5 rounded-lg border border-line bg-white p-4 text-left",
-                "transition-colors hover:border-brand/40 hover:bg-secondary-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-              )}
-            >
-              <span className="text-label-md-semi text-foreground">
-                {template.name}
-              </span>
-              <span className="text-paragraph-sm text-muted-foreground">
-                {template.description}
-              </span>
-            </button>
-          ))}
-        </div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="md"
+      title="What kind of conversation are you preparing agents for?"
+      description="Start from a template, or create your own from scratch."
+    >
+      <div className="flex flex-col gap-5">
+        <section>
+          <div className="border-b border-line">
+            <Tabs
+              items={CATEGORY_TABS}
+              value={category}
+              onValueChange={(key) => setCategory(key as TemplateCategory)}
+              aria-label="Template category"
+            />
+          </div>
+          <div
+            role="tabpanel"
+            id={`${category}-templates`}
+            className="mt-4 flex flex-col gap-2"
+          >
+            {templates.map((template) => (
+              <TemplateRow
+                key={template.id}
+                template={template}
+                onSelect={(templateId) => onSelect({ type: "template", templateId })}
+              />
+            ))}
+          </div>
+        </section>
 
-        <div className="relative flex items-center">
-          <div className="h-px flex-1 bg-line" />
-          <span className="px-3 text-label-sm text-muted-foreground">OR</span>
-          <div className="h-px flex-1 bg-line" />
-        </div>
-
-        <button
-          type="button"
-          onClick={() => onSelect("scratch")}
-          className={cn(
-            "flex min-h-[56px] flex-row items-center justify-center gap-2 rounded-lg border border-dashed border-brand bg-brand-subtle px-4 py-3 text-center",
-            "transition-colors hover:border-brand-hover hover:bg-blue-200/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-          )}
-        >
-          <span className="text-brand">
-            <PlusIcon size={20} />
-          </span>
-          <span className="text-label-md text-brand">Start from scratch</span>
-        </button>
+        <section className="flex flex-col gap-2">
+          <div className="px-1">
+            <p className="text-label-md-semi text-foreground">Create your own</p>
+            <p className="mt-0.5 text-pretty text-paragraph-sm text-muted-foreground">
+              Start from scratch. AI can rephrase wording after you add a line.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <ScratchOption
+              title="Add manually"
+              description="Write the steps and suggested wording yourself."
+              icon={<IconPencil size={20} />}
+              onSelect={() => onSelect({ type: "scratch", method: "manual" })}
+            />
+            <ScratchOption
+              title="Upload document"
+              description="Import an existing script or process doc as steps."
+              icon={<IconFile size={20} />}
+              onSelect={() => onSelect({ type: "scratch", method: "upload" })}
+            />
+          </div>
+        </section>
       </div>
     </Modal>
   );

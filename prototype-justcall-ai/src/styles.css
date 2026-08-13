@@ -1,5 +1,22 @@
 @import "../../src/styles/globals.css";
 
+@keyframes assist-faq-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assist-faq-card {
+    animation: none !important;
+  }
+}
+
 /* Tailwind's auto content-detection only scans this prototype's own
    folder; point it at the library source and the shared add-ons prototype
    pieces we reuse (ProfileMenu, toolbar icons) so their utilities generate. */

@@ -59,6 +59,8 @@ export interface ModalProps extends VariantProps<typeof modalVariants> {
   closeOnEscape?: boolean;
   children?: React.ReactNode;
   className?: string;
+  /** Optional class for the scrollable body. Use `overflow-visible` when the body hosts dropdowns. */
+  bodyClassName?: string;
 }
 
 export function Modal({
@@ -74,6 +76,7 @@ export function Modal({
   closeOnEscape = true,
   children,
   className,
+  bodyClassName,
 }: ModalProps) {
   const dialogRef = React.useRef<HTMLDivElement>(null);
 
@@ -157,7 +160,12 @@ export function Modal({
         )}
 
         {children && (
-          <div className="flex-1 overflow-y-auto p-6 text-paragraph-md text-gray-700">
+          <div
+            className={cn(
+              "flex-1 overflow-y-auto p-6 text-paragraph-md text-gray-700",
+              bodyClassName
+            )}
+          >
             {children}
           </div>
         )}

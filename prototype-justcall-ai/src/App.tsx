@@ -7,7 +7,9 @@ import {
   isJustCallAiPageKey,
   type JustCallAiPageKey,
 } from "./JustCallAiShell";
+import { PrototypeLauncher } from "./PrototypeLauncher";
 
+type AppView = "launcher" | "setup" | "in-call";
 type AppArea = "dashboard" | "justcall-ai";
 
 /**
@@ -16,7 +18,7 @@ type AppArea = "dashboard" | "justcall-ai";
  * AI nav enters from the right; main content crossfades). Logo + sidenav
  * chrome stay fixed. Back reverses the same motion.
  */
-export default function App() {
+function SetupFlow() {
   const [area, setArea] = useState<AppArea>("dashboard");
   const [navTransition, setNavTransition] = useState<SidenavItemsTransition>("forward");
   const [aiPage, setAiPage] = useState<JustCallAiPageKey>("agent-assist");
@@ -73,4 +75,34 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+function InCallFlow() {
+  return (
+    <div className="flex h-screen overflow-hidden bg-background">
+      <Sidenav activeKey="dashboard" />
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <Dashboard />
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [view, setView] = useState<AppView>("launcher");
+
+  if (view === "launcher") {
+    return (
+      <PrototypeLauncher
+        onStartSetup={() => setView("setup")}
+        onStartInCall={() => setView("in-call")}
+      />
+    );
+  }
+
+  if (view === "in-call") {
+    return <InCallFlow />;
+  }
+
+  return <SetupFlow />;
 }
