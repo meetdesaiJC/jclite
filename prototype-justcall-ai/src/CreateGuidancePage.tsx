@@ -176,7 +176,7 @@ export function CreateGuidancePage({
   };
 
   const runTest = () => {
-    setPreviewSection(null);
+    if (!testInput.trim()) return;
     setTestPreviewOpen(true);
   };
 
@@ -515,7 +515,7 @@ export function CreateGuidancePage({
           item={{
             id: draft.id,
             atMs: 0,
-            quote: customerLineForGuidance(draft),
+            quote: testInput.trim() || customerLineForGuidance(draft),
             item: draft,
             priority: priorityForGuidance(draft),
             stance: stanceForGuidance(draft),
