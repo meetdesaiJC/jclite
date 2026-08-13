@@ -381,7 +381,7 @@ function AgentAssistEmptyState({
 }
 
 export function AgentAssistPage() {
-  const [tab, setTab] = React.useState("guidance");
+  const [tab, setTab] = React.useState("scripts");
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(25);

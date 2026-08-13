@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { cn } from "@/lib/utils";
 import { Dropdown } from "@/components/Dropdown";
-import {
-  IconCircleCheckFilled,
-  IconCircleDashed,
-  IconSparkles,
-} from "@/components/Icon";
+import { IconCircleCheckFilled, IconCircleDashed } from "@/components/Icon";
+import { IconJcaiAgentAssist } from "./icons/JustCallAiNavIcons";
 import {
   CALL_SCENARIOS,
   simulationAt,
@@ -25,8 +22,8 @@ import {
 
 /**
  * In-call Agent Assist — one stream. The full script stays open so any
- * spoken line can check off; guidance cards insert under the step they
- * belong to and stay in the timeline until the agent dismisses them.
+ * spoken line can check off. Guidance cards insert under the step they
+ * belong to and stay until the agent dismisses them with X.
  */
 
 function IconScript(props: SVGProps<SVGSVGElement>) {
@@ -154,8 +151,7 @@ export function AgentAssistCallSheet({
     >
       <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-4">
         <div className="flex min-w-0 items-center gap-1.5">
-          <IconSparkles
-            size={16}
+          <IconJcaiAgentAssist
             className="size-4 shrink-0 text-brand"
             aria-hidden="true"
           />

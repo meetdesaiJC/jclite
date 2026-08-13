@@ -1,11 +1,12 @@
 /**
  * Choreographed during-call demo: a customer with a real problem,
  * the agent following the script, and Guidance cards surfacing from
- * what was said — matched against the live Guidance library.
+ * what was just said — matched against the live library. Cards stay
+ * until the agent dismisses them.
  *
- * Discovery follows one story: Elena is on Aircall, misses after-hours
- * calls, nothing logs to Salesforce, then hesitates on price before
- * booking a working session with her ops lead.
+ * Discovery follows the script, beat by beat: Elena is on Aircall, misses
+ * after-hours calls, names the cost, then Salesforce logging for her ops
+ * lead, then price vs Aircall, then books a working session.
  */
 
 import {
@@ -22,7 +23,7 @@ export interface ScriptStep {
   title: string;
   wording?: string;
   required?: boolean;
-  /** Guidance that appears under this step once the line has been told. */
+  /** Guidance that belongs under this step when the customer hits that topic. */
   relatedGuidanceIds?: string[];
 }
 
@@ -106,8 +107,8 @@ export const CALL_SCENARIOS: CallScenario[] = [
     scriptName: "Discovery call",
     contactName: "Elena Vasquez",
     contactMeta: "Outbound · Sales",
-    // Story: current tool (Aircall) → missed after-hours → Salesforce
-    // logging gap → pricing vs Aircall → book the ops-lead session.
+    // Story follows the script: Aircall → after-hours pain → cost of
+    // missed leads → Salesforce for the ops lead → price → book session.
     steps: [
       step(
         "Set the purpose of the call",
@@ -119,8 +120,8 @@ export const CALL_SCENARIOS: CallScenario[] = [
         false
       ),
       step(
-        "Explore current workflow",
-        "What are you currently using to manage customer calls?",
+        "Ask how they handle this today",
+        "Walk me through how this works on your team today.",
         true,
         ["g-aircall"]
       ),
@@ -132,14 +133,13 @@ export const CALL_SCENARIOS: CallScenario[] = [
       ),
       step(
         "Quantify the cost of the status quo",
-        "What does that cost you in time, missed revenue, or customer experience?",
-        false,
-        ["g-salesforce"]
+        "What does that cost you in time, missed revenue, or customer experience?"
       ),
       step(
         "Identify who else cares about this",
         "Who else feels this day to day — ops, support leads, or whoever owns the number?",
-        false
+        false,
+        ["g-salesforce"]
       ),
       step(
         "Propose a concrete follow-up",
@@ -154,11 +154,11 @@ export const CALL_SCENARIOS: CallScenario[] = [
     ],
     moments: [
       { id: "default", label: "Script only", atMs: 800 },
-      { id: "competitor", label: "Current tool — Aircall", atMs: 11200 },
-      { id: "pain", label: "Missed after-hours calls", atMs: 24000 },
-      { id: "crm", label: "Salesforce logging", atMs: 34500 },
-      { id: "objection", label: "Pricing vs Aircall", atMs: 49500 },
-      { id: "end", label: "End of call", atMs: 61000 },
+      { id: "competitor", label: "Current tool — Aircall", atMs: 13500 },
+      { id: "pain", label: "Missed after-hours calls", atMs: 25000 },
+      { id: "crm", label: "Salesforce logging", atMs: 44500 },
+      { id: "objection", label: "Pricing vs Aircall", atMs: 57500 },
+      { id: "end", label: "End of call", atMs: 70000 },
     ],
     events: [
       { atMs: 0, scriptIndex: 0 },
@@ -183,14 +183,13 @@ export const CALL_SCENARIOS: CallScenario[] = [
       {
         atMs: 10500,
         speaker: "agent",
-        quote: "What are you currently using to manage customer calls?",
+        quote: "Walk me through how this works on your team today.",
       },
-      // Step is told — check it off so the Aircall battlecard can sit under it.
-      { atMs: 11200, scriptIndex: 3 },
       {
         atMs: 13500,
         speaker: "customer",
-        quote: "We're on Aircall for the phone. SMS is in a separate tool.",
+        quote: "We're on Aircall. SMS lives in a separate tool.",
+        guidanceIds: ["g-aircall"],
       },
       {
         atMs: 16500,
@@ -199,93 +198,94 @@ export const CALL_SCENARIOS: CallScenario[] = [
           "JustCall puts calling, messaging, and CRM in one place — that's usually why teams look. I want the workflow first though.",
       },
       { atMs: 18500, handledGuidanceId: "g-aircall" },
+      { atMs: 20000, scriptIndex: 3 },
       {
-        atMs: 21000,
+        atMs: 21500,
         speaker: "agent",
         quote:
           "Where does that break down — missed calls, slow follow-up, or the team using different tools for the same job?",
       },
       {
-        atMs: 24000,
+        atMs: 25000,
         speaker: "customer",
         quote:
           "After-hours calls go to voicemail. Follow-up is whoever happens to pick it up.",
         guidanceIds: ["g-after-hours"],
       },
       {
-        atMs: 27000,
+        atMs: 28000,
         speaker: "agent",
         quote:
           "After-hours coverage is usually the first workflow we show — missed-call SMS so the lead isn't sitting until morning.",
       },
-      { atMs: 29000, handledGuidanceId: "g-after-hours" },
-      { atMs: 30000, scriptIndex: 4 },
+      { atMs: 30000, handledGuidanceId: "g-after-hours" },
+      { atMs: 31500, scriptIndex: 4 },
       {
-        atMs: 31500,
+        atMs: 33000,
         speaker: "agent",
         quote: "What does that cost you in time, missed revenue, or customer experience?",
       },
       {
-        atMs: 34500,
+        atMs: 36000,
         speaker: "customer",
         quote:
-          "Maybe twenty after-hours leads a week. And nothing logs to Salesforce unless someone remembers.",
-        guidanceIds: ["g-salesforce"],
+          "Maybe twenty missed leads a week. That's revenue sitting until morning, and the team feels it.",
       },
+      { atMs: 38500, scriptIndex: 5 },
       {
-        atMs: 37500,
-        speaker: "agent",
-        quote:
-          "Yes — native Salesforce integration. Calls and SMS log to the contact automatically.",
-      },
-      { atMs: 39500, handledGuidanceId: "g-salesforce" },
-      { atMs: 40500, scriptIndex: 5 },
-      {
-        atMs: 42000,
+        atMs: 40000,
         speaker: "agent",
         quote:
           "Who else feels this day to day — ops, support leads, or whoever owns the number?",
       },
       {
-        atMs: 44000,
+        atMs: 44500,
         speaker: "customer",
         quote:
-          "Our ops lead sees the missed-call list every morning. She'd need to be in a next conversation.",
+          "Our ops lead. She lives in Salesforce — and none of this logs unless someone remembers.",
+        guidanceIds: ["g-salesforce"],
       },
-      { atMs: 45500, scriptIndex: 6 },
       {
-        atMs: 47000,
+        atMs: 47500,
+        speaker: "agent",
+        quote:
+          "Yes — native Salesforce integration. Calls and SMS log to the contact automatically.",
+      },
+      { atMs: 49500, handledGuidanceId: "g-salesforce" },
+      { atMs: 51000, scriptIndex: 6 },
+      {
+        atMs: 52500,
         speaker: "agent",
         quote:
           "If this still looks relevant, the useful next step is a 30-minute working session with your ops lead.",
       },
       {
-        atMs: 49500,
+        atMs: 57500,
         speaker: "customer",
         quote:
           "A working session could work, but Aircall is cheaper. Not sure I can sell a more expensive tool internally.",
         guidanceIds: ["g-pricing"],
       },
       {
-        atMs: 52500,
+        atMs: 60500,
         speaker: "agent",
         quote:
           "Pricing includes calling, messaging, and CRM in one place — so you're not stacking extra tools. We can size the plan to the seats you'd actually use.",
       },
-      { atMs: 54500, handledGuidanceId: "g-pricing" },
-      { atMs: 55500, scriptIndex: 7 },
+      { atMs: 62500, handledGuidanceId: "g-pricing" },
+      { atMs: 64000, scriptIndex: 7 },
       {
-        atMs: 57000,
+        atMs: 65500,
         speaker: "agent",
         quote:
           "Let's lock a time this week. If we can show the missed-call workflow in their language, we'll know whether a trial is worth it.",
       },
       {
-        atMs: 59000,
+        atMs: 68000,
         speaker: "customer",
         quote: "Thursday afternoon is open. I'll bring the ops lead.",
       },
-      { atMs: 61000, scriptIndex: 8 },
+      { atMs: 70000, scriptIndex: 8 },
     ],
     wrapUp: {
       summary:
@@ -342,7 +342,7 @@ export const CALL_SCENARIOS: CallScenario[] = [
     moments: [
       { id: "default", label: "Script only", atMs: 800 },
       { id: "refund", label: "Refund guidance", atMs: 5600 },
-      { id: "stacked", label: "Three cues", atMs: 18600 },
+      { id: "pci", label: "Card details warning", atMs: 17200 },
       { id: "handled", label: "Compliance covered", atMs: 30000 },
       { id: "end", label: "End of call", atMs: 42000 },
     ],
@@ -377,12 +377,6 @@ export const CALL_SCENARIOS: CallScenario[] = [
         speaker: "customer",
         quote: "I'll read you my card number so you can refund it.",
         guidanceIds: ["g-pci"],
-      },
-      {
-        atMs: 18200,
-        speaker: "customer",
-        quote: "And this plan is more expensive than I expected for what I'm getting.",
-        guidanceIds: ["g-pricing"],
       },
       {
         atMs: 22600,
@@ -568,21 +562,7 @@ export function simulationAt(
   for (const event of scenario.events) {
     if (elapsedMs < event.atMs) break;
     if (event.scriptIndex !== undefined) {
-      const previousIndex = scriptIndex;
       scriptIndex = event.scriptIndex;
-      // A completed step has been told — surface the cards that belong to it.
-      if (scriptIndex > previousIndex) {
-        for (let index = previousIndex; index < scriptIndex; index += 1) {
-          const completed = scenario.steps[index];
-          const related = completed?.relatedGuidanceIds;
-          if (!related?.length) continue;
-          surfaceGuidance(
-            related,
-            event.atMs,
-            event.quote ?? completed.wording ?? latestQuote?.quote ?? ""
-          );
-        }
-      }
     }
     if (event.handledGuidanceId && !handledIds.includes(event.handledGuidanceId)) {
       handledIds.push(event.handledGuidanceId);
@@ -597,11 +577,11 @@ export function simulationAt(
 
     const quote = event.quote ?? latestQuote?.quote ?? "";
     if (event.guidanceIds?.length) {
-      surfaceGuidance(event.guidanceIds, event.atMs, quote);
+      surfaceGuidance(event.guidanceIds.slice(0, 1), event.atMs, quote);
     } else if (event.quote && (event.speaker ?? "customer") === "customer") {
       const unused = live.filter((item) => !shown.has(item.id));
-      const matches = rankGuidanceMatches(unused, event.quote).slice(0, 3);
-      for (const match of matches) {
+      const match = rankGuidanceMatches(unused, event.quote)[0];
+      if (match) {
         shown.add(match.id);
         suggestions.push(toSuggestion(match, event.atMs, event.quote));
       }
@@ -610,7 +590,7 @@ export function simulationAt(
 
   return {
     scriptIndex,
-    suggestions: sortSuggestions(suggestions),
+    suggestions,
     handledIds,
     latestQuote,
     transcript,

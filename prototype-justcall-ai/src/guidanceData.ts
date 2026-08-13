@@ -339,27 +339,88 @@ const STOP_WORDS = new Set([
   "the",
 ]);
 
-function significantTokens(text: string): string[] {
+/** Too common to fire a card on their own — "phone" must not match PCI. */
+const WEAK_TOKENS = new Set([
+  ...STOP_WORDS,
+  "phone",
+  "call",
+  "calls",
+  "card",
+  "number",
+  "data",
+  "other",
+  "full",
+  "take",
+  "give",
+  "tell",
+  "over",
+  "read",
+  "details",
+  "offers",
+  "offer",
+  "manage",
+  "today",
+  "team",
+  "tool",
+  "tools",
+  "work",
+  "works",
+  "same",
+  "also",
+  "think",
+  "make",
+  "lead",
+  "leads",
+]);
+
+function tokens(text: string): string[] {
   return text
     .toLowerCase()
+    .replace(/['’]/g, "")
     .split(/[^a-z0-9]+/)
-    .filter((word) => word.length >= 4 && !STOP_WORDS.has(word));
+    .filter(Boolean);
+}
+
+const SHORT_KEEP = new Set(["cvv", "pci", "pan", "sms", "mfa", "crm"]);
+
+function distinctiveTokens(text: string): string[] {
+  return tokens(text).filter(
+    (word) => !WEAK_TOKENS.has(word) && (word.length >= 4 || SHORT_KEEP.has(word))
+  );
+}
+
+function contentBigrams(text: string): string[] {
+  const words = tokens(text);
+  const grams: string[] = [];
+  for (let i = 0; i < words.length - 1; i += 1) {
+    const left = words[i]!;
+    const right = words[i + 1]!;
+    if (left.length < 3 || right.length < 3) continue;
+    if (STOP_WORDS.has(left) || STOP_WORDS.has(right)) continue;
+    grams.push(`${left} ${right}`);
+  }
+  return grams;
 }
 
 export function guidanceMatchScore(item: GuidanceItem, utterance: string): number {
-  const hay = new Set(significantTokens(utterance));
-  if (hay.size === 0) return 0;
-  const needles = significantTokens(
-    [item.trigger, item.name, ...item.examplePhrases].join(" ")
+  const hay = new Set(distinctiveTokens(utterance));
+  const utteredGrams = new Set(contentBigrams(utterance));
+  if (hay.size === 0 && utteredGrams.size === 0) return 0;
+
+  const source = [item.name, ...item.examplePhrases].join(" ");
+  const needles = distinctiveTokens(source);
+  const phraseHits = contentBigrams(source).reduce(
+    (score, gram) => score + (utteredGrams.has(gram) ? 2 : 0),
+    0
   );
-  return needles.reduce((score, token) => score + (hay.has(token) ? 1 : 0), 0);
+  return needles.reduce((score, token) => score + (hay.has(token) ? 1 : 0), phraseHits);
 }
 
 export function guidanceMatchesUtterance(
   item: GuidanceItem,
   utterance: string
 ): boolean {
-  return guidanceMatchScore(item, utterance) >= 1;
+  return guidanceMatchScore(item, utterance) >= 2;
 }
 
 export function rankGuidanceMatches(
@@ -368,7 +429,7 @@ export function rankGuidanceMatches(
 ): GuidanceItem[] {
   return items
     .map((item) => ({ item, score: guidanceMatchScore(item, utterance) }))
-    .filter((entry) => entry.score > 0)
+    .filter((entry) => entry.score >= 2)
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.item);
 }
