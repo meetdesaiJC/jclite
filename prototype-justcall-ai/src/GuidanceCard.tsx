@@ -1,5 +1,5 @@
 import * as React from "react";
-import { IconChevronRight, IconClose, IconFile } from "@/components/Icon";
+import { IconClose } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import {
   GUIDANCE_KIND_META,
@@ -203,6 +203,26 @@ function ExpandHint() {
   );
 }
 
+function ExternalLinkIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M9.5 3H13.5V7M13.5 3 7.5 9M6.5 4.5H4.5A1.5 1.5 0 0 0 3 6v6.5A1.5 1.5 0 0 0 4.5 14H11a1.5 1.5 0 0 0 1.5-1.5V9.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function GuidanceResourceLink({
   resource,
   className,
@@ -212,27 +232,22 @@ export function GuidanceResourceLink({
 }) {
   const content = (
     <>
-      <span className="flex size-7 shrink-0 items-center justify-center rounded-[6px] border border-line bg-white text-muted-foreground">
-        <IconFile size={16} />
-      </span>
-      <span className="inline-flex min-w-0 items-center gap-0.5 text-label-md text-brand">
-        <span className="truncate">{resource.name}</span>
-        <IconChevronRight size={16} className="size-4 shrink-0" />
+      <span className="min-w-0 truncate">{resource.name}</span>
+      <span className="shrink-0">
+        <ExternalLinkIcon size={13} />
       </span>
     </>
   );
 
+  const linkClass = cn(
+    "inline-flex min-w-0 max-w-full items-center gap-1 text-label-md text-brand",
+    "hover:text-brand-hover hover:underline hover:underline-offset-2",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24 focus-visible:ring-offset-1",
+    className
+  );
+
   if (!resource.url) {
-    return (
-      <span
-        className={cn(
-          "flex items-center gap-2 rounded-[4px] bg-white/70 py-0.5",
-          className
-        )}
-      >
-        {content}
-      </span>
-    );
+    return <span className={linkClass}>{content}</span>;
   }
 
   return (
@@ -240,10 +255,7 @@ export function GuidanceResourceLink({
       href={resource.url}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn(
-        "flex min-w-0 cursor-pointer items-center gap-2 rounded-[4px] bg-white/70 py-0.5 text-left hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
-        className
-      )}
+      className={cn(linkClass, "cursor-pointer")}
     >
       {content}
     </a>
@@ -421,11 +433,7 @@ export function GuidanceCard({
         ) : null}
 
         {links.map((resource) => (
-          <GuidanceResourceLink
-            key={resource.id}
-            resource={resource}
-            className="pr-1 pl-0.5"
-          />
+          <GuidanceResourceLink key={resource.id} resource={resource} />
         ))}
       </div>
 
