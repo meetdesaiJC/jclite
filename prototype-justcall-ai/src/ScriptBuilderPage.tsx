@@ -173,11 +173,13 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
         }
       >
         <dl className="flex flex-col gap-3">
-            <SummaryRow label="Script" value={playbook.name} />
-            <SummaryRow
-              label="Steps"
-              value={`${stepCount} ${stepCount === 1 ? "step" : "steps"}`}
-            />
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-8">
+              <SummaryRow label="Script" value={playbook.name} />
+              <SummaryRow
+                label="Steps"
+                value={`${stepCount} ${stepCount === 1 ? "step" : "steps"}`}
+              />
+            </div>
             <div>
               <dt className="text-label-sm text-muted-foreground">Assigned users</dt>
               <dd className="mt-1.5">
@@ -229,9 +231,9 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <dt className="text-label-sm text-muted-foreground">{label}</dt>
-      <dd className="text-paragraph-md text-foreground">{value}</dd>
+      <dd className="text-paragraph-md text-foreground tabular-nums">{value}</dd>
     </div>
   );
 }
