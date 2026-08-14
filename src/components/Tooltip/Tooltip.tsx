@@ -1,4 +1,5 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import { IconClose } from "@/components/Icon";
@@ -366,24 +367,59 @@ type TriggerPlacement =
   | "left"
   | "right";
 
-const placementClass: Record<TriggerPlacement, string> = {
-  top: "bottom-full left-1/2 -translate-x-1/2",
-  "top-center": "bottom-full left-1/2 -translate-x-1/2",
-  "top-left": "bottom-full left-0",
-  "top-right": "bottom-full right-0",
-  bottom: "top-full left-1/2 -translate-x-1/2",
-  "bottom-center": "top-full left-1/2 -translate-x-1/2",
-  "bottom-left": "top-full left-0",
-  "bottom-right": "top-full right-0",
-  left: "top-1/2 right-full -translate-y-1/2",
-  right: "top-1/2 left-full -translate-y-1/2",
-};
+/** Viewport-fixed coords so the bubble isn't clipped by overflow ancestors. */
+function getFixedStyle(
+  placement: TriggerPlacement,
+  trigger: DOMRect
+): React.CSSProperties {
+  const gap = TRIGGER_GAP_PX;
+  const cx = trigger.left + trigger.width / 2;
+  const cy = trigger.top + trigger.height / 2;
 
-function gapStyle(placement: TriggerPlacement): React.CSSProperties {
-  if (placement === "left") return { marginRight: TRIGGER_GAP_PX };
-  if (placement === "right") return { marginLeft: TRIGGER_GAP_PX };
-  if (placement.startsWith("bottom")) return { marginTop: TRIGGER_GAP_PX };
-  return { marginBottom: TRIGGER_GAP_PX };
+  switch (placement) {
+    case "top":
+    case "top-center":
+      return {
+        top: trigger.top - gap,
+        left: cx,
+        transform: "translate(-50%, -100%)",
+      };
+    case "top-left":
+      return {
+        top: trigger.top - gap,
+        left: trigger.left,
+        transform: "translateY(-100%)",
+      };
+    case "top-right":
+      return {
+        top: trigger.top - gap,
+        left: trigger.right,
+        transform: "translate(-100%, -100%)",
+      };
+    case "bottom":
+    case "bottom-center":
+      return { top: trigger.bottom + gap, left: cx, transform: "translateX(-50%)" };
+    case "bottom-left":
+      return { top: trigger.bottom + gap, left: trigger.left };
+    case "bottom-right":
+      return {
+        top: trigger.bottom + gap,
+        left: trigger.right,
+        transform: "translateX(-100%)",
+      };
+    case "left":
+      return {
+        top: cy,
+        left: trigger.left - gap,
+        transform: "translate(-100%, -50%)",
+      };
+    case "right":
+      return {
+        top: cy,
+        left: trigger.right + gap,
+        transform: "translateY(-50%)",
+      };
+  }
 }
 
 export interface TooltipTriggerProps {
@@ -417,6 +453,8 @@ export function TooltipTrigger({
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen);
   const open = openProp ?? uncontrolledOpen;
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerRef = React.useRef<HTMLSpanElement>(null);
+  const bubbleRef = React.useRef<HTMLSpanElement>(null);
 
   const setOpen = (next: boolean) => {
     if (openProp === undefined) setUncontrolledOpen(next);
@@ -442,6 +480,28 @@ export function TooltipTrigger({
   };
 
   React.useEffect(() => () => clearTimer(), []);
+
+  const show = open && !disabled;
+
+  React.useLayoutEffect(() => {
+    if (!show) return;
+    const update = () => {
+      const trigger = triggerRef.current;
+      const bubble = bubbleRef.current;
+      if (!trigger || !bubble) return;
+      const next = getFixedStyle(placement, trigger.getBoundingClientRect());
+      bubble.style.top = `${next.top}px`;
+      bubble.style.left = `${next.left}px`;
+      bubble.style.transform = typeof next.transform === "string" ? next.transform : "none";
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [show, placement]);
 
   const child = React.cloneElement(children, {
     onMouseEnter: (event: React.MouseEvent) => {
@@ -475,19 +535,20 @@ export function TooltipTrigger({
   });
 
   return (
-    <span className={cn("relative inline-flex", className)}>
+    <span ref={triggerRef} className={cn("relative inline-flex", className)}>
       {child}
-      {open && !disabled && (
-        <span
-          className={cn(
-            "pointer-events-none absolute z-50",
-            placementClass[placement]
-          )}
-          style={gapStyle(placement)}
-        >
-          {content}
-        </span>
-      )}
+      {show && typeof document !== "undefined"
+        ? createPortal(
+            <span
+              ref={bubbleRef}
+              className="pointer-events-none fixed z-[100]"
+              style={{ top: 0, left: 0 }}
+            >
+              {content}
+            </span>,
+            document.body
+          )
+        : null}
     </span>
   );
 }
