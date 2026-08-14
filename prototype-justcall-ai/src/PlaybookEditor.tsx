@@ -790,10 +790,20 @@ function AiSuggestionState({
         </p>
       ) : (
         <div className="ai-suggest-in mt-2 rounded-[6px] bg-ai-surface px-2.5 py-2">
-          <p className="mb-1 flex items-center gap-1 text-label-sm text-ai">
-            <IconSparkles size={16} />
-            AI suggestion
-          </p>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="flex min-w-0 items-center gap-1 text-label-sm text-ai">
+              <IconSparkles size={16} />
+              AI suggestion
+            </p>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={onCancel}
+              className="-mr-1 flex size-6 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground hover:bg-white/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/24"
+            >
+              <IconClose size={16} />
+            </button>
+          </div>
           <p className="text-pretty text-paragraph-md text-foreground">{draft.suggestion}</p>
           <AiSuggestionActions
             tone={draft.tone}
@@ -801,7 +811,6 @@ function AiSuggestionState({
             onReplace={onReplace}
             onTryAgain={onTryAgain}
             onToneChange={onToneChange}
-            onCancel={onCancel}
           />
         </div>
       )}
@@ -815,14 +824,12 @@ function AiSuggestionActions({
   onReplace,
   onTryAgain,
   onToneChange,
-  onCancel,
 }: {
   tone: WordingTone;
   disabled: boolean;
   onReplace: () => void;
   onTryAgain: () => void;
   onToneChange: (tone: WordingTone) => void;
-  onCancel: () => void;
 }) {
   const [toneOpen, setToneOpen] = React.useState(false);
   const toneRef = React.useRef<HTMLDivElement>(null);
@@ -901,16 +908,6 @@ function AiSuggestionActions({
           </ul>
         ) : null}
       </div>
-      <span className="text-muted-foreground/40" aria-hidden="true">
-        ·
-      </span>
-      <button
-        type="button"
-        onClick={onCancel}
-        className={cn(actionClass, "text-muted-foreground hover:text-foreground")}
-      >
-        Cancel
-      </button>
     </div>
   );
 }
