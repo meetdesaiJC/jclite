@@ -785,13 +785,13 @@ function AiSuggestionState({
           className="ai-suggest-in mt-2 flex items-center gap-1.5 text-label-sm text-ai"
           aria-live="polite"
         >
-          <IconSparkles size={14} className="motion-safe:animate-pulse" />
+          <IconSparkles size={16} className="motion-safe:animate-pulse" />
           Improving wording…
         </p>
       ) : (
         <div className="ai-suggest-in mt-2 rounded-[6px] bg-ai-surface px-2.5 py-2">
           <p className="mb-1 flex items-center gap-1 text-label-sm text-ai">
-            <IconSparkles size={12} />
+            <IconSparkles size={16} />
             AI suggestion
           </p>
           <p className="text-pretty text-paragraph-md text-foreground">{draft.suggestion}</p>
