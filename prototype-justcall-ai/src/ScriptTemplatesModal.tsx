@@ -165,7 +165,7 @@ export function ScriptTemplatesModal({
 
         <ScratchOption
           title="Create custom script"
-          description="Add your first step, or import a document you already have."
+          description="Build from scratch or import an existing script."
           icon={<PlusIcon size={20} />}
           onSelect={() => onSelect({ type: "scratch" })}
         />

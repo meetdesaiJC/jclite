@@ -296,6 +296,35 @@
   animation: script-next-emphasis 500ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
+/* Script builder — drag-to-reorder micro-interactions. */
+.script-card-slot.is-shifting {
+  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.script-card-placeholder {
+  box-sizing: border-box;
+  border: 1px dashed var(--color-line);
+  border-radius: 8px;
+  background-color: transparent;
+}
+
+.script-card-lift {
+  position: relative;
+  z-index: 2;
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-300);
+  transition:
+    transform 120ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.script-card-float {
+  cursor: grabbing;
+  border-radius: 8px;
+  opacity: 1;
+  box-shadow: var(--shadow-400);
+}
+
 .script-step-title {
   text-decoration-line: line-through;
   text-decoration-color: transparent;
@@ -308,6 +337,36 @@
 
 .script-step-title.is-complete {
   text-decoration-color: currentColor;
+}
+
+@keyframes ai-improve-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ai-suggest-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ai-improve-popover {
+  animation: ai-improve-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.ai-suggest-in {
+  animation: ai-suggest-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 /* Post-call recap — generate, shimmer, reveal, then settle. */
@@ -534,6 +593,21 @@
 
   .script-check-glow,
   .script-next-emphasis {
+    animation: none !important;
+  }
+
+  .script-card-slot.is-shifting,
+  .script-card-lift,
+  .script-card-float {
+    transition: none !important;
+  }
+
+  .script-card-lift {
+    transform: none;
+  }
+
+  .ai-improve-popover,
+  .ai-suggest-in {
     animation: none !important;
   }
 

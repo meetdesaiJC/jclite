@@ -100,18 +100,31 @@ function StatusToggle({
   name,
   checked,
   onCheckedChange,
+  disabled,
+  disabledReason,
 }: {
   name: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
-  return (
+  const toggle = (
     <Toggle
       size="sm"
       checked={checked}
+      disabled={disabled}
       onCheckedChange={onCheckedChange}
       aria-label={`${name} ${checked ? "live" : "draft"}`}
     />
+  );
+  if (!disabled || !disabledReason) return toggle;
+  return (
+    <TooltipTrigger
+      content={<Tooltip theme="dark" arrow="top-center" title={disabledReason} />}
+    >
+      <span className="inline-flex">{toggle}</span>
+    </TooltipTrigger>
   );
 }
 
@@ -221,6 +234,8 @@ function AssignmentFace({
 }
 
 function AssignmentAvatarStack({ people }: { people: AssignmentPerson[] }) {
+  const [openId, setOpenId] = React.useState<string | null>(null);
+
   if (people.length === 0) {
     return <span className="text-paragraph-md text-muted-foreground">–</span>;
   }
@@ -235,12 +250,15 @@ function AssignmentAvatarStack({ people }: { people: AssignmentPerson[] }) {
         <span
           key={person.id}
           className="relative"
-          style={{ zIndex: visible.length - index }}
+          style={{
+            zIndex: openId === person.id ? 50 : visible.length - index,
+          }}
         >
           <TooltipTrigger
-            placement="bottom"
+            placement="top"
+            onOpenChange={(open) => setOpenId(open ? person.id : null)}
             content={
-              <Tooltip theme="dark" arrow="top-center" title={person.name} />
+              <Tooltip theme="dark" arrow="bottom-center" title={person.name} />
             }
           >
             <AssignmentFace person={person} />
@@ -608,15 +626,16 @@ export function AgentAssistPage() {
                     onDelete={(row) =>
                       setGuidanceItems((current) => current.filter((item) => item.id !== row.id))
                     }
-                    onStatusChange={(row, live) =>
+                    onStatusChange={(row, live) => {
+                      if (live && guidanceAssignees(row).length === 0) return;
                       setGuidanceItems((current) =>
                         current.map((item) =>
                           item.id === row.id
                             ? { ...item, status: live ? "live" : "draft", updated: "Just now" }
                             : item
                         )
-                      )
-                    }
+                      );
+                    }}
                   />
                 )}
               </div>
@@ -761,6 +780,8 @@ function GuidanceTable({
               <StatusToggle
                 name={row.name}
                 checked={row.status === "live"}
+                disabled={row.status !== "live" && guidanceAssignees(row).length === 0}
+                disabledReason="Assign users or groups before publishing"
                 onCheckedChange={(live) => onStatusChange(row, live)}
               />
             </TableCell>

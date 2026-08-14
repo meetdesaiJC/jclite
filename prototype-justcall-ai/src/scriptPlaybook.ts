@@ -803,18 +803,41 @@ export function playbookAssignmentLabel(playbook: ScriptPlaybook): string {
 }
 
 export type WordingTone =
+  | "natural"
+  | "concise"
+  | "conversational"
   | "empathetic"
-  | "confident"
-  | "professional"
-  | "urgent"
-  | "engaging";
+  | "persuasive"
+  | "professional";
 
 export const WORDING_TONES: { value: WordingTone; label: string }[] = [
+  { value: "natural", label: "Natural" },
+  { value: "concise", label: "Concise" },
+  { value: "conversational", label: "Conversational" },
   { value: "empathetic", label: "Empathetic" },
-  { value: "confident", label: "Confident" },
+  { value: "persuasive", label: "Persuasive" },
   { value: "professional", label: "Professional" },
-  { value: "urgent", label: "Urgent" },
-  { value: "engaging", label: "Engaging" },
+];
+
+export type AiWordingAction =
+  | "rephrase"
+  | "shorter"
+  | "conversational"
+  | "empathetic"
+  | "persuasive"
+  | "custom";
+
+export const AI_WORDING_ACTIONS: {
+  value: AiWordingAction;
+  label: string;
+  tone: WordingTone;
+}[] = [
+  { value: "rephrase", label: "Rephrase", tone: "natural" },
+  { value: "shorter", label: "Make shorter", tone: "concise" },
+  { value: "conversational", label: "Make more conversational", tone: "conversational" },
+  { value: "empathetic", label: "Make more empathetic", tone: "empathetic" },
+  { value: "persuasive", label: "Make more persuasive", tone: "persuasive" },
+  { value: "custom", label: "Custom instruction…", tone: "natural" },
 ];
 
 export interface WordingRewriteResult {
@@ -868,10 +891,12 @@ function shortenSpoken(text: string): string {
   return `${(atWord > 40 ? cut.slice(0, atWord) : cut).trim().replace(/[,;:]$/, "")}.`;
 }
 
-function pickVariant(variants: string[], seed: number): string {
+function pickVariant(variants: string[], seed: number, source?: string): string {
   const unique = [...new Set(variants.map((item) => item.trim()).filter(Boolean))];
-  if (unique.length === 0) return "";
-  return unique[Math.abs(seed) % unique.length] ?? unique[0] ?? "";
+  const different = source ? unique.filter((item) => item !== source.trim()) : unique;
+  const pool = different.length > 0 ? different : unique;
+  if (pool.length === 0) return source?.trim() ?? "";
+  return pool[Math.abs(seed) % pool.length] ?? pool[0] ?? "";
 }
 
 function asSpokenLine(text: string): string {
@@ -883,10 +908,10 @@ function asSpokenLine(text: string): string {
 function stripToneLeadIn(text: string): string {
   return text
     .replace(
-      /^(I can help with that\. |I know this is frustrating\. |I'm sorry you've had to deal with this\. |I'm sorry this has been a hassle\. |I'll take care of that\. |Here's what we'll do\. |Let's get this sorted right now\. |I can fix this on this call\. |Thank you for waiting\. |Quick question — )/i,
+      /^(I can help with that\. |I know this is frustrating\. |I'm sorry you've had to deal with this\. |I'm sorry this has been a hassle\. |I'll take care of that\. |Here's what we'll do\. |Let's get this sorted right now\. |I can fix this on this call\. |Thank you for waiting\. |Quick question — |No rush on this\. |Take your time\. |The teams who get the most from this usually |If we can get this right, )/i,
       ""
     )
-    .replace(/ (How does that sound\?|Does that work for you\?)$/i, "")
+    .replace(/ (How does that sound\?|Does that work for you\?|Would that work\?)$/i, "")
     .trim();
 }
 
@@ -908,70 +933,189 @@ function formalSpoken(text: string): string {
     .replace(/\bdon't\b/g, "do not");
 }
 
-function confidentSpoken(text: string): string {
+function simplifySpoken(text: string): string {
   return text
-    .replace(/\b(just |maybe |perhaps |I think |I believe )/gi, "")
-    .replace(/\bmight\b/gi, "will")
+    .replace(/\butilize\b/gi, "use")
+    .replace(/\bassist you with\b/gi, "help with")
+    .replace(/\bin order to\b/gi, "to")
+    .replace(/\bat this time\b/gi, "now")
+    .replace(/\bgoing forward\b/gi, "next")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
 
-function applyTone(source: string, tone: WordingTone, seed: number): string {
-  const base = asSpokenLine(stripToneLeadIn(source) || source);
-
-  if (tone === "empathetic") {
-    return pickVariant(
-      [
-        warmerSpoken(base),
-        `I know this is frustrating. ${base}`,
-        `I'm sorry you've had to deal with this. ${base}`,
-      ],
-      seed
-    );
-  }
-
-  if (tone === "confident") {
-    const direct = confidentSpoken(base);
-    return pickVariant(
-      [`I'll take care of that. ${direct}`, `Here's what we'll do. ${direct}`, direct],
-      seed
-    );
-  }
-
-  if (tone === "professional") {
-    const formal = formalSpoken(base);
-    return pickVariant([formal, `Thank you for waiting. ${formal}`], seed);
-  }
-
-  if (tone === "urgent") {
-    const short = shortenSpoken(base);
-    return pickVariant(
-      [`Let's get this sorted right now. ${short}`, `I can fix this on this call. ${short}`, short],
-      seed
-    );
-  }
-
-  const engagingBase = base.replace(/[.]+$/, "");
+function asQuestion(text: string, seed: number): string {
+  const base = text.trim().replace(/[.!?]+$/, "");
   return pickVariant(
     [
-      `${engagingBase} — how does that sound?`,
-      `Quick question — ${engagingBase.toLowerCase()}?`,
-      `${engagingBase}. Does that work for you?`,
+      `${base}?`,
+      `${base} — would that work?`,
+      `Would it help if ${lowerFirst(base)}?`,
     ],
-    seed
+    seed,
+    text
   );
+}
+
+const KNOWN_REPHRASES: { test: (text: string) => boolean; variants: string[] }[] = [
+  {
+    test: (text) =>
+      /who else needs to be involved/i.test(text) &&
+      /date you're trying to have this live by/i.test(text),
+    variants: [
+      "If this feels like a good fit, who else would be involved in the decision, and what timeline are you working toward?",
+      "If this seems like a fit, who else should be part of this conversation, and when are you hoping to have this in place?",
+      "Assuming this looks useful, who else needs to weigh in, and is there a go-live date you're working toward?",
+    ],
+  },
+  {
+    test: (text) => /date you're trying to have this live by/i.test(text),
+    variants: [
+      "what timeline are you working toward?",
+      "when are you hoping to have this in place?",
+      "is there a go-live date you're working toward?",
+    ],
+  },
+];
+
+function knownRephrase(text: string, seed: number): string | null {
+  const match = KNOWN_REPHRASES.find((item) => item.test(text));
+  if (!match) return null;
+  return pickVariant(match.variants, seed, text);
+}
+
+function naturalSpoken(text: string, seed: number): string {
+  const known = knownRephrase(text, seed);
+  if (known) return known;
+  const base = asSpokenLine(stripToneLeadIn(text) || text);
+  const noEnd = base.replace(/[.!?]+$/, "");
+  return pickVariant(
+    [
+      base.replace(/\blooks like\b/gi, "feels like").replace(/\bneeds to\b/gi, "would"),
+      `${noEnd.replace(/\bJust so I don't\b/i, "So I don't")}.`,
+      base.replace(/\bRoughly\b/i, "About").replace(/\bJust so\b/i, "So"),
+    ],
+    seed,
+    text
+  );
+}
+
+function conversationalSpoken(text: string, seed: number): string {
+  const known = knownRephrase(text, seed);
+  if (known) return known;
+  const base = stripToneLeadIn(text) || text;
+  const noEnd = asSpokenLine(base).replace(/[.]+$/, "");
+  return pickVariant(
+    [
+      `${noEnd} — how does that sound?`,
+      `Quick question — ${lowerFirst(noEnd)}?`,
+      `${noEnd}. Does that work for you?`,
+    ],
+    seed,
+    text
+  );
+}
+
+function empatheticSpoken(text: string, seed: number): string {
+  const base = asSpokenLine(stripToneLeadIn(text) || text);
+  return pickVariant(
+    [
+      warmerSpoken(base),
+      `No rush on this. ${base}`,
+      `I know this is a lot to think through. ${base}`,
+    ],
+    seed,
+    text
+  );
+}
+
+function persuasiveSpoken(text: string, seed: number): string {
+  const base = asSpokenLine(stripToneLeadIn(text) || text);
+  const noEnd = base.replace(/[.!?]+$/, "");
+  return pickVariant(
+    [
+      `If we can get this right, ${lowerFirst(base)}`,
+      `${noEnd} — that is usually what helps teams move faster.`,
+      `Most teams in your spot find this is the piece that unlocks the rest. ${base}`,
+    ],
+    seed,
+    text
+  );
+}
+
+function applyTone(source: string, tone: WordingTone, seed: number): string {
+  if (tone === "concise") return shortenSpoken(source);
+  if (tone === "conversational") return conversationalSpoken(source, seed);
+  if (tone === "empathetic") return empatheticSpoken(source, seed);
+  if (tone === "persuasive") return persuasiveSpoken(source, seed);
+  if (tone === "professional") {
+    const formal = formalSpoken(asSpokenLine(stripToneLeadIn(source) || source));
+    return pickVariant([formal, `Thank you for waiting. ${formal}`], seed, source);
+  }
+  return naturalSpoken(source, seed);
+}
+
+function applyAction(
+  source: string,
+  action: AiWordingAction,
+  instruction: string,
+  seed: number
+): string {
+  if (action === "shorter") return shortenSpoken(source);
+  if (action === "conversational") return conversationalSpoken(source, seed);
+  if (action === "empathetic") return empatheticSpoken(source, seed);
+  if (action === "persuasive") return persuasiveSpoken(source, seed);
+  if (action === "custom") return applyCustomInstruction(source, instruction, seed);
+  return naturalSpoken(source, seed);
+}
+
+function applyCustomInstruction(source: string, instruction: string, seed: number): string {
+  const q = instruction.toLowerCase();
+  if (/less salesy|not salesy|less sales|too sales/.test(q)) {
+    const plain = source
+      .replace(/\b(just|really|amazing|perfect|great opportunity|unlocks the rest)\b/gi, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    return pickVariant(
+      [
+        asSpokenLine(plain),
+        asSpokenLine(plain.replace(/\bIf this looks like a fit,\s*/i, "")),
+        simplifySpoken(plain),
+      ],
+      seed,
+      source
+    );
+  }
+  if (/question|ask/.test(q)) return asQuestion(source, seed);
+  if (/easier|new agent|simpler|plain|easier to say/.test(q)) {
+    return pickVariant([simplifySpoken(source), shortenSpoken(simplifySpoken(source))], seed, source);
+  }
+  if (/enterprise|formal|b2b/.test(q)) {
+    return pickVariant([formalSpoken(source), `Thank you for your time. ${formalSpoken(source)}`], seed, source);
+  }
+  return naturalSpoken(source, seed);
 }
 
 export function rewriteSuggestedWording(input: {
   title: string;
   wording: string;
   tone: WordingTone;
+  action?: AiWordingAction;
+  customInstruction?: string;
   seed?: number;
 }): WordingRewriteResult {
   const source = input.wording.trim() || spokenFromTitle(input.title);
-  const wording = applyTone(source, input.tone, input.seed ?? 0);
-  const toneLabel = WORDING_TONES.find((item) => item.value === input.tone)?.label ?? "Empathetic";
+  const seed = input.seed ?? 0;
+  const action = input.action ?? "rephrase";
+  const instruction = input.customInstruction?.trim() ?? "";
+  const defaultTone = AI_WORDING_ACTIONS.find((item) => item.value === action)?.tone ?? "natural";
 
+  let wording = applyAction(source, action, instruction, seed);
+  if (input.tone !== defaultTone) {
+    wording = applyTone(wording, input.tone, seed);
+  }
+
+  const toneLabel = WORDING_TONES.find((item) => item.value === input.tone)?.label ?? "Natural";
   return {
     wording,
     summary: input.wording.trim()
