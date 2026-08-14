@@ -5,6 +5,7 @@ import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
 import {
   IconClose,
+  IconEye,
   IconFile,
   IconInfoCircle,
 } from "@/components/Icon";
@@ -138,10 +139,8 @@ export function CreateGuidancePage({
   const [linkOpen, setLinkOpen] = React.useState(false);
   const [linkName, setLinkName] = React.useState("");
   const [linkUrl, setLinkUrl] = React.useState("");
-  const [testInput, setTestInput] = React.useState(
-    () => initial?.examplePhrases[0] ?? placeholders.testInput
-  );
   const [testPreviewOpen, setTestPreviewOpen] = React.useState(false);
+  const [publishOpen, setPublishOpen] = React.useState(false);
   const [viewingResource, setViewingResource] =
     React.useState<GuidanceResource | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -156,6 +155,19 @@ export function CreateGuidancePage({
     draft.trigger.trim().length > 0 &&
     (draft.suggestedResponse.trim().length > 0 ||
       draft.talkingPoints.some((point) => point.trim().length > 0));
+  const hasAssignees =
+    draft.teamMembers.length > 0 || draft.userGroups.length > 0;
+  const canConfirmPublish = canSave && hasAssignees;
+
+  const publishedItem = (): GuidanceItem => ({
+    ...draft,
+    name: draft.name.trim(),
+    trigger: draft.trigger.trim(),
+    suggestedResponse: draft.suggestedResponse.trim(),
+    talkingPoints: draft.talkingPoints.filter((point) => point.trim()),
+    updated: "Just now",
+    status: "live",
+  });
 
   const addTalkingPoint = () => {
     patch({ talkingPoints: [...draft.talkingPoints, ""] });
@@ -176,13 +188,13 @@ export function CreateGuidancePage({
   };
 
   const runTest = () => {
-    if (!testInput.trim()) return;
+    if (!canSave) return;
     setTestPreviewOpen(true);
   };
 
   return (
     <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-line bg-white px-6">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line bg-white px-6">
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
@@ -196,23 +208,27 @@ export function CreateGuidancePage({
             {isEditing ? "Edit guidance" : "Create guidance"}
           </h1>
         </div>
-        <Button
-          size="sm"
-          disabled={!canSave}
-          onClick={() => {
-            if (!canSave) return;
-            onSave({
-              ...draft,
-              name: draft.name.trim(),
-              trigger: draft.trigger.trim(),
-              suggestedResponse: draft.suggestedResponse.trim(),
-              talkingPoints: draft.talkingPoints.filter((point) => point.trim()),
-              updated: "Just now",
-            });
-          }}
-        >
-          {isEditing ? "Save" : "Create"}
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            variant="grey-outline"
+            size="sm"
+            disabled={!canSave}
+            leftIcon={<IconEye size={16} />}
+            onClick={runTest}
+          >
+            Preview
+          </Button>
+          <Button
+            size="sm"
+            disabled={!canSave}
+            onClick={() => {
+              if (!canSave) return;
+              setPublishOpen(true);
+            }}
+          >
+            {isEditing ? "Save" : "Create"}
+          </Button>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1 gap-6 overflow-hidden p-6">
@@ -435,34 +451,6 @@ export function CreateGuidancePage({
               </ul>
             )}
           </SectionCard>
-
-          <SectionCard
-            title="Test guidance"
-            description="Enter something a customer might say, then preview what the agent would see."
-          >
-            <InputField
-              placeholder={placeholders.testInput}
-              value={testInput}
-              onChange={(e) => setTestInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  runTest();
-                }
-              }}
-              clearable={false}
-            />
-            <div>
-              <Button
-                variant="grey-outline"
-                size="sm"
-                onClick={runTest}
-                disabled={!testInput.trim() || !canSave}
-              >
-                Test
-              </Button>
-            </div>
-          </SectionCard>
         </div>
       </div>
 
@@ -505,9 +493,82 @@ export function CreateGuidancePage({
       </Modal>
 
       <Modal
+        open={publishOpen}
+        onClose={() => setPublishOpen(false)}
+        size="sm"
+        className="overflow-visible"
+        bodyClassName="overflow-visible"
+        title="Ready to publish"
+        description="Agents will start seeing this guidance on matching conversations."
+        footer={
+          <>
+            <Button variant="grey-outline" size="sm" onClick={() => setPublishOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!canConfirmPublish}
+              onClick={() => {
+                if (!canConfirmPublish) return;
+                onSave(publishedItem());
+              }}
+            >
+              Publish
+            </Button>
+          </>
+        }
+      >
+        <dl className="flex flex-col gap-3">
+          <div>
+            <dt className="text-label-sm text-muted-foreground">Guidance</dt>
+            <dd className="text-paragraph-md text-foreground">{draft.name}</dd>
+          </div>
+          <div>
+            <dt className="text-label-sm text-muted-foreground">Assigned users</dt>
+            <dd className="mt-1.5">
+              <Dropdown
+                placeholder="Search team members"
+                searchPlaceholder="Search team members"
+                options={TEAM_MEMBERS}
+                multiple
+                searchable
+                maxVisibleTags={1}
+                value={draft.teamMembers}
+                onValueChange={(value) =>
+                  patch({ teamMembers: Array.isArray(value) ? value : [value] })
+                }
+              />
+            </dd>
+          </div>
+          <div>
+            <dt className="text-label-sm text-muted-foreground">User groups</dt>
+            <dd className="mt-1.5">
+              <Dropdown
+                placeholder="Search user groups"
+                searchPlaceholder="Search user groups"
+                options={USER_GROUPS}
+                multiple
+                searchable
+                maxVisibleTags={1}
+                value={draft.userGroups}
+                onValueChange={(value) =>
+                  patch({ userGroups: Array.isArray(value) ? value : [value] })
+                }
+              />
+            </dd>
+          </div>
+          {!hasAssignees ? (
+            <p className="text-paragraph-sm text-muted-foreground">
+              Assign at least one team member or user group to publish.
+            </p>
+          ) : null}
+        </dl>
+      </Modal>
+
+      <Modal
         open={testPreviewOpen}
         onClose={() => setTestPreviewOpen(false)}
-        size="sm"
+        size="md"
         title="Preview"
         description="What the agent would see during a call"
       >
@@ -515,7 +576,7 @@ export function CreateGuidancePage({
           item={{
             id: draft.id,
             atMs: 0,
-            quote: testInput.trim() || customerLineForGuidance(draft),
+            quote: customerLineForGuidance(draft),
             item: draft,
             priority: priorityForGuidance(draft),
             stance: stanceForGuidance(draft),

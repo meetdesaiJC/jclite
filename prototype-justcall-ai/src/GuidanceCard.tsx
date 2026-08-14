@@ -8,6 +8,7 @@ import {
   type GuidanceKind,
   type GuidanceResource,
 } from "./guidanceData";
+import aircallBattlecard from "./assets/aircall-battlecard.png";
 
 function ThumbUpIcon({ size = 16, filled = false }: { size?: number; filled?: boolean }) {
   return (
@@ -53,39 +54,11 @@ function ThumbDownIcon({ size = 16, filled = false }: { size?: number; filled?: 
 
 export function BattlecardVisual({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 360 220"
-      className={className}
-      role="img"
-      aria-label="JustCall compared with Aircall"
-    >
-      <rect width="360" height="220" rx="8" fill="#F9FAFB" />
-      <rect x="16" y="16" width="328" height="36" rx="6" fill="#EFF8FF" />
-      <text x="28" y="39" fill="#004CE6" fontSize="13" fontWeight="600" fontFamily="inherit">
-        JustCall vs Aircall
-      </text>
-      {[
-        ["Calling + SMS + email", "Yes", "Add-on"],
-        ["Native CRM integrations", "Yes", "Limited"],
-        ["AI agent assistance", "Yes", "No"],
-        ["Conversation intelligence", "Yes", "Add-on"],
-      ].map((row, i) => {
-        const y = 72 + i * 34;
-        return (
-          <g key={row[0]}>
-            <text x="28" y={y} fill="#101828" fontSize="12" fontFamily="inherit">
-              {row[0]}
-            </text>
-            <text x="230" y={y} fill="#027A48" fontSize="12" fontWeight="600" fontFamily="inherit">
-              {row[1]}
-            </text>
-            <text x="290" y={y} fill="#667085" fontSize="12" fontFamily="inherit">
-              {row[2]}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+    <img
+      src={aircallBattlecard}
+      alt="JustCall compared with Aircall"
+      className={cn("object-contain object-top", className)}
+    />
   );
 }
 

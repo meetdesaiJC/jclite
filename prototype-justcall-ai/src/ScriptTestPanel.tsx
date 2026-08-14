@@ -1,5 +1,4 @@
 import * as React from "react";
-import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
 import { flattenSteps, spokenLineFor, type PlaybookStep, type ScriptPlaybook } from "./scriptPlaybook";
@@ -22,18 +21,16 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
   const steps = React.useMemo(() => flattenSteps(playbook), [playbook]);
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [complete, setComplete] = React.useState(false);
-  const [paused, setPaused] = React.useState(false);
   const activeRef = React.useRef<HTMLLIElement | null>(null);
 
   React.useEffect(() => {
     if (!open) return;
     setActiveIndex(0);
     setComplete(false);
-    setPaused(false);
   }, [open, playbook.id]);
 
   React.useEffect(() => {
-    if (!open || paused || steps.length === 0) return;
+    if (!open || steps.length === 0) return;
 
     const delay = complete ? COMPLETE_HOLD_MS : STEP_HOLD_MS;
     const timer = window.setTimeout(() => {
@@ -50,7 +47,7 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
     }, delay);
 
     return () => window.clearTimeout(timer);
-  }, [activeIndex, complete, open, paused, steps.length]);
+  }, [activeIndex, complete, open, steps.length]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -60,12 +57,6 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
     });
   }, [activeIndex, complete, open]);
 
-  const replay = () => {
-    setComplete(false);
-    setActiveIndex(0);
-    setPaused(false);
-  };
-
   return (
     <Modal
       open={open}
@@ -73,23 +64,6 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
       size="md"
       title={playbook.name}
       description="What the agent sees during the call"
-      footer={
-        steps.length > 0 ? (
-          <Button
-            variant="grey-outline"
-            size="sm"
-            onClick={() => {
-              if (complete) {
-                replay();
-                return;
-              }
-              setPaused((value) => !value);
-            }}
-          >
-            {complete ? "Replay" : paused ? "Resume" : "Pause"}
-          </Button>
-        ) : undefined
-      }
     >
       {steps.length === 0 ? (
         <p className="rounded-lg bg-secondary-bg px-4 py-6 text-center text-paragraph-sm text-muted-foreground">

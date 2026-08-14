@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
-import { IconClose } from "@/components/Icon";
+import { IconClose, IconEye } from "@/components/Icon";
 import { Modal } from "@/components/Modal";
 import { HeaderEditableTitle } from "./HeaderEditableTitle";
 import { PlaybookEditor } from "./PlaybookEditor";
@@ -39,6 +39,9 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [publishOpen, setPublishOpen] = React.useState(false);
   const canPublish = playbook.stages.some((stage) => stage.steps.length > 0);
+  const hasAssignees =
+    playbook.assignedMembers.length > 0 || playbook.assignedGroups.length > 0;
+  const canConfirmPublish = canPublish && hasAssignees;
   const stepCount = countSteps(playbook);
 
   const updatePlaybook = (patch: Partial<ScriptPlaybook>) => {
@@ -66,6 +69,7 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
           <Button
             variant="grey-outline"
             size="sm"
+            leftIcon={<IconEye size={16} />}
             onClick={() => setPreviewOpen(true)}
           >
             Preview
@@ -83,7 +87,6 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
       <div className="flex min-h-0 flex-1 gap-6 overflow-hidden bg-white px-6 py-6">
           <aside className="flex w-[300px] shrink-0 flex-col">
             <div className="flex flex-col gap-4 rounded-lg border border-line bg-white p-4">
-              <p className="text-label-md-semi text-foreground">Assign this script</p>
               <Dropdown
                 label="Assign team members"
                 placeholder="Search team members"
@@ -158,8 +161,9 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
             </Button>
             <Button
               size="sm"
+              disabled={!canConfirmPublish}
               onClick={() => {
-                if (!canPublish) return;
+                if (!canConfirmPublish) return;
                 onPublish(playbook);
               }}
             >
@@ -212,6 +216,11 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
                 />
               </dd>
             </div>
+            {!hasAssignees ? (
+              <p className="text-paragraph-sm text-muted-foreground">
+                Assign at least one team member or user group to publish.
+              </p>
+            ) : null}
           </dl>
       </Modal>
     </main>

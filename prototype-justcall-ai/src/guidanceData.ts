@@ -1,4 +1,5 @@
 import type { DropdownListItem } from "@/components/Dropdown";
+import aircallBattlecard from "./assets/aircall-battlecard.png";
 
 export type PublishStatus = "live" | "draft";
 
@@ -74,6 +75,7 @@ export const SEED_GUIDANCE: GuidanceItem[] = [
         id: "r-aircall-battlecard",
         type: "image",
         name: "Aircall comparison battlecard",
+        thumbnail: aircallBattlecard,
       },
     ],
     teamMembers: [],
