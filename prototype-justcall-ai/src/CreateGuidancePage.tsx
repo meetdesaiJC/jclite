@@ -407,11 +407,7 @@ export function CreateGuidancePage({
                         className="text-paragraph-sm text-brand hover:text-brand-hover"
                         onClick={() => setViewingResource(resource)}
                       >
-                        {resource.type === "image"
-                          ? resource.name.toLowerCase().includes("battlecard")
-                            ? "View battlecard"
-                            : "View image"
-                          : "Open link"}
+                        {resource.type === "image" ? "View image" : "Open link"}
                       </button>
                     </div>
                     <button
