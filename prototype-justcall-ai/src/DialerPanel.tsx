@@ -55,6 +55,13 @@ const CALL_OUTCOMES = [
 const RINGING_MS = 2400;
 const DEFAULT_NUMBER = "919773110910";
 
+/** Tap Call — let the button finish compressing before the dialer turns over. */
+const CALL_PRESS_MS = 120;
+/** Hangup — Agent Assist lets go first, then the phone changes state. */
+const ASSIST_COLLAPSE_MS = 200;
+/** How long the outgoing card stays on top while the next one resolves. */
+const SHELL_CROSSFADE_MS = 180;
+
 const KEYPAD: { digit: string; letters: string }[][] = [
   [
     { digit: "1", letters: "" },
@@ -154,6 +161,70 @@ function prefersReducedMotion(): boolean {
   );
 }
 
+/**
+ * Cross-dissolve between two call cards. The outgoing card is snapshotted and
+ * held on top at the same footprint while the incoming card resolves under it,
+ * so dialing → ringing → wrap-up reads as one surface changing state.
+ */
+function ShellSwap({
+  swapKey,
+  reduced,
+  className,
+  children,
+}: {
+  swapKey: string;
+  reduced: boolean;
+  className?: string;
+  children: (enterClassName: string) => ReactNode;
+}) {
+  const [live, setLive] = useState({ key: swapKey, entering: false });
+  const [outgoing, setOutgoing] = useState<ReactNode>(null);
+  const onScreen = useRef<ReactNode>(null);
+  const timer = useRef<number | null>(null);
+
+  // Commit the entering state in the same render as the swap, so the incoming
+  // card never lands at full opacity for a frame before the dissolve starts.
+  if (live.key !== swapKey) setLive({ key: swapKey, entering: !reduced });
+  const rendered = children(
+    live.key === swapKey && live.entering ? "dialer-shell-in" : ""
+  );
+
+  useEffect(() => {
+    const previous = onScreen.current;
+    if (!previous || reduced) return;
+    setOutgoing(previous);
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setOutgoing(null), SHELL_CROSSFADE_MS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [swapKey]);
+
+  useEffect(() => {
+    onScreen.current = rendered;
+  });
+
+  useEffect(
+    () => () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    },
+    []
+  );
+
+  return (
+    <div className={cn("relative", className)}>
+      {outgoing ? (
+        <div
+          aria-hidden="true"
+          inert
+          className="dialer-shell-out pointer-events-none absolute inset-0 z-10 flex items-start justify-center"
+        >
+          {outgoing}
+        </div>
+      ) : null}
+      {rendered}
+    </div>
+  );
+}
+
 function initialsFromName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -183,6 +254,8 @@ export function DialerPanel({
   const [muted, setMuted] = useState(false);
   const [onHold, setOnHold] = useState(false);
   const [scenarioId, setScenarioId] = useState(CALL_SCENARIOS[0].id);
+  const [assistCollapsing, setAssistCollapsing] = useState(false);
+  const collapseTimer = useRef<number | null>(null);
   const callStartedAt = useRef<number | null>(null);
   const holdStartedAt = useRef<number | null>(null);
   const pausedMs = useRef(0);
@@ -288,18 +361,42 @@ export function DialerPanel({
     setScenarioId(CALL_SCENARIOS[0].id);
   };
 
+  const endToWrapUp = () => {
+    collapseTimer.current = null;
+    holdStartedAt.current = null;
+    pausedMs.current = 0;
+    setAssistCollapsing(false);
+    setMuted(false);
+    setOnHold(false);
+    setPhase("wrapup");
+  };
+
   const hangup = () => {
+    if (collapseTimer.current != null) return;
+    // Freeze the clock at hangup; the panel gets its beat to let go first.
     callStartedAt.current = null;
+    if (phase === "talking") {
+      if (prefersReducedMotion()) {
+        endToWrapUp();
+        return;
+      }
+      setAssistCollapsing(true);
+      collapseTimer.current = window.setTimeout(endToWrapUp, ASSIST_COLLAPSE_MS);
+      return;
+    }
     holdStartedAt.current = null;
     pausedMs.current = 0;
     setMuted(false);
     setOnHold(false);
-    if (phase === "talking") {
-      setPhase("wrapup");
-      return;
-    }
     resetToIdle();
   };
+
+  useEffect(
+    () => () => {
+      if (collapseTimer.current) window.clearTimeout(collapseTimer.current);
+    },
+    []
+  );
 
   const resetCallClock = () => {
     if (callStartedAt.current == null) return;
@@ -331,41 +428,52 @@ export function DialerPanel({
         </button>
       ) : null}
 
-      {inCall ? (
-        <div className="flex h-full min-h-0 w-full flex-1 justify-center">
-          <InCallShell
-            phase={phase}
-            talking={talking}
-            wrapping={wrapping}
-            elapsedMs={elapsedMs}
-            contactName={scenario.contactName}
-            contactMeta={scenario.contactMeta}
-            muted={muted}
-            onHold={onHold}
-            tab={tab}
-            scenario={scenario}
-            onScenarioChange={(id) => {
-              setScenarioId(id);
-              resetCallClock();
-            }}
-            onTabChange={setTab}
-            onMute={() => setMuted((value) => !value)}
-            onHoldToggle={() => setOnHold((value) => !value)}
-            onHangup={hangup}
-            onCloseWrapUp={resetToIdle}
-          />
-        </div>
-      ) : (
-        <IdleDialer
-          inputId={inputId}
-          number={number}
-          tab={tab}
-          onNumberChange={setNumber}
-          onTabChange={setTab}
-          onDigit={appendDigit}
-          onCall={startCall}
-        />
-      )}
+      {/* Dialing → ringing: the dialer transforms into the dark call state
+          rather than hard-switching. */}
+      <ShellSwap
+        swapKey={inCall ? "call" : "idle"}
+        reduced={prefersReducedMotion()}
+        className="flex h-full min-h-0 w-full flex-1 items-start justify-center"
+      >
+        {(enter) =>
+          inCall ? (
+            <InCallShell
+              className={enter}
+              phase={phase}
+              talking={talking}
+              wrapping={wrapping}
+              assistCollapsing={assistCollapsing}
+              elapsedMs={elapsedMs}
+              contactName={scenario.contactName}
+              contactMeta={scenario.contactMeta}
+              muted={muted}
+              onHold={onHold}
+              tab={tab}
+              scenario={scenario}
+              onScenarioChange={(id) => {
+                setScenarioId(id);
+                resetCallClock();
+              }}
+              onTabChange={setTab}
+              onMute={() => setMuted((value) => !value)}
+              onHoldToggle={() => setOnHold((value) => !value)}
+              onHangup={hangup}
+              onCloseWrapUp={resetToIdle}
+            />
+          ) : (
+            <IdleDialer
+              className={enter}
+              inputId={inputId}
+              number={number}
+              tab={tab}
+              onNumberChange={setNumber}
+              onTabChange={setTab}
+              onDigit={appendDigit}
+              onCall={startCall}
+            />
+          )
+        }
+      </ShellSwap>
     </div>,
     document.body
   );
@@ -375,6 +483,7 @@ function IdleDialer({
   inputId,
   number,
   tab,
+  className,
   onNumberChange,
   onTabChange,
   onDigit,
@@ -383,13 +492,44 @@ function IdleDialer({
   inputId: string;
   number: string;
   tab: DialerTab;
+  className?: string;
   onNumberChange: (value: string) => void;
   onTabChange: (tab: DialerTab) => void;
   onDigit: (digit: string) => void;
   onCall: () => void;
 }) {
+  const [pressing, setPressing] = useState(false);
+  const pressTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (pressTimer.current) window.clearTimeout(pressTimer.current);
+    },
+    []
+  );
+
+  // Let the press land before the dialer turns over, so the compress reads.
+  const handleCall = () => {
+    if (pressTimer.current) return;
+    if (prefersReducedMotion()) {
+      onCall();
+      return;
+    }
+    setPressing(true);
+    pressTimer.current = window.setTimeout(() => {
+      pressTimer.current = null;
+      setPressing(false);
+      onCall();
+    }, CALL_PRESS_MS);
+  };
+
   return (
-    <div className="flex w-[360px] shrink-0 flex-col overflow-hidden rounded-[16px] bg-white shadow-600">
+    <div
+      className={cn(
+        "flex w-[360px] shrink-0 flex-col overflow-hidden rounded-[16px] bg-white shadow-600",
+        className
+      )}
+    >
       <div className="flex w-full items-center justify-center">
         <div className="flex h-5 w-24 items-center justify-center gap-1.5 rounded-b-lg bg-badge-beta px-2">
           <AvatarIndicator
@@ -449,8 +589,11 @@ function IdleDialer({
           <button
             type="button"
             aria-label="Call"
-            onClick={onCall}
-            className="flex size-14 shrink-0 items-center justify-center overflow-clip rounded-full bg-brand outline-none transition-colors hover:bg-brand-hover focus-visible:ring-4 focus-visible:ring-brand/24 active:scale-[0.97]"
+            onClick={handleCall}
+            className={cn(
+              "flex size-14 shrink-0 items-center justify-center overflow-clip rounded-full bg-brand outline-none transition-colors hover:bg-brand-hover focus-visible:ring-4 focus-visible:ring-brand/24",
+              pressing ? "dialer-press" : "active:scale-[0.97]"
+            )}
           >
             <Glyph src={phoneFilled} />
           </button>
@@ -484,9 +627,11 @@ function IdleDialer({
 }
 
 function InCallShell({
+  className,
   phase,
   talking,
   wrapping,
+  assistCollapsing,
   elapsedMs,
   contactName,
   contactMeta,
@@ -501,9 +646,11 @@ function InCallShell({
   onHangup,
   onCloseWrapUp,
 }: {
+  className?: string;
   phase: CallPhase;
   talking: boolean;
   wrapping: boolean;
+  assistCollapsing: boolean;
   elapsedMs: number;
   contactName: string;
   contactMeta: string;
@@ -528,21 +675,29 @@ function InCallShell({
       : "h-[640px] max-h-full";
 
   return (
-    <div className="flex h-full min-h-0 items-start gap-3">
-      {wrapping ? (
+    <div className={cn("flex h-full min-h-0 items-start gap-3", className)}>
+      {/* End call — the phone cross-dissolves into the post-call state once
+          Agent Assist has let go of the live stream. */}
+      <ShellSwap
+        swapKey={wrapping ? "wrapup" : "live"}
+        reduced={reduced}
+        className={cn("w-[360px] shrink-0", stageHeight)}
+      >
+        {(enter) =>
+          wrapping ? (
         <WrapUpPhone
           contactName={contactName}
           contactMeta={contactMeta}
           tab={tab}
           onTabChange={onTabChange}
           onClose={onCloseWrapUp}
-          className={stageHeight}
+          className={cn("h-full", enter)}
         />
       ) : (
       <div
         className={cn(
-          "flex w-[360px] shrink-0 flex-col overflow-hidden rounded-[16px] bg-[#071532] shadow-600",
-          stageHeight
+          "flex h-full w-[360px] shrink-0 flex-col overflow-hidden rounded-[16px] bg-[#071532] shadow-600",
+          enter
         )}
       >
         <div className="flex w-full items-center justify-center px-4">
@@ -595,19 +750,36 @@ function InCallShell({
               <p className="text-[16px] leading-6 font-medium text-pretty text-white">
                 {contactName}
               </p>
-              <p className="text-[12px] leading-4 text-white/70">
+              <p
+                key={phase === "ringing" ? "ringing-meta" : "live-meta"}
+                className={cn(
+                  "text-[12px] leading-4 text-white/70",
+                  !reduced && "dialer-text-in"
+                )}
+              >
                 {phase === "ringing" ? `Incoming · Support` : contactMeta}
               </p>
             </div>
+            {/* Call connects — “Ringing” hands over to “Talking” and the
+                timer fades in underneath it. */}
             <div className="flex h-11 w-24 flex-col items-center justify-end gap-1 text-center text-white">
-              {talking ? (
-                <p className="text-[12px] leading-4">Talking</p>
-              ) : (
-                <p className="text-[12px] leading-4 opacity-0" aria-hidden="true">
-                  Talking
-                </p>
-              )}
-              <p className="text-[16px] leading-6 font-medium tabular-nums">
+              <p
+                aria-hidden={!talking}
+                className={cn(
+                  "text-[12px] leading-4",
+                  !reduced && "dialer-text-fade",
+                  talking ? "opacity-100" : "opacity-0"
+                )}
+              >
+                Talking
+              </p>
+              <p
+                key={phase === "ringing" ? "ringing-clock" : "live-clock"}
+                className={cn(
+                  "text-[16px] leading-6 font-medium tabular-nums",
+                  !reduced && "dialer-text-in"
+                )}
+              >
                 {phase === "ringing" ? "Ringing" : formatDuration(elapsedMs)}
               </p>
             </div>
@@ -644,7 +816,7 @@ function InCallShell({
               onClick={onHangup}
               className="flex h-14 w-32 items-center justify-center overflow-clip rounded-full bg-white outline-none transition-transform hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
             >
-              <Glyph src={hangupIcon} />
+              <Glyph src={hangupIcon} className="size-7" />
             </button>
             <button
               type="button"
@@ -658,14 +830,20 @@ function InCallShell({
 
         <DialerNav tab={tab} onTabChange={onTabChange} />
       </div>
-      )}
+          )
+        }
+      </ShellSwap>
 
+      {/* Agent Assist expands from its right edge — the call card is pushed
+          left by the flex row as the panel takes its width. */}
       <div
         className={cn(
           "min-h-0 shrink-0 overflow-hidden rounded-[16px] bg-white shadow-600",
           stageHeight,
-          reduced ? "" : "transition-[width] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
-          showAssist ? "w-[680px]" : "w-0"
+          reduced
+            ? ""
+            : "transition-[width,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
+          showAssist ? "w-[680px] opacity-100" : "w-0 opacity-0"
         )}
         aria-hidden={!showAssist}
         inert={!showAssist ? true : undefined}
@@ -675,6 +853,8 @@ function InCallShell({
           elapsedMs={elapsedMs}
           scenario={scenario}
           onScenarioChange={onScenarioChange}
+          active={showAssist}
+          exiting={assistCollapsing}
           ended={wrapping}
           className="h-full"
         />
@@ -698,7 +878,6 @@ function WrapUpPhone({
   onClose: () => void;
   className?: string;
 }) {
-  const reduced = prefersReducedMotion();
   const [rating, setRating] = useState(0);
   const [outcome, setOutcome] = useState("");
   const [notes, setNotes] = useState("");
@@ -712,9 +891,6 @@ function WrapUpPhone({
     <div
       className={cn(
         "flex w-[360px] shrink-0 flex-col rounded-[16px] bg-white shadow-600",
-        reduced
-          ? ""
-          : "animate-[assist-wrap-in_220ms_cubic-bezier(0.23,1,0.32,1)_both]",
         className
       )}
     >
