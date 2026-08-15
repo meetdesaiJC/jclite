@@ -1,5 +1,8 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/Button";
+import { Modal } from "@/components/Modal";
+import { Dropdown, type DropdownListItem } from "@/components/Dropdown";
 import { Tabs, type TabItem } from "@/components/Tabs";
 import { InputField } from "@/components/InputField";
 import { Toggle } from "@/components/Toggle";
@@ -14,7 +17,10 @@ import {
   IconSearch,
   IconFilter,
   IconCopy,
+  IconDotsVertical,
+  IconEye,
   IconPencil,
+  IconTeamManagement,
 } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import {
@@ -34,15 +40,21 @@ import {
   type ScriptStartChoice,
 } from "./ScriptTemplatesModal";
 import { ScriptBuilderPage, type BuilderLaunch } from "./ScriptBuilderPage";
+import { ScriptPreviewModal } from "./ScriptTestPanel";
 import {
   clonePlaybook,
   countSteps,
   playbookAssignees,
   playbookAssignmentLabel,
+  SCRIPT_TEAM_MEMBERS,
+  SCRIPT_USER_GROUPS,
   SEED_SCRIPTS,
   type AssignmentPerson,
   type ScriptPlaybook,
 } from "./scriptPlaybook";
+import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
+import { BattlecardVisual } from "./GuidanceCard";
+import { LiveGuidanceCard } from "./LiveGuidance";
 import { CreateGuidancePage } from "./CreateGuidancePage";
 import {
   GuidanceTemplatesModal,
@@ -50,11 +62,17 @@ import {
 } from "./GuidanceTemplatesModal";
 import {
   SEED_GUIDANCE,
+  TEAM_MEMBERS,
+  USER_GROUPS,
   createEmptyGuidance,
   createGuidanceFromTemplate,
+  customerLineForGuidance,
   formatAssignment,
   guidanceAssignees,
+  priorityForGuidance,
+  stanceForGuidance,
   type GuidanceItem,
+  type GuidanceResource,
   type GuidanceTemplateId,
 } from "./guidanceData";
 
@@ -301,15 +319,142 @@ function IconTrash({ size = 20 }: { size?: number }) {
   );
 }
 
+interface ActionMenuItem {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  onSelect?: () => void;
+  destructive?: boolean;
+}
+
+/**
+ * Kebab menu for the secondary row actions. The list body scrolls and clips,
+ * so the popover renders in a portal and tracks the trigger — same approach
+ * the tooltips use.
+ */
+function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }) {
+  const [open, setOpen] = React.useState(false);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const trigger = triggerRef.current;
+      const menu = menuRef.current;
+      if (!trigger || !menu) return;
+      const rect = trigger.getBoundingClientRect();
+      const { offsetWidth: width, offsetHeight: height } = menu;
+      const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+      const below = rect.bottom + 4;
+      const top = below + height > window.innerHeight - 8 ? rect.top - height - 4 : below;
+      menu.style.top = `${top}px`;
+      menu.style.left = `${left}px`;
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <TooltipTrigger
+        placement="bottom"
+        disabled={open}
+        content={<Tooltip theme="dark" arrow="top-center" title="More actions" />}
+      >
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={label}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+          className={cn(
+            "flex size-9 items-center justify-center rounded-r-[4px] border border-line bg-white text-foreground hover:bg-secondary-bg",
+            open && "bg-secondary-bg"
+          )}
+        >
+          <IconDotsVertical size={20} />
+        </button>
+      </TooltipTrigger>
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              aria-label={label}
+              className="fixed z-[100] min-w-[180px] rounded-[6px] border border-line bg-white py-1 shadow-400"
+              style={{ top: 0, left: 0 }}
+            >
+              {items.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    item.onSelect?.();
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 px-3 py-2 text-left text-paragraph-md",
+                    item.destructive
+                      ? "text-error hover:bg-error-subtle"
+                      : "text-foreground hover:bg-secondary-bg"
+                  )}
+                >
+                  <span className="flex size-4 shrink-0 items-center justify-center">
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </button>
+              ))}
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  );
+}
+
 function ActionButtonGroup({
   entity,
   onEdit,
+  onPreview,
   onDuplicate,
+  onAssign,
   onDelete,
 }: {
   entity: "script" | "guidance";
   onEdit?: () => void;
+  onPreview?: () => void;
   onDuplicate?: () => void;
+  onAssign?: () => void;
   onDelete?: () => void;
 }) {
   return (
@@ -329,30 +474,41 @@ function ActionButtonGroup({
       </TooltipTrigger>
       <TooltipTrigger
         placement="bottom"
-        content={<Tooltip theme="dark" arrow="top-center" title="Duplicate" />}
+        content={<Tooltip theme="dark" arrow="top-center" title="Preview" />}
       >
         <button
           type="button"
-          aria-label={`Duplicate ${entity}`}
-          onClick={onDuplicate}
+          aria-label={`Preview ${entity}`}
+          onClick={onPreview}
           className="-mr-px flex size-9 items-center justify-center border border-line bg-white text-foreground hover:bg-secondary-bg"
         >
-          <IconCopy size={20} />
+          <IconEye size={20} />
         </button>
       </TooltipTrigger>
-      <TooltipTrigger
-        placement="bottom"
-        content={<Tooltip theme="dark" arrow="top-center" title="Delete" />}
-      >
-        <button
-          type="button"
-          aria-label={`Delete ${entity}`}
-          onClick={onDelete}
-          className="flex size-9 items-center justify-center rounded-r-[4px] border border-line bg-white text-error hover:bg-error-subtle"
-        >
-          <IconTrash />
-        </button>
-      </TooltipTrigger>
+      <ActionMenu
+        label={`More ${entity} actions`}
+        items={[
+          {
+            key: "duplicate",
+            label: "Duplicate",
+            icon: <IconCopy size={16} />,
+            onSelect: onDuplicate,
+          },
+          {
+            key: "assign",
+            label: "Assign",
+            icon: <IconTeamManagement size={16} />,
+            onSelect: onAssign,
+          },
+          {
+            key: "delete",
+            label: "Delete",
+            icon: <IconTrash size={16} />,
+            onSelect: onDelete,
+            destructive: true,
+          },
+        ]}
+      />
     </div>
   );
 }
@@ -401,6 +557,9 @@ function AgentAssistEmptyState({
 export function AgentAssistPage() {
   const [tab, setTab] = React.useState("scripts");
   const [search, setSearch] = React.useState("");
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [memberFilter, setMemberFilter] = React.useState<string[]>([]);
+  const [groupFilter, setGroupFilter] = React.useState<string[]>([]);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(25);
   const [templatesOpen, setTemplatesOpen] = React.useState(false);
@@ -415,16 +574,37 @@ export function AgentAssistPage() {
     item: GuidanceItem;
     templateId?: GuidanceTemplateId | null;
   } | null>(null);
+  const [previewScript, setPreviewScript] = React.useState<ScriptPlaybook | null>(null);
+  const [previewGuidance, setPreviewGuidance] = React.useState<GuidanceItem | null>(null);
+  const [viewingResource, setViewingResource] = React.useState<GuidanceResource | null>(null);
+  const [assignTarget, setAssignTarget] = React.useState<
+    { type: "script"; row: ScriptRow } | { type: "guidance"; row: GuidanceItem } | null
+  >(null);
   const isScripts = tab === "scripts";
 
   const query = search.trim().toLowerCase();
-  const filteredScripts = scripts.filter(
-    (row) =>
+  const hasFilters = memberFilter.length > 0 || groupFilter.length > 0;
+  // A row survives the filter row when it is assigned to at least one of the
+  // picked members and at least one of the picked groups (each filter is
+  // ignored while empty).
+  const matchesAssignment = (members: string[], groups: string[]) =>
+    (memberFilter.length === 0 || memberFilter.some((value) => members.includes(value))) &&
+    (groupFilter.length === 0 || groupFilter.some((value) => groups.includes(value)));
+
+  const filteredScripts = scripts.filter((row) => {
+    if (
+      !matchesAssignment(row.playbook.assignedMembers, row.playbook.assignedGroups)
+    ) {
+      return false;
+    }
+    return (
       !query ||
       row.name.toLowerCase().includes(query) ||
       row.team.toLowerCase().includes(query)
-  );
+    );
+  });
   const filteredGuidance = guidanceItems.filter((row) => {
+    if (!matchesAssignment(row.teamMembers, row.userGroups)) return false;
     if (!query) return true;
     return (
       row.name.toLowerCase().includes(query) ||
@@ -433,7 +613,7 @@ export function AgentAssistPage() {
     );
   });
   const filtered = isScripts ? filteredScripts : filteredGuidance;
-  const isEmpty = filtered.length === 0 && !query;
+  const isEmpty = filtered.length === 0 && !query && !hasFilters;
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -488,6 +668,26 @@ export function AgentAssistPage() {
     setGuidanceLaunch(null);
   };
 
+  const assignScript = (row: ScriptRow, members: string[], groups: string[]) => {
+    const playbook = { ...row.playbook, assignedMembers: members, assignedGroups: groups };
+    setScripts((current) =>
+      current.map((item) =>
+        item.id === row.id ? toScriptRow(playbook, item.status, "Just now") : item
+      )
+    );
+  };
+
+  const assignGuidance = (row: GuidanceItem, members: string[], groups: string[]) => {
+    setGuidanceItems((current) =>
+      current.map((item) => {
+        if (item.id !== row.id) return item;
+        const next = { ...item, teamMembers: members, userGroups: groups, updated: "Just now" };
+        // Live guidance needs at least one assignee — drop to draft if it loses them.
+        return guidanceAssignees(next).length === 0 ? { ...next, status: "draft" as const } : next;
+      })
+    );
+  };
+
   const duplicateGuidance = (item: GuidanceItem) => {
     setGuidanceItems((current) => [
       {
@@ -532,6 +732,8 @@ export function AgentAssistPage() {
           onValueChange={(key) => {
             setTab(key);
             setSearch("");
+            setMemberFilter([]);
+            setGroupFilter([]);
             setPage(1);
           }}
         />
@@ -573,8 +775,14 @@ export function AgentAssistPage() {
                 wrapperClassName="w-[280px]"
               />
               <span className="h-full w-px shrink-0 bg-line" aria-hidden="true" />
-              <Button variant="grey-outline" size="sm" leftIcon={<IconFilter size={16} />}>
-                Filters
+              <Button
+                variant="grey-outline"
+                size="sm"
+                leftIcon={<IconFilter size={16} />}
+                aria-expanded={filtersOpen}
+                onClick={() => setFiltersOpen((open) => !open)}
+              >
+                {filtersOpen ? "Hide filters" : "Filters"}
               </Button>
             </div>
 
@@ -591,6 +799,54 @@ export function AgentAssistPage() {
             </div>
           </div>
 
+          {filtersOpen ? (
+            <div className="flex items-center gap-3 border-t border-line px-6 py-3">
+              <Dropdown
+                placeholder="Team members"
+                searchPlaceholder="Search team members"
+                options={isScripts ? SCRIPT_TEAM_MEMBERS : TEAM_MEMBERS}
+                multiple
+                searchable
+                maxVisibleTags={1}
+                value={memberFilter}
+                onValueChange={(value) => {
+                  setMemberFilter(Array.isArray(value) ? value : [value]);
+                  setPage(1);
+                }}
+                className="w-[220px]"
+                triggerClassName="h-9"
+              />
+              <Dropdown
+                placeholder="User groups"
+                searchPlaceholder="Search user groups"
+                options={isScripts ? SCRIPT_USER_GROUPS : USER_GROUPS}
+                multiple
+                searchable
+                maxVisibleTags={1}
+                value={groupFilter}
+                onValueChange={(value) => {
+                  setGroupFilter(Array.isArray(value) ? value : [value]);
+                  setPage(1);
+                }}
+                className="w-[220px]"
+                triggerClassName="h-9"
+              />
+              {hasFilters ? (
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => {
+                    setMemberFilter([]);
+                    setGroupFilter([]);
+                    setPage(1);
+                  }}
+                >
+                  Clear all
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
               <div className="min-h-0 flex-1 overflow-auto">
@@ -598,6 +854,8 @@ export function AgentAssistPage() {
                   <ScriptsTable
                     rows={visibleScripts}
                     onEdit={(row) => setBuilder({ type: "edit", playbook: row.playbook })}
+                    onPreview={(row) => setPreviewScript(row.playbook)}
+                    onAssign={(row) => setAssignTarget({ type: "script", row })}
                     onDuplicate={(row) => {
                       const copy = clonePlaybook(row.playbook);
                       copy.name = `Copy of ${row.playbook.name}`;
@@ -622,6 +880,8 @@ export function AgentAssistPage() {
                     onEdit={(row) =>
                       setGuidanceLaunch({ mode: "edit", item: row })
                     }
+                    onPreview={setPreviewGuidance}
+                    onAssign={(row) => setAssignTarget({ type: "guidance", row })}
                     onDuplicate={duplicateGuidance}
                     onDelete={(row) =>
                       setGuidanceItems((current) => current.filter((item) => item.id !== row.id))
@@ -667,20 +927,170 @@ export function AgentAssistPage() {
         onClose={() => setGuidanceTemplatesOpen(false)}
         onSelect={handleGuidanceTemplateSelect}
       />
+
+      {previewScript ? (
+        <ScriptPreviewModal
+          open
+          playbook={previewScript}
+          onClose={() => setPreviewScript(null)}
+        />
+      ) : null}
+
+      <Modal
+        open={Boolean(previewGuidance)}
+        onClose={() => setPreviewGuidance(null)}
+        size="md"
+        title="Preview"
+        description="What the agent would see during a call"
+      >
+        {previewGuidance ? (
+          <LiveGuidanceCard
+            item={{
+              id: previewGuidance.id,
+              atMs: 0,
+              quote: customerLineForGuidance(previewGuidance),
+              item: previewGuidance,
+              priority: priorityForGuidance(previewGuidance),
+              stance: stanceForGuidance(previewGuidance),
+            }}
+            reduced
+            onDismiss={() => setPreviewGuidance(null)}
+            onViewResource={setViewingResource}
+          />
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(viewingResource)}
+        onClose={() => setViewingResource(null)}
+        size="lg"
+        title={viewingResource?.name}
+      >
+        {viewingResource?.type === "image" ? (
+          <div className="overflow-hidden rounded-[6px] border border-line bg-secondary-bg">
+            {viewingResource.thumbnail ? (
+              <img
+                src={viewingResource.thumbnail}
+                alt={viewingResource.name}
+                className="mx-auto max-h-[70vh] w-full object-contain"
+              />
+            ) : (
+              <BattlecardVisual className="w-full" />
+            )}
+          </div>
+        ) : null}
+      </Modal>
+
+      {assignTarget ? (
+        <AssignModal
+          key={assignTarget.row.id}
+          name={assignTarget.row.name}
+          entity={assignTarget.type}
+          members={assignTarget.type === "script" ? SCRIPT_TEAM_MEMBERS : TEAM_MEMBERS}
+          groups={assignTarget.type === "script" ? SCRIPT_USER_GROUPS : USER_GROUPS}
+          initialMembers={
+            assignTarget.type === "script"
+              ? assignTarget.row.playbook.assignedMembers
+              : assignTarget.row.teamMembers
+          }
+          initialGroups={
+            assignTarget.type === "script"
+              ? assignTarget.row.playbook.assignedGroups
+              : assignTarget.row.userGroups
+          }
+          onClose={() => setAssignTarget(null)}
+          onSave={(nextMembers, nextGroups) => {
+            if (assignTarget.type === "script") {
+              assignScript(assignTarget.row, nextMembers, nextGroups);
+            } else {
+              assignGuidance(assignTarget.row, nextMembers, nextGroups);
+            }
+            setAssignTarget(null);
+          }}
+        />
+      ) : null}
     </main>
+  );
+}
+
+/** Assign a script or guidance to users and groups without opening the editor. */
+function AssignModal({
+  name,
+  entity,
+  members,
+  groups,
+  initialMembers,
+  initialGroups,
+  onClose,
+  onSave,
+}: {
+  name: string;
+  entity: "script" | "guidance";
+  members: DropdownListItem[];
+  groups: DropdownListItem[];
+  initialMembers: string[];
+  initialGroups: string[];
+  onClose: () => void;
+  onSave: (members: string[], groups: string[]) => void;
+}) {
+  const [selectedMembers, setSelectedMembers] = React.useState(initialMembers);
+  const [selectedGroups, setSelectedGroups] = React.useState(initialGroups);
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      className="overflow-visible"
+      bodyClassName="overflow-visible"
+      title="Assign"
+      description={`Choose who sees this ${entity} on their calls.`}
+      footer={
+        <>
+          <Button variant="grey-outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={() => onSave(selectedMembers, selectedGroups)}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <dl className="flex flex-col gap-3">
+        <div>
+          <dt className="text-label-sm text-muted-foreground">
+            {entity === "script" ? "Script" : "Guidance"}
+          </dt>
+          <dd className="text-paragraph-md text-foreground">{name}</dd>
+        </div>
+        <AssignTeamAndGroups
+          variant="summary"
+          members={members}
+          groups={groups}
+          selectedMembers={selectedMembers}
+          selectedGroups={selectedGroups}
+          onMembersChange={setSelectedMembers}
+          onGroupsChange={setSelectedGroups}
+        />
+      </dl>
+    </Modal>
   );
 }
 
 function ScriptsTable({
   rows,
   onEdit,
+  onPreview,
   onDuplicate,
+  onAssign,
   onDelete,
   onStatusChange,
 }: {
   rows: ScriptRow[];
   onEdit: (row: ScriptRow) => void;
+  onPreview: (row: ScriptRow) => void;
   onDuplicate: (row: ScriptRow) => void;
+  onAssign: (row: ScriptRow) => void;
   onDelete: (row: ScriptRow) => void;
   onStatusChange: (row: ScriptRow, live: boolean) => void;
 }) {
@@ -718,7 +1128,9 @@ function ScriptsTable({
               <ActionButtonGroup
                 entity="script"
                 onEdit={() => onEdit(row)}
+                onPreview={() => onPreview(row)}
                 onDuplicate={() => onDuplicate(row)}
+                onAssign={() => onAssign(row)}
                 onDelete={() => onDelete(row)}
               />
             </TableCell>
@@ -732,13 +1144,17 @@ function ScriptsTable({
 function GuidanceTable({
   rows,
   onEdit,
+  onPreview,
   onDuplicate,
+  onAssign,
   onDelete,
   onStatusChange,
 }: {
   rows: GuidanceItem[];
   onEdit: (row: GuidanceItem) => void;
+  onPreview: (row: GuidanceItem) => void;
   onDuplicate: (row: GuidanceItem) => void;
+  onAssign: (row: GuidanceItem) => void;
   onDelete: (row: GuidanceItem) => void;
   onStatusChange: (row: GuidanceItem, live: boolean) => void;
 }) {
@@ -751,9 +1167,7 @@ function GuidanceTable({
           <TableHead className="sticky top-0 z-10 w-[160px]">Assigned to</TableHead>
           <TableHead className="sticky top-0 z-10 w-[120px]">Status</TableHead>
           <TableHead className="sticky top-0 z-10 w-[120px]">Last updated</TableHead>
-          <TableHead className="sticky top-0 z-10 w-[148px] text-center">
-            More actions
-          </TableHead>
+          <TableHead className="sticky top-0 z-10 w-[148px] text-center">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -790,7 +1204,9 @@ function GuidanceTable({
               <ActionButtonGroup
                 entity="guidance"
                 onEdit={() => onEdit(row)}
+                onPreview={() => onPreview(row)}
                 onDuplicate={() => onDuplicate(row)}
+                onAssign={() => onAssign(row)}
                 onDelete={() => onDelete(row)}
               />
             </TableCell>

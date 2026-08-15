@@ -210,9 +210,9 @@ export function KnowledgeBuilderPage({
               <div className="flex flex-col gap-4 rounded-lg border border-line bg-white p-4">
                 <p className="text-label-md-semi text-foreground">Assign this knowledge</p>
                 <Dropdown
-                  label="Assign teams"
-                  placeholder="Search teams"
-                  searchPlaceholder="Search teams"
+                  label="Assign user groups"
+                  placeholder="Search user groups"
+                  searchPlaceholder="Search user groups"
                   options={TEAM_DROPDOWN}
                   multiple
                   searchable
@@ -281,7 +281,7 @@ export function KnowledgeBuilderPage({
           />
           <SummaryRow
             label="Available to"
-            value={assignmentLabel(repository) || "No teams selected"}
+            value={assignmentLabel(repository) || "No user groups selected"}
           />
         </dl>
       </Modal>

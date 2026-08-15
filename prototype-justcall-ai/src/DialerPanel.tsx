@@ -236,16 +236,9 @@ export interface DialerPanelProps {
   className?: string;
   onCall?: (number: string) => void;
   onClose?: () => void;
-  /** Jump straight into a live call — used by the in-call prototype. */
-  autoStartCall?: boolean;
 }
 
-export function DialerPanel({
-  className,
-  onCall,
-  onClose,
-  autoStartCall = false,
-}: DialerPanelProps) {
+export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
   const inputId = useId();
   const [number, setNumber] = useState("");
   const [tab, setTab] = useState<DialerTab>("dialer");
@@ -338,17 +331,6 @@ export function DialerPanel({
     }
     onCall?.(digits);
   };
-
-  const didAutoStart = useRef(false);
-  useEffect(() => {
-    if (!autoStartCall || didAutoStart.current) return;
-    didAutoStart.current = true;
-    startCall({
-      skipRinging: true,
-      scenarioId: "discovery",
-      elapsedMs: 0,
-    });
-  }, [autoStartCall]);
 
   const resetToIdle = () => {
     callStartedAt.current = null;
@@ -751,13 +733,12 @@ function InCallShell({
                 {contactName}
               </p>
               <p
-                key={phase === "ringing" ? "ringing-meta" : "live-meta"}
                 className={cn(
                   "text-[12px] leading-4 text-white/70",
                   !reduced && "dialer-text-in"
                 )}
               >
-                {phase === "ringing" ? `Incoming · Support` : contactMeta}
+                {contactMeta}
               </p>
             </div>
             {/* Call connects — “Ringing” hands over to “Talking” and the

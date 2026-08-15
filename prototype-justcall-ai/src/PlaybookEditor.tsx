@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { Alert } from "@/components/Alert";
 import { Button } from "@/components/Button";
 import { IconChevronDown, IconClose, IconSparkles } from "@/components/Icon";
-import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import { cn } from "@/lib/utils";
 import { HeaderEditableTitle } from "./HeaderEditableTitle";
 import {
@@ -329,7 +328,6 @@ export function PlaybookEditor({
                   handleRef={(node) => reorder.setHandleRef(stepIndex, node)}
                   onHandlePointerDown={(event) => reorder.beginPress(stepIndex, event)}
                   onHandleKeyDown={(event) => reorder.onHandleKeyDown(stepIndex, event)}
-                  tooltipDisabled={reorderBusy}
                   onUpdate={(patch) => updateStep(item.id, patch)}
                   onRemove={() => removeStep(item.id)}
                   onToggleMenu={() => {
@@ -392,7 +390,6 @@ export function PlaybookEditor({
                 busy={aiBusyStepId === floatingStep.id}
                 grabbing
                 preview
-                tooltipDisabled
                 onUpdate={() => {}}
                 onRemove={() => {}}
                 onToggleMenu={() => {}}
@@ -432,7 +429,6 @@ function ScriptStepCard({
   lifted = false,
   grabbing = false,
   preview = false,
-  tooltipDisabled = false,
   handleRef,
   onHandlePointerDown,
   onHandleKeyDown,
@@ -457,7 +453,6 @@ function ScriptStepCard({
   lifted?: boolean;
   grabbing?: boolean;
   preview?: boolean;
-  tooltipDisabled?: boolean;
   handleRef?: (node: HTMLButtonElement | null) => void;
   onHandlePointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onHandleKeyDown?: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
@@ -514,17 +509,7 @@ function ScriptStepCard({
       )}
     >
       <div className="mb-2 flex items-center gap-1.5">
-        <TooltipTrigger
-          placement="top"
-          delay={280}
-          disabled={preview || tooltipDisabled}
-          className="shrink-0"
-          content={
-            <Tooltip theme="dark" arrow="bottom-center" title="Drag to reorder" />
-          }
-        >
-          {handleButton}
-        </TooltipTrigger>
+        {handleButton}
         <HeaderEditableTitle
           value={item.title}
           onChange={(title) => onUpdate({ title })}

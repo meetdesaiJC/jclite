@@ -1,6 +1,5 @@
 import * as React from "react";
 import { Button } from "@/components/Button";
-import { Dropdown } from "@/components/Dropdown";
 import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
 import {
@@ -9,6 +8,7 @@ import {
   IconFile,
   IconInfoCircle,
 } from "@/components/Icon";
+import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
 import {
   TEAM_MEMBERS,
   USER_GROUPS,
@@ -233,34 +233,14 @@ export function CreateGuidancePage({
 
       <div className="flex min-h-0 flex-1 gap-6 overflow-hidden p-6">
         <aside className="flex w-[300px] shrink-0 flex-col overflow-auto">
-          <SectionCard title="Assign to">
-            <Dropdown
-              label="Teams"
-              placeholder="Search teams"
-              searchPlaceholder="Search teams"
-              options={USER_GROUPS}
-              multiple
-              searchable
-              maxVisibleTags={1}
-              value={draft.userGroups}
-              onValueChange={(value) =>
-                patch({ userGroups: Array.isArray(value) ? value : [value] })
-              }
-            />
-            <Dropdown
-              label="Individual team members"
-              placeholder="Search team members"
-              searchPlaceholder="Search team members"
-              options={TEAM_MEMBERS}
-              multiple
-              searchable
-              maxVisibleTags={1}
-              value={draft.teamMembers}
-              onValueChange={(value) =>
-                patch({ teamMembers: Array.isArray(value) ? value : [value] })
-              }
-            />
-          </SectionCard>
+          <AssignTeamAndGroups
+            members={TEAM_MEMBERS}
+            groups={USER_GROUPS}
+            selectedMembers={draft.teamMembers}
+            selectedGroups={draft.userGroups}
+            onMembersChange={(teamMembers) => patch({ teamMembers })}
+            onGroupsChange={(userGroups) => patch({ userGroups })}
+          />
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-auto pr-1">
@@ -523,40 +503,15 @@ export function CreateGuidancePage({
             <dt className="text-label-sm text-muted-foreground">Guidance</dt>
             <dd className="text-paragraph-md text-foreground">{draft.name}</dd>
           </div>
-          <div>
-            <dt className="text-label-sm text-muted-foreground">Assigned users</dt>
-            <dd className="mt-1.5">
-              <Dropdown
-                placeholder="Search team members"
-                searchPlaceholder="Search team members"
-                options={TEAM_MEMBERS}
-                multiple
-                searchable
-                maxVisibleTags={1}
-                value={draft.teamMembers}
-                onValueChange={(value) =>
-                  patch({ teamMembers: Array.isArray(value) ? value : [value] })
-                }
-              />
-            </dd>
-          </div>
-          <div>
-            <dt className="text-label-sm text-muted-foreground">User groups</dt>
-            <dd className="mt-1.5">
-              <Dropdown
-                placeholder="Search user groups"
-                searchPlaceholder="Search user groups"
-                options={USER_GROUPS}
-                multiple
-                searchable
-                maxVisibleTags={1}
-                value={draft.userGroups}
-                onValueChange={(value) =>
-                  patch({ userGroups: Array.isArray(value) ? value : [value] })
-                }
-              />
-            </dd>
-          </div>
+          <AssignTeamAndGroups
+            variant="summary"
+            members={TEAM_MEMBERS}
+            groups={USER_GROUPS}
+            selectedMembers={draft.teamMembers}
+            selectedGroups={draft.userGroups}
+            onMembersChange={(teamMembers) => patch({ teamMembers })}
+            onGroupsChange={(userGroups) => patch({ userGroups })}
+          />
           {!hasAssignees ? (
             <p className="text-paragraph-sm text-muted-foreground">
               Assign at least one team member or user group to publish.

@@ -251,19 +251,11 @@ const INBOUND_CALLS_CARDS: KpiCardData[] = [
 export interface DashboardProps {
   /** Signed-in user's full name shown in the profile dropdown header. */
   profileName?: string;
-  /** Open the dialer as soon as the dashboard mounts. */
-  autoOpenDialer?: boolean;
-  /** Once the dialer is open, jump into a live call. */
-  autoStartCall?: boolean;
 }
 
-export function Dashboard({
-  profileName = "Sarah Johnson",
-  autoOpenDialer = false,
-  autoStartCall = false,
-}: DashboardProps) {
+export function Dashboard({ profileName = "Sarah Johnson" }: DashboardProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [dialerOpen, setDialerOpen] = useState(autoOpenDialer);
+  const [dialerOpen, setDialerOpen] = useState(false);
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -289,10 +281,7 @@ export function Dashboard({
       />
 
       {dialerOpen ? (
-        <DialerPanel
-          autoStartCall={autoStartCall}
-          onClose={() => setDialerOpen(false)}
-        />
+        <DialerPanel onClose={() => setDialerOpen(false)} />
       ) : (
         <>
       <div className="flex items-center gap-8 border-b border-line px-6">
