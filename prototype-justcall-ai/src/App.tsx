@@ -77,12 +77,17 @@ function SetupFlow() {
   );
 }
 
+/**
+ * In-call prototype — starts on the Calls dashboard. The agent opens the
+ * dialer from the top nav, dials a number, and hits Call; ringing → pickup →
+ * Agent Assist all play out from that first tap.
+ */
 function InCallFlow() {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidenav activeKey="dashboard" />
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <Dashboard autoOpenDialer autoStartCall />
+        <Dashboard />
       </div>
     </div>
   );
