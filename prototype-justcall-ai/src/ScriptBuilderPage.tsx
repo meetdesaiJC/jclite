@@ -1,9 +1,9 @@
 import * as React from "react";
 import { Button } from "@/components/Button";
-import { Dropdown } from "@/components/Dropdown";
 import { IconClose, IconEye } from "@/components/Icon";
+import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
-import { HeaderEditableTitle } from "./HeaderEditableTitle";
+import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
 import { PlaybookEditor } from "./PlaybookEditor";
 import { ScriptPreviewModal } from "./ScriptTestPanel";
 import { ScriptUploadWizard } from "./ScriptUploadWizard";
@@ -60,10 +60,9 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
           >
             <IconClose size={20} />
           </button>
-          <HeaderEditableTitle
-            value={playbook.name}
-            onChange={(name) => setPlaybook({ ...playbook, name })}
-          />
+          <h1 className="truncate text-heading-lg text-foreground">
+            {launch.type === "edit" ? "Edit script" : "Create script"}
+          </h1>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button
@@ -86,43 +85,27 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
 
       <div className="flex min-h-0 flex-1 gap-6 overflow-hidden bg-white px-6 py-6">
           <aside className="flex w-[300px] shrink-0 flex-col">
-            <div className="flex flex-col gap-4 rounded-lg border border-line bg-white p-4">
-              <Dropdown
-                label="Assign team members"
-                placeholder="Search team members"
-                searchPlaceholder="Search team members"
-                options={SCRIPT_TEAM_MEMBERS}
-                multiple
-                searchable
-                maxVisibleTags={1}
-                value={playbook.assignedMembers}
-                onValueChange={(value) =>
-                  updatePlaybook({
-                    assignedMembers: Array.isArray(value) ? value : [value],
-                  })
-                }
-              />
-              <Dropdown
-                label="Assign user groups"
-                placeholder="Search user groups"
-                searchPlaceholder="Search user groups"
-                options={SCRIPT_USER_GROUPS}
-                multiple
-                searchable
-                maxVisibleTags={1}
-                value={playbook.assignedGroups}
-                onValueChange={(value) =>
-                  updatePlaybook({
-                    assignedGroups: Array.isArray(value) ? value : [value],
-                  })
-                }
-              />
-              <p className="text-pretty text-paragraph-sm text-muted-foreground">
-                People and groups can both be selected. Assigned agents will see this script on matching calls.
-              </p>
-            </div>
+            <AssignTeamAndGroups
+              members={SCRIPT_TEAM_MEMBERS}
+              groups={SCRIPT_USER_GROUPS}
+              selectedMembers={playbook.assignedMembers}
+              selectedGroups={playbook.assignedGroups}
+              onMembersChange={(assignedMembers) => updatePlaybook({ assignedMembers })}
+              onGroupsChange={(assignedGroups) => updatePlaybook({ assignedGroups })}
+            />
           </aside>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+            <section className="flex shrink-0 flex-col gap-4 rounded-lg border border-line bg-white p-4">
+              <InputField
+                label="Script name"
+                placeholder="e.g. Discovery call"
+                value={playbook.name}
+                onChange={(e) => updatePlaybook({ name: e.target.value })}
+                helpText="Give this script an internal name so your team can identify it."
+                helpIcon
+                clearable={false}
+              />
+            </section>
             <PlaybookEditor
               playbook={playbook}
               onChange={setPlaybook}
@@ -180,44 +163,15 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
                 value={`${stepCount} ${stepCount === 1 ? "step" : "steps"}`}
               />
             </div>
-            <div>
-              <dt className="text-label-sm text-muted-foreground">Assigned users</dt>
-              <dd className="mt-1.5">
-                <Dropdown
-                  placeholder="Search team members"
-                  searchPlaceholder="Search team members"
-                  options={SCRIPT_TEAM_MEMBERS}
-                  multiple
-                  searchable
-                  maxVisibleTags={1}
-                  value={playbook.assignedMembers}
-                  onValueChange={(value) =>
-                    updatePlaybook({
-                      assignedMembers: Array.isArray(value) ? value : [value],
-                    })
-                  }
-                />
-              </dd>
-            </div>
-            <div>
-              <dt className="text-label-sm text-muted-foreground">User groups</dt>
-              <dd className="mt-1.5">
-                <Dropdown
-                  placeholder="Search user groups"
-                  searchPlaceholder="Search user groups"
-                  options={SCRIPT_USER_GROUPS}
-                  multiple
-                  searchable
-                  maxVisibleTags={1}
-                  value={playbook.assignedGroups}
-                  onValueChange={(value) =>
-                    updatePlaybook({
-                      assignedGroups: Array.isArray(value) ? value : [value],
-                    })
-                  }
-                />
-              </dd>
-            </div>
+            <AssignTeamAndGroups
+              variant="summary"
+              members={SCRIPT_TEAM_MEMBERS}
+              groups={SCRIPT_USER_GROUPS}
+              selectedMembers={playbook.assignedMembers}
+              selectedGroups={playbook.assignedGroups}
+              onMembersChange={(assignedMembers) => updatePlaybook({ assignedMembers })}
+              onGroupsChange={(assignedGroups) => updatePlaybook({ assignedGroups })}
+            />
             {!hasAssignees ? (
               <p className="text-paragraph-sm text-muted-foreground">
                 Assign at least one team member or user group to publish.
