@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type SVGProps } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type SVGProps,
+} from "react";
 import { cn } from "@/lib/utils";
 import { Dropdown } from "@/components/Dropdown";
 import { IconSparkles } from "@/components/Icon";
@@ -35,10 +42,17 @@ const PRIORITY_RANK: Record<GuidancePriority, number> = {
   normal: 2,
 };
 
-const CARD_ENTER_MS = 250;
+const CARD_ENTER_MS = 200;
 const CARD_EXIT_MS = 160;
 const CARD_ATTENTION_MS = 700;
 const AGENT_SCROLL_IDLE_MS = 2000;
+
+/** Panel opens — a short prepare beat before the script is on screen. */
+const PREPARE_MS = 420;
+/** Script appears — each line fades upward behind the one before it. */
+const SCRIPT_STEP_MS = 180;
+const SCRIPT_STAGGER_MS = 35;
+const SCRIPT_STAGGER_CAP = 8;
 
 const CHECKLIST_MOTION = {
   detectMs: 160,
@@ -96,6 +110,10 @@ export interface AgentAssistCallSheetProps {
   scenario: CallScenario;
   onScenarioChange: (id: string) => void;
   guidanceItems?: GuidanceItem[];
+  /** The panel has taken its width — play the prepare beat, then the script. */
+  active?: boolean;
+  /** Hangup — the live stream lets go before the phone changes state. */
+  exiting?: boolean;
   /** Hangup — script and transcript yield to the generated recap. */
   ended?: boolean;
   className?: string;
@@ -106,6 +124,8 @@ export function AgentAssistCallSheet({
   scenario,
   onScenarioChange,
   guidanceItems = SEED_GUIDANCE,
+  active = true,
+  exiting = false,
   ended = false,
   className,
 }: AgentAssistCallSheetProps) {
@@ -115,6 +135,7 @@ export function AgentAssistCallSheet({
   );
   const snapshot = simulationAt(scenario, elapsedMs, guidanceItems);
   const reduced = prefersReducedMotion();
+  const [preparing, setPreparing] = useState(() => !reduced && !ended && active);
   const latestCard = snapshot.suggestions[snapshot.suggestions.length - 1] ?? null;
   const lastChecked =
     snapshot.scriptIndex > 0 ? scenario.steps[snapshot.scriptIndex - 1] : null;
@@ -132,6 +153,17 @@ export function AgentAssistCallSheet({
     setViewingResource(null);
   }, [scenario.id]);
 
+  // Panel loading — held only as long as the content needs to be ready.
+  useEffect(() => {
+    if (!active || ended || reduced) {
+      setPreparing(false);
+      return;
+    }
+    setPreparing(true);
+    const timer = window.setTimeout(() => setPreparing(false), PREPARE_MS);
+    return () => window.clearTimeout(timer);
+  }, [active, ended, reduced]);
+
   const options = useMemo(
     () => CALL_SCENARIOS.map((item) => ({ value: item.id, label: item.scriptName })),
     []
@@ -145,7 +177,12 @@ export function AgentAssistCallSheet({
         className
       )}
     >
-      <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-4">
+      <header
+        className={cn(
+          "flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-4",
+          !reduced && "assist-head-in"
+        )}
+      >
         <div className="flex min-w-0 items-center gap-1.5">
           <IconJcaiAgentAssist
             className="size-4 shrink-0 text-brand"
@@ -188,14 +225,21 @@ export function AgentAssistCallSheet({
 
       {ended ? (
         <PostCallAssist key={scenario.id} scenario={scenario} reduced={reduced} />
+      ) : preparing ? (
+        <PreparingPane />
       ) : view === "transcript" ? (
-        <TranscriptPane turns={snapshot.transcript} reduced={reduced} />
+        <TranscriptPane
+          turns={snapshot.transcript}
+          reduced={reduced}
+          exiting={exiting}
+        />
       ) : (
         <AssistStream
           key={scenario.id}
           scenario={scenario}
           snapshot={snapshot}
           reduced={reduced}
+          collapsing={exiting}
           onViewResource={setViewingResource}
         />
       )}
@@ -216,15 +260,43 @@ export function AgentAssistCallSheet({
   );
 }
 
+/**
+ * Panel loading — a short, quiet beat while the script is put together.
+ * No blocking loader: a shimmer where the content is about to land.
+ */
+function PreparingPane() {
+  return (
+    <div
+      className="assist-prep-in flex min-h-0 flex-1 flex-col gap-2.5 px-4 py-3"
+      aria-live="polite"
+    >
+      <div className="flex items-center gap-1.5">
+        <IconSparkles
+          size={16}
+          aria-hidden="true"
+          className="recap-sparkle-pulse size-4 shrink-0 text-ai"
+        />
+        <p className="text-label-sm text-muted-foreground">
+          Preparing Agent Assist...
+        </p>
+      </div>
+      <span className="assist-prep-bar w-[62%]" aria-hidden="true" />
+      <span className="assist-prep-bar w-[44%]" aria-hidden="true" />
+    </div>
+  );
+}
+
 function AssistStream({
   scenario,
   snapshot,
   reduced,
+  collapsing,
   onViewResource,
 }: {
   scenario: CallScenario;
   snapshot: SimulationSnapshot;
   reduced: boolean;
+  collapsing: boolean;
   onViewResource: (resource: GuidanceResource) => void;
 }) {
   const [dismissed, setDismissed] = useState<string[]>([]);
@@ -381,7 +453,10 @@ function AssistStream({
   return (
     <div
       ref={paneRef}
-      className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3"
+      className={cn(
+        "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3",
+        !reduced && collapsing && "assist-stream-out"
+      )}
       onPointerDown={() => {
         lastUserScrollAt.current = Date.now();
       }}
@@ -911,6 +986,23 @@ function FullScriptList({
     reduced,
   });
 
+  // Script appears — the list fades upward line by line, then holds still so
+  // later guidance never re-triggers the entrance.
+  const [entering, setEntering] = useState(!reduced);
+  const stepCount = scenario.steps.length;
+
+  useEffect(() => {
+    if (!entering) return;
+    const timer = window.setTimeout(
+      () =>
+        setEntering(false),
+      Math.min(stepCount, SCRIPT_STAGGER_CAP) * SCRIPT_STAGGER_MS +
+        SCRIPT_STEP_MS +
+        40
+    );
+    return () => window.clearTimeout(timer);
+  }, [entering, stepCount]);
+
   const cardsByStep = new Map<number, GuidanceSuggestion[]>();
   for (const { card, insertAfter } of placedCards) {
     const list = cardsByStep.get(insertAfter) ?? [];
@@ -925,7 +1017,17 @@ function FullScriptList({
         const phase = phases[index] ?? "idle";
 
         return (
-          <li key={`${scenario.id}-${step.title}`} className="flex flex-col">
+          <li
+            key={`${scenario.id}-${step.title}`}
+            className={cn("flex flex-col", entering && "script-step-in")}
+            style={
+              entering
+                ? ({
+                    "--step-index": Math.min(index, SCRIPT_STAGGER_CAP),
+                  } as CSSProperties)
+                : undefined
+            }
+          >
             <ScriptStepRow
               step={step}
               phase={phase}
@@ -1059,9 +1161,11 @@ function ScriptStepRow({
 function TranscriptPane({
   turns,
   reduced,
+  exiting = false,
 }: {
   turns: TranscriptTurn[];
   reduced: boolean;
+  exiting?: boolean;
 }) {
   const endRef = useRef<HTMLLIElement | null>(null);
 
@@ -1087,7 +1191,10 @@ function TranscriptPane({
     <ol
       className={cn(
         "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3",
-        !reduced && "animate-[assist-now-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]"
+        !reduced &&
+          !exiting &&
+          "animate-[assist-now-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]",
+        !reduced && exiting && "assist-stream-out"
       )}
       aria-label="Call transcript"
     >
