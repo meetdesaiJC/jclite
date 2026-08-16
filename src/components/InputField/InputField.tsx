@@ -171,7 +171,7 @@ function HelpRow({
       {iconNode && (
         <span
           className={cn(
-            "mt-px inline-flex size-4 shrink-0 items-center justify-center [&_svg]:size-full",
+            "inline-flex h-[1lh] w-4 shrink-0 items-center justify-center [&_svg]:block [&_svg]:size-4",
             toneClass
           )}
         >

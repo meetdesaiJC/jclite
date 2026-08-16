@@ -199,6 +199,12 @@ export interface DropdownProps
   emptyDescription?: string;
   /** Max tags shown before "+N more". Default `2`. */
   maxVisibleTags?: number;
+  /**
+   * When set and a value is selected, the trigger becomes an applied-filter
+   * chip: "{field} is {first value} +N" with a clear control. Empty state
+   * still uses `placeholder`.
+   */
+  appliedField?: string;
   /** Label for the multi-select "Select all" row. */
   selectAllLabel?: string;
   /** className for the trigger button. */
@@ -273,6 +279,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
       emptyTitle = "No Results Found",
       emptyDescription = "Try searching with another keyword",
       maxVisibleTags = 2,
+      appliedField,
       selectAllLabel = "Select all",
       ...props
     },
@@ -466,6 +473,9 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
       0,
       selectedLabels.length - maxVisibleTags
     );
+    const isApplied = Boolean(appliedField) && filled;
+    const appliedExtra = Math.max(0, selectedLabels.length - 1);
+    const appliedTitle = selectedLabels.join(", ");
 
     const displayValue = !multiple
       ? (optionsOnly.find((o) => o.value === value)?.label ?? "")
@@ -484,7 +494,11 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
     return (
       <div
         ref={rootRef}
-        className={cn("relative flex w-full flex-col gap-2", className)}
+        className={cn(
+          "relative flex w-full flex-col gap-2",
+          className,
+          isApplied && "w-max max-w-[360px]"
+        )}
         {...props}
       >
         {label != null && label !== "" && (
@@ -522,8 +536,14 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
             onKeyDown={onTriggerKeyDown}
             className={cn(
               triggerVariants({ variant, hasPrefix: Boolean(prefix) }),
+              isApplied && "min-w-0 gap-0 px-0",
               triggerClassName
             )}
+            aria-label={
+              isApplied
+                ? `${appliedField} is ${appliedTitle}`
+                : undefined
+            }
           >
             {prefix != null && (
               <span
@@ -552,12 +572,28 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
 
             <span
               className={cn(
-                "flex min-w-0 flex-1 items-center gap-2",
-                prefix && !leftIcon && "pl-3",
+                "flex min-w-0 flex-1 items-center",
+                isApplied ? "gap-2 py-2 pl-3 pr-2.5" : "gap-2",
+                prefix && !leftIcon && !isApplied && "pl-3",
                 multiple && filled && disabled && "opacity-50"
               )}
+              title={isApplied ? `${appliedField} is ${appliedTitle}` : undefined}
             >
-              {multiple && filled ? (
+              {isApplied ? (
+                <>
+                  <span className="shrink-0 whitespace-nowrap text-paragraph-md text-muted-foreground">
+                    {appliedField} is
+                  </span>
+                  <span className="min-w-0 truncate text-label-md text-foreground">
+                    {selectedLabels[0]}
+                  </span>
+                  {appliedExtra > 0 && (
+                    <span className="shrink-0 tabular-nums text-label-md text-foreground">
+                      +{appliedExtra}
+                    </span>
+                  )}
+                </>
+              ) : multiple && filled ? (
                 <>
                   {visibleTags.map((tag) => (
                     <Tag key={tag}>{tag}</Tag>
@@ -573,22 +609,42 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
               )}
             </span>
 
-            <span
-              className={cn(
-                "inline-flex size-5 shrink-0 items-center justify-center",
-                disabled ? "text-disabled-fg" : "text-foreground"
-              )}
-            >
-              {open ? (
-                <IconChevronUp size={20} className="size-5" aria-hidden="true" />
-              ) : (
-                <IconChevronDown
-                  size={20}
-                  className="size-5"
-                  aria-hidden="true"
-                />
-              )}
-            </span>
+            {isApplied ? (
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "inline-flex w-8 shrink-0 items-center justify-center self-stretch border-l border-line",
+                  disabled
+                    ? "text-disabled-fg"
+                    : "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                )}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (disabled) return;
+                  setValue(multiple ? [] : "");
+                }}
+              >
+                <IconClose size={16} className="size-4" />
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "inline-flex size-5 shrink-0 items-center justify-center",
+                  disabled ? "text-disabled-fg" : "text-foreground"
+                )}
+              >
+                {open ? (
+                  <IconChevronUp size={20} className="size-5" aria-hidden="true" />
+                ) : (
+                  <IconChevronDown
+                    size={20}
+                    className="size-5"
+                    aria-hidden="true"
+                  />
+                )}
+              </span>
+            )}
           </button>
 
           {open && (

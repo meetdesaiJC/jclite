@@ -90,11 +90,13 @@ function FieldLabel({
 function HelpText({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-1">
-      <IconInfoCircle
-        size={16}
-        className="mt-px size-4 shrink-0 text-muted-foreground"
-        aria-hidden="true"
-      />
+      <span className="inline-flex h-[1lh] w-4 shrink-0 items-center justify-center text-muted-foreground">
+        <IconInfoCircle
+          size={16}
+          className="block size-4"
+          aria-hidden="true"
+        />
+      </span>
       <p className="text-paragraph-sm text-muted-foreground">{children}</p>
     </div>
   );
