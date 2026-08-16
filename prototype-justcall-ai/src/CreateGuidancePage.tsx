@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Banner } from "@/components/Banner";
 import { Button } from "@/components/Button";
 import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
@@ -8,6 +9,7 @@ import {
   IconFile,
   IconInfoCircle,
 } from "@/components/Icon";
+import { cn } from "@/lib/utils";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
 import {
   TEAM_MEMBERS,
@@ -21,7 +23,7 @@ import {
   type GuidanceResource,
   type GuidanceTemplateId,
 } from "./guidanceData";
-import { BattlecardVisual } from "./GuidanceCard";
+import { BattlecardThumb, BattlecardVisual } from "./GuidanceCard";
 import { LiveGuidanceCard } from "./LiveGuidance";
 
 export interface CreateGuidancePageProps {
@@ -89,7 +91,7 @@ function FieldLabel({
 
 function HelpText({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-1">
+    <div className="flex items-start gap-1 text-paragraph-sm">
       <span className="inline-flex h-[1lh] w-4 shrink-0 items-center justify-center text-muted-foreground">
         <IconInfoCircle
           size={16}
@@ -97,7 +99,7 @@ function HelpText({ children }: { children: React.ReactNode }) {
           aria-hidden="true"
         />
       </span>
-      <p className="text-paragraph-sm text-muted-foreground">{children}</p>
+      <p className="m-0 text-muted-foreground">{children}</p>
     </div>
   );
 }
@@ -141,11 +143,17 @@ export function CreateGuidancePage({
   const [linkOpen, setLinkOpen] = React.useState(false);
   const [linkName, setLinkName] = React.useState("");
   const [linkUrl, setLinkUrl] = React.useState("");
+  const [imageOpen, setImageOpen] = React.useState(false);
+  const [imageName, setImageName] = React.useState("");
+  const [imageFile, setImageFile] = React.useState<File | null>(null);
+  const [imagePreview, setImagePreview] = React.useState("");
+  const [imageError, setImageError] = React.useState("");
+  const [isDraggingImage, setIsDraggingImage] = React.useState(false);
   const [testPreviewOpen, setTestPreviewOpen] = React.useState(false);
   const [publishOpen, setPublishOpen] = React.useState(false);
   const [viewingResource, setViewingResource] =
     React.useState<GuidanceResource | null>(null);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const imageInputRef = React.useRef<HTMLInputElement>(null);
 
   const patch = (partial: Partial<GuidanceItem>) => {
     setDraft((current) => ({ ...current, ...partial }));
@@ -187,6 +195,49 @@ export function CreateGuidancePage({
     setLinkName("");
     setLinkUrl("");
     setLinkOpen(false);
+  };
+
+  const resetImageModal = (revokePreview: boolean) => {
+    if (revokePreview && imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageName("");
+    setImageFile(null);
+    setImagePreview("");
+    setImageError("");
+    setIsDraggingImage(false);
+  };
+
+  const closeImageModal = () => {
+    setImageOpen(false);
+    resetImageModal(true);
+  };
+
+  const acceptImageFile = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setImageError("Use a PNG, JPG, GIF, or WebP image.");
+      return;
+    }
+    setImageError("");
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setImageName((current) =>
+      current.trim()
+        ? current
+        : file.name.replace(/\.[^.]+$/, "") || "Uploaded image"
+    );
+  };
+
+  const addImage = () => {
+    if (!imageName.trim() || !imageFile || !imagePreview) return;
+    const resource: GuidanceResource = {
+      id: `r-${Date.now()}`,
+      type: "image",
+      name: imageName.trim(),
+      thumbnail: imagePreview,
+    };
+    patch({ resources: [...draft.resources, resource] });
+    setImageOpen(false);
+    resetImageModal(false);
   };
 
   const runTest = () => {
@@ -352,28 +403,10 @@ export function CreateGuidancePage({
                 variant="grey-outline"
                 size="sm"
                 leftIcon={<PlusIcon size={16} />}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => setImageOpen(true)}
               >
                 Upload image
               </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const resource: GuidanceResource = {
-                    id: `r-${Date.now()}`,
-                    type: "image",
-                    name: file.name.replace(/\.[^.]+$/, "") || "Uploaded image",
-                    thumbnail: URL.createObjectURL(file),
-                  };
-                  patch({ resources: [...draft.resources, resource] });
-                  e.target.value = "";
-                }}
-              />
             </div>
 
             {draft.resources.length > 0 && (
@@ -385,14 +418,19 @@ export function CreateGuidancePage({
                   >
                     {resource.type === "image" ? (
                       <span className="flex size-10 shrink-0 overflow-hidden rounded-[6px] border border-line bg-secondary-bg">
-                        {resource.thumbnail ? (
+                        {resource.battlecard ? (
+                          <BattlecardThumb
+                            data={resource.battlecard}
+                            className="size-full"
+                          />
+                        ) : resource.thumbnail ? (
                           <img
                             src={resource.thumbnail}
                             alt=""
                             className="size-full object-cover"
                           />
                         ) : (
-                          <BattlecardVisual className="size-full" />
+                          <BattlecardThumb className="size-full" />
                         )}
                       </span>
                     ) : (
@@ -467,6 +505,123 @@ export function CreateGuidancePage({
             onChange={(e) => setLinkUrl(e.target.value)}
             clearable={false}
           />
+        </div>
+      </Modal>
+
+      <Modal
+        open={imageOpen}
+        onClose={closeImageModal}
+        size="md"
+        title="Upload image"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="grey-outline" size="sm" onClick={closeImageModal}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!imageName.trim() || !imageFile}
+              onClick={addImage}
+            >
+              Upload image
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <InputField
+            label="Name"
+            placeholder="e.g. Aircall comparison battlecard"
+            value={imageName}
+            onChange={(e) => setImageName(e.target.value)}
+            helpText="Shown as the title when this image appears during a call."
+            helpIcon
+            clearable={false}
+          />
+          <div className="flex flex-col gap-2">
+            <FieldLabel htmlFor="guidance-image-upload">Image</FieldLabel>
+            <input
+              id="guidance-image-upload"
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) acceptImageFile(file);
+                event.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIsDraggingImage(true);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsDraggingImage(true);
+              }}
+              onDragLeave={(event) => {
+                event.preventDefault();
+                if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                  setIsDraggingImage(false);
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setIsDraggingImage(false);
+                const file = event.dataTransfer.files[0];
+                if (file) acceptImageFile(file);
+              }}
+              className={cn(
+                "flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-10 text-center transition-colors",
+                isDraggingImage
+                  ? "border-brand bg-brand-subtle/60"
+                  : "border-brand/40 bg-brand-subtle/20 hover:border-brand hover:bg-brand-subtle/40"
+              )}
+            >
+              {imagePreview ? (
+                <>
+                  <span className="flex h-20 w-full max-w-[220px] overflow-hidden rounded-[8px] border border-line bg-white">
+                    <img
+                      src={imagePreview}
+                      alt=""
+                      className="size-full object-contain"
+                    />
+                  </span>
+                  <span>
+                    <span className="block text-label-md-semi text-foreground">
+                      {imageFile?.name ?? "Image selected"}
+                    </span>
+                    <span className="mt-1 block text-paragraph-sm text-muted-foreground">
+                      Drop a different file or click to replace.
+                    </span>
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="flex size-10 items-center justify-center rounded-[8px] bg-white text-brand shadow-[0_0_0_1px_rgba(0,76,230,0.12)]">
+                    <IconFile size={20} />
+                  </span>
+                  <span>
+                    <span className="block text-label-md-semi text-foreground">
+                      Upload PNG, JPG, or WebP
+                    </span>
+                    <span className="mt-1 block text-paragraph-sm text-muted-foreground">
+                      Drop a file or click to browse.
+                    </span>
+                  </span>
+                </>
+              )}
+            </button>
+            {imageError ? (
+              <Banner variant="error" width="page">
+                {imageError}
+              </Banner>
+            ) : null}
+          </div>
         </div>
       </Modal>
 
@@ -547,17 +702,21 @@ export function CreateGuidancePage({
         title={viewingResource?.name}
       >
         {viewingResource?.type === "image" ? (
-          <div className="overflow-hidden rounded-[6px] border border-line bg-secondary-bg">
-            {viewingResource.thumbnail ? (
-              <img
-                src={viewingResource.thumbnail}
-                alt={viewingResource.name}
-                className="mx-auto max-h-[70vh] w-full object-contain"
-              />
-            ) : (
-              <BattlecardVisual className="w-full" />
-            )}
-          </div>
+          viewingResource.battlecard ? (
+            <BattlecardVisual data={viewingResource.battlecard} className="w-full" />
+          ) : (
+            <div className="overflow-hidden rounded-md border border-line bg-secondary-bg">
+              {viewingResource.thumbnail ? (
+                <img
+                  src={viewingResource.thumbnail}
+                  alt={viewingResource.name}
+                  className="mx-auto max-h-[70vh] w-full object-contain"
+                />
+              ) : (
+                <BattlecardVisual className="w-full" />
+              )}
+            </div>
+          )
         ) : null}
       </Modal>
     </main>

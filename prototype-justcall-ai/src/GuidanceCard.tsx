@@ -1,14 +1,16 @@
 import * as React from "react";
-import { IconClose } from "@/components/Icon";
+import {
+  IconCircleCheckFilled,
+  IconClose,
+} from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import {
-  GUIDANCE_KIND_META,
-  inferGuidanceKind,
+  AIRCALL_BATTLECARD,
+  type BattlecardData,
   type GuidanceItem,
   type GuidanceKind,
   type GuidanceResource,
 } from "./guidanceData";
-import aircallBattlecard from "./assets/aircall-battlecard.png";
 
 function ThumbUpIcon({ size = 16, filled = false }: { size?: number; filled?: boolean }) {
   return (
@@ -52,17 +54,297 @@ function ThumbDownIcon({ size = 16, filled = false }: { size?: number; filled?: 
   );
 }
 
-export function BattlecardVisual({ className }: { className?: string }) {
+function battlecardValueClass(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "yes") return "text-success";
+  if (normalized === "no") return "text-error";
+  return "text-muted-foreground";
+}
+
+export function BattlecardVisual({
+  className,
+  data = AIRCALL_BATTLECARD,
+}: {
+  className?: string;
+  data?: BattlecardData;
+}) {
   return (
-    <img
-      src={aircallBattlecard}
-      alt="JustCall compared with Aircall"
-      className={cn("object-contain object-top", className)}
-    />
+    <div
+      className={cn(
+        "w-full overflow-hidden rounded-md border border-line bg-white",
+        className
+      )}
+    >
+      <div className="grid grid-cols-[minmax(0,1fr)_88px_88px] items-stretch">
+        <div className="min-w-0 px-2 py-1.5">
+          <p className="text-[10px] leading-normal font-semibold text-foreground">
+            Features
+          </p>
+        </div>
+        <div className="flex items-center justify-center bg-brand px-2 py-1.5">
+          <p className="text-[10px] leading-normal font-semibold text-white">
+            {data.usLabel}
+          </p>
+        </div>
+        <div className="flex items-center justify-center px-2 py-1.5">
+          <p className="text-[10px] leading-normal font-semibold text-foreground">
+            {data.competitorLabel}
+          </p>
+        </div>
+      </div>
+      {data.rows.map((row) => (
+        <div
+          key={row.feature}
+          className="grid grid-cols-[minmax(0,1fr)_88px_88px] items-stretch border-t border-line"
+        >
+          <div className="min-w-0 px-2 py-1.5">
+            <p className="truncate text-[10px] leading-normal text-foreground">
+              {row.feature}
+            </p>
+          </div>
+          <div className="flex items-start justify-center px-2 py-1.5">
+            <p
+              className={cn(
+                "text-[10px] leading-normal font-medium",
+                battlecardValueClass(row.us)
+              )}
+            >
+              {row.us}
+            </p>
+          </div>
+          <div className="flex items-start justify-center px-2 py-1.5">
+            <p
+              className={cn(
+                "text-[10px] leading-normal font-medium",
+                battlecardValueClass(row.competitor)
+              )}
+            >
+              {row.competitor}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Miniature of the comparison header — for 40px resource thumbs. */
+export function BattlecardThumb({
+  className,
+  data = AIRCALL_BATTLECARD,
+}: {
+  className?: string;
+  data?: BattlecardData;
+}) {
+  return (
+    <div
+      className={cn("flex size-full overflow-hidden bg-white", className)}
+      aria-hidden="true"
+      title={`${data.usLabel} vs ${data.competitorLabel}`}
+    >
+      <span className="min-w-0 flex-1 bg-secondary-bg" />
+      <span className="w-[34%] shrink-0 bg-brand" />
+      <span className="w-[34%] shrink-0 bg-white" />
+    </div>
+  );
+}
+
+export function GuidanceSectionLabel({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <p
+      className={cn(
+        "text-label-sm font-medium tracking-[0.04em] text-disabled-fg uppercase",
+        className
+      )}
+    >
+      {children}
+    </p>
+  );
+}
+
+/** Filled AI sparkles — Design System 2.0 16px path with ai/primary gradient. */
+export function GuidanceSparklesIcon({
+  size = 16,
+  className,
+}: {
+  size?: number;
+  className?: string;
+}) {
+  const id = React.useId();
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M10.6667 12.0003C11.0203 12.0003 11.3594 12.1408 11.6095 12.3909C11.8595 12.6409 12 12.98 12 13.3337C12 12.98 12.1405 12.6409 12.3905 12.3909C12.6406 12.1408 12.9797 12.0003 13.3333 12.0003C12.9797 12.0003 12.6406 11.8598 12.3905 11.6098C12.1405 11.3598 12 11.0206 12 10.667C12 11.0206 11.8595 11.3598 11.6095 11.6098C11.3594 11.8598 11.0203 12.0003 10.6667 12.0003ZM10.6667 4.00033C11.0203 4.00033 11.3594 4.1408 11.6095 4.39085C11.8595 4.6409 12 4.98004 12 5.33366C12 4.98004 12.1405 4.6409 12.3905 4.39085C12.6406 4.1408 12.9797 4.00033 13.3333 4.00033C12.9797 4.00033 12.6406 3.85985 12.3905 3.6098C12.1405 3.35975 12 3.02061 12 2.66699C12 3.02061 11.8595 3.35975 11.6095 3.6098C11.3594 3.85985 11.0203 4.00033 10.6667 4.00033ZM6 12.0003C6 10.9395 6.42143 9.92204 7.17157 9.1719C7.92172 8.42175 8.93913 8.00033 10 8.00033C8.93913 8.00033 7.92172 7.5789 7.17157 6.82875C6.42143 6.07861 6 5.06119 6 4.00033C6 5.06119 5.57857 6.07861 4.82843 6.82875C4.07828 7.5789 3.06087 8.00033 2 8.00033C3.06087 8.00033 4.07828 8.42175 4.82843 9.1719C5.57857 9.92204 6 10.9395 6 12.0003Z"
+        fill={`url(#${id})`}
+        stroke={`url(#${id})`}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <defs>
+        <linearGradient
+          id={id}
+          x1="-0.979"
+          y1="-5.715"
+          x2="20.879"
+          y2="-3.737"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop stopColor="#3318FF" />
+          <stop offset="1" stopColor="#B46DFF" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
+export function GuidanceAiHeader({
+  title,
+  onDismiss,
+  trailing,
+  className,
+}: {
+  title: string;
+  onDismiss?: () => void;
+  trailing?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "guidance-ai-header flex items-center gap-1 overflow-hidden px-4 py-1.5",
+        className
+      )}
+    >
+      <GuidanceSparklesIcon className="size-4 shrink-0" />
+      <p className="guidance-ai-title min-w-0 flex-1 text-label-sm font-medium">
+        {title}
+      </p>
+      {trailing}
+      {onDismiss ? (
+        <button
+          type="button"
+          aria-label="Dismiss guidance"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDismiss();
+          }}
+          className="-mr-1 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-white/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+        >
+          <IconClose size={16} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function quotedResponse(text: string) {
+  const trimmed = text.trim();
+  if (/^[“"].*[”"]$/.test(trimmed)) return trimmed;
+  return `“${trimmed}”`;
+}
+
+export function GuidanceSuggestedResponse({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex w-full flex-col gap-2", className)}>
+      <GuidanceSectionLabel>Suggested response</GuidanceSectionLabel>
+      <p className="text-pretty text-label-md-semi text-foreground">
+        {quotedResponse(text)}
+      </p>
+    </div>
+  );
+}
+
+export function GuidanceTalkingPoints({
+  points,
+  className,
+}: {
+  points: string[];
+  className?: string;
+}) {
+  if (points.length === 0) return null;
+
+  return (
+    <div className={cn("flex w-full flex-col gap-2", className)}>
+      <GuidanceSectionLabel>Talking points</GuidanceSectionLabel>
+      <ul className="flex flex-col gap-2">
+        {points.map((point) => (
+          <li
+            key={point}
+            className="flex items-center gap-1.5 overflow-hidden rounded-md p-1"
+          >
+            <IconCircleCheckFilled
+              size={16}
+              className="size-4 shrink-0 text-success"
+            />
+            <span className="min-w-0 flex-1 text-pretty text-label-md font-medium text-foreground">
+              {point}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
 export type GuidanceFeedback = "helpful" | "not-helpful" | null;
+
+const THANKS_MS = 2000;
+
+function ThumbVoteButton({
+  label,
+  selected,
+  pressKey,
+  onClick,
+  children,
+}: {
+  label: string;
+  selected: boolean;
+  pressKey: number;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={selected}
+      onClick={onClick}
+      className={cn(
+        "inline-flex size-7 cursor-pointer items-center justify-center rounded-full",
+        "text-muted-foreground transition-colors duration-150",
+        "hover:bg-surface-hover hover:text-foreground",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+        selected && "bg-indigo-50 text-foreground hover:bg-indigo-50"
+      )}
+    >
+      <span
+        key={pressKey}
+        className={cn("inline-flex", pressKey > 0 && "thumb-press")}
+      >
+        {children}
+      </span>
+    </button>
+  );
+}
 
 export function GuidanceFeedbackBar({
   feedback,
@@ -75,41 +357,64 @@ export function GuidanceFeedbackBar({
   onNotHelpful?: () => void;
   className?: string;
 }) {
+  const [upPress, setUpPress] = React.useState(0);
+  const [downPress, setDownPress] = React.useState(0);
+  const [thanksId, setThanksId] = React.useState(0);
+
+  React.useEffect(() => {
+    if (feedback === "helpful" || feedback === "not-helpful") {
+      setThanksId((current) => current + 1);
+      return;
+    }
+    setThanksId(0);
+  }, [feedback]);
+
+  React.useEffect(() => {
+    if (thanksId === 0) return;
+    const timer = window.setTimeout(() => setThanksId(0), THANKS_MS);
+    return () => window.clearTimeout(timer);
+  }, [thanksId]);
+
   return (
     <div
       className={cn(
-        "flex items-center gap-1 border-t border-line/80 px-2 py-1.5 pl-[12px]",
+        "flex items-center gap-1 border-t border-line bg-white px-2 py-1.5 pl-3",
         className
       )}
     >
-      <button
-        type="button"
-        aria-pressed={feedback === "helpful"}
-        onClick={onHelpful}
-        className={cn(
-          "inline-flex h-7 cursor-pointer items-center gap-1 rounded-[4px] px-2 text-paragraph-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
-          feedback === "helpful"
-            ? "bg-secondary-bg text-foreground"
-            : "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-        )}
+      <ThumbVoteButton
+        label="Helpful"
+        selected={feedback === "helpful"}
+        pressKey={upPress}
+        onClick={() => {
+          setUpPress((current) => current + 1);
+          onHelpful?.();
+        }}
       >
         <ThumbUpIcon size={14} filled={feedback === "helpful"} />
-        Helpful
-      </button>
-      <button
-        type="button"
-        aria-pressed={feedback === "not-helpful"}
-        onClick={onNotHelpful}
-        className={cn(
-          "inline-flex h-7 cursor-pointer items-center gap-1 rounded-[4px] px-2 text-paragraph-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
-          feedback === "not-helpful"
-            ? "bg-secondary-bg text-foreground"
-            : "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-        )}
+      </ThumbVoteButton>
+
+      <ThumbVoteButton
+        label="Not helpful"
+        selected={feedback === "not-helpful"}
+        pressKey={downPress}
+        onClick={() => {
+          setDownPress((current) => current + 1);
+          onNotHelpful?.();
+        }}
       >
         <ThumbDownIcon size={14} filled={feedback === "not-helpful"} />
-        Not helpful
-      </button>
+      </ThumbVoteButton>
+
+      {thanksId > 0 ? (
+        <span
+          key={thanksId}
+          className="thumb-thanks whitespace-nowrap text-label-sm text-muted-foreground"
+          aria-live="polite"
+        >
+          Thanks for the feedback
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -128,12 +433,12 @@ export interface GuidanceCardProps {
 
 /** Shared AI tone — every guidance card uses the same wash and accent. */
 export const GUIDANCE_AI_THEME = {
-  card: "relative overflow-hidden rounded-lg border border-ai-border bg-ai-surface",
+  card: "relative overflow-hidden rounded-lg border border-brand bg-indigo-50",
   rail: "absolute inset-y-0 left-0 w-[3px] bg-ai",
   badge: "bg-white/80 text-ai",
   tick: "bg-ai",
   say: "border-ai-border bg-white",
-  feedback: "border-ai-border/70 bg-transparent",
+  feedback: "border-line bg-white",
 } as const;
 
 export function GuidanceKindMark({ kind }: { kind: GuidanceKind }) {
@@ -262,7 +567,7 @@ export function GuidanceResourceLink({
   );
 }
 
-function ResourceImage({
+export function GuidanceResourcePreview({
   resource,
   compact,
   onView,
@@ -271,46 +576,58 @@ function ResourceImage({
   compact?: boolean;
   onView?: (resource: GuidanceResource) => void;
 }) {
+  if (resource.battlecard) {
+    return (
+      <div className="flex w-full flex-col gap-2">
+        <GuidanceSectionLabel>Battle card</GuidanceSectionLabel>
+        <BattlecardVisual data={resource.battlecard} />
+      </div>
+    );
+  }
+
   return (
-    <button
-      type="button"
-      onClick={() => onView?.(resource)}
-      aria-label={`Expand ${resource.name}`}
-      className={cn(
-        "group relative block w-full overflow-hidden rounded-[6px] border border-line bg-white text-left outline-none",
-        "hover:border-control-border focus-visible:ring-2 focus-visible:ring-brand/24",
-        "active:scale-[0.99] motion-safe:transition-[border-color,transform] motion-safe:duration-150 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]"
-      )}
-    >
-      {resource.thumbnail ? (
-        <img
-          src={resource.thumbnail}
-          alt={resource.name}
-          className={cn(
-            "w-full object-contain",
-            compact ? "max-h-28" : "max-h-44"
-          )}
-        />
-      ) : (
-        <BattlecardVisual
-          className={cn("w-full", compact ? "max-h-28" : "max-h-44")}
-        />
-      )}
-      <span
-        className="pointer-events-none absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]"
-        aria-hidden="true"
-      />
-      <span
+    <div className="flex flex-col gap-2">
+      <p className="truncate text-label-md-semi text-foreground">{resource.name}</p>
+      <button
+        type="button"
+        onClick={() => onView?.(resource)}
+        aria-label={`Expand ${resource.name}`}
         className={cn(
-          "pointer-events-none absolute right-1.5 bottom-1.5 inline-flex size-7 items-center justify-center rounded-[4px] bg-white/92 text-foreground shadow-[0_0_0_1px_rgba(0,0,0,0.06)]",
-          "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
-          "motion-safe:transition-opacity motion-safe:duration-150"
+          "group relative block w-full overflow-hidden rounded-md border border-line bg-white text-left outline-none",
+          "hover:border-control-border focus-visible:ring-2 focus-visible:ring-brand/24",
+          "active:scale-[0.99] motion-safe:transition-[border-color,transform] motion-safe:duration-150 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]"
         )}
-        aria-hidden="true"
       >
-        <ExpandHint />
-      </span>
-    </button>
+        {resource.thumbnail ? (
+          <img
+            src={resource.thumbnail}
+            alt={resource.name}
+            className={cn(
+              "w-full object-contain",
+              compact ? "max-h-28" : "max-h-44"
+            )}
+          />
+        ) : (
+          <BattlecardVisual
+            className={cn("w-full", compact ? "max-h-28" : "max-h-44")}
+          />
+        )}
+        <span
+          className="pointer-events-none absolute inset-0 rounded-md shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]"
+          aria-hidden="true"
+        />
+        <span
+          className={cn(
+            "pointer-events-none absolute right-1.5 bottom-1.5 inline-flex size-7 items-center justify-center rounded-[4px] bg-white/92 text-foreground shadow-[0_0_0_1px_rgba(0,0,0,0.06)]",
+            "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+            "motion-safe:transition-opacity motion-safe:duration-150"
+          )}
+          aria-hidden="true"
+        >
+          <ExpandHint />
+        </span>
+      </button>
+    </div>
   );
 }
 
@@ -339,96 +656,38 @@ export function GuidanceCard({
   showActions = true,
   className,
 }: GuidanceCardProps) {
-  const kind = inferGuidanceKind(item);
-  const theme = GUIDANCE_AI_THEME;
-  const meta = GUIDANCE_KIND_META[kind];
   const talkingPoints = item.talkingPoints.filter((point) => point.trim()).slice(0, 4);
   const response = item.suggestedResponse.trim();
   const images = item.resources.filter((resource) => resource.type === "image");
   const links = item.resources.filter((resource) => resource.type === "link");
 
   return (
-    <article className={cn(theme.card, className)}>
-      <span className={theme.rail} aria-hidden="true" />
+    <article className={cn(GUIDANCE_AI_THEME.card, className)}>
+      <GuidanceAiHeader
+        title={item.name}
+        onDismiss={showActions ? onDismiss : undefined}
+      />
 
-      <div className="flex items-start justify-between gap-2 py-3 pr-2 pl-[15px]">
-        <div className="min-w-0">
-          <span
-            className={cn(
-              "inline-flex h-5 items-center gap-1 rounded-full px-1.5 text-[11px] leading-4 font-medium",
-              theme.badge
-            )}
-          >
-            <GuidanceKindMark kind={kind} />
-            {meta.label}
-          </span>
-          <h3 className="mt-1.5 min-w-0 text-pretty text-label-md-semi text-foreground">
-            {item.name}
-          </h3>
-        </div>
-        {showActions && onDismiss ? (
-          <button
-            type="button"
-            aria-label="Dismiss guidance"
-            onClick={onDismiss}
-            className="-mt-0.5 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-white/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-          >
-            <IconClose size={16} />
-          </button>
-        ) : null}
-      </div>
+      <div className="flex flex-col gap-4 bg-white px-4 pt-2 pb-4">
+        {response ? <GuidanceSuggestedResponse text={response} /> : null}
 
-      <div className="flex flex-col gap-2.5 px-3 pb-3 pl-[15px]">
-        {response ? (
-          <p
-            className={cn(
-              "rounded-[6px] border px-2.5 py-2 text-pretty text-paragraph-sm font-medium text-foreground",
-              theme.say
-            )}
-          >
-            {response}
-          </p>
-        ) : null}
-
-        {talkingPoints.length > 0 ? (
-          <div className="flex flex-col gap-1">
-            <p className="text-[11px] leading-4 font-medium tracking-[0.04em] text-muted-foreground uppercase">
-              Talking points
-            </p>
-            <ul className="flex flex-col gap-1">
-              {talkingPoints.map((point) => (
-                <li
-                  key={point}
-                  className="flex items-start gap-1.5 text-paragraph-sm text-foreground"
-                >
-                  <span className={cn("mt-[6px] size-1.5 shrink-0 rounded-full", theme.tick)} />
-                  <span className="min-w-0">{point}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+        <GuidanceTalkingPoints points={talkingPoints} />
 
         {images.length > 0 ? (
-          <div className="flex flex-col gap-1.5">
-            <p className="text-[11px] leading-4 font-medium tracking-[0.04em] text-muted-foreground uppercase">
-              {images.length === 1 ? "Attached image" : "Attached images"}
-            </p>
-            <div
-              className={cn(
-                "grid gap-2",
-                images.length > 1 ? "grid-cols-2" : "grid-cols-1"
-              )}
-            >
-              {images.map((resource) => (
-                <ResourceImage
-                  key={resource.id}
-                  resource={resource}
-                  compact={images.length > 1}
-                  onView={onViewResource}
-                />
-              ))}
-            </div>
+          <div
+            className={cn(
+              "grid gap-2",
+              images.length > 1 ? "grid-cols-2" : "grid-cols-1"
+            )}
+          >
+            {images.map((resource) => (
+              <GuidanceResourcePreview
+                key={resource.id}
+                resource={resource}
+                compact={images.length > 1}
+                onView={onViewResource}
+              />
+            ))}
           </div>
         ) : null}
 
@@ -442,7 +701,7 @@ export function GuidanceCard({
           feedback={feedback}
           onHelpful={onHelpful}
           onNotHelpful={onNotHelpful}
-          className={theme.feedback}
+          className={GUIDANCE_AI_THEME.feedback}
         />
       ) : null}
     </article>
