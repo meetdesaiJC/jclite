@@ -1,5 +1,6 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
+import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
 import { Dropdown, type DropdownListItem } from "@/components/Dropdown";
@@ -790,14 +791,20 @@ export function AgentAssistPage() {
                 }
                 aria-expanded={filtersOpen}
                 aria-controls="agent-assist-filters"
+                aria-label={
+                  hasFilters
+                    ? `${filtersOpen ? "Hide filters" : "Filters"}, ${activeFilterCount} active`
+                    : undefined
+                }
                 className={cn((filtersOpen || hasFilters) && "bg-surface-hover")}
                 onClick={() => setFiltersOpen((open) => !open)}
               >
-                {filtersOpen
-                  ? "Hide filters"
-                  : hasFilters
-                    ? `Filters · ${activeFilterCount}`
-                    : "Filters"}
+                {filtersOpen ? "Hide filters" : "Filters"}
+                {hasFilters ? (
+                  <Badge variant="blue-grey" className="tabular-nums">
+                    {activeFilterCount}
+                  </Badge>
+                ) : null}
               </Button>
             </div>
 
@@ -821,41 +828,42 @@ export function AgentAssistPage() {
             inert={!filtersOpen ? true : undefined}
           >
             <div className="aa-filter-row-clip">
-              <div className="aa-filter-row-inner flex items-center gap-3 border-t border-line px-6 py-3">
+              <div className="aa-filter-row-inner flex flex-wrap items-center gap-3 border-t border-line px-6 py-3">
                 <Dropdown
                   placeholder="Team members"
                   searchPlaceholder="Search team members"
+                  appliedField="Members"
                   options={isScripts ? SCRIPT_TEAM_MEMBERS : TEAM_MEMBERS}
                   multiple
                   searchable
-                  maxVisibleTags={1}
                   value={memberFilter}
                   onValueChange={(value) => {
                     setMemberFilter(Array.isArray(value) ? value : [value]);
                     setPage(1);
                   }}
-                  className="w-[220px]"
+                  className="w-[220px] shrink-0"
                   triggerClassName="h-9"
                 />
                 <Dropdown
                   placeholder="User groups"
                   searchPlaceholder="Search user groups"
+                  appliedField="User groups"
                   options={isScripts ? SCRIPT_USER_GROUPS : USER_GROUPS}
                   multiple
                   searchable
-                  maxVisibleTags={1}
                   value={groupFilter}
                   onValueChange={(value) => {
                     setGroupFilter(Array.isArray(value) ? value : [value]);
                     setPage(1);
                   }}
-                  className="w-[220px]"
+                  className="w-[220px] shrink-0"
                   triggerClassName="h-9"
                 />
                 {hasFilters ? (
                   <Button
                     variant="link"
                     size="sm"
+                    className="text-muted-foreground hover:text-foreground"
                     onClick={() => {
                       setMemberFilter([]);
                       setGroupFilter([]);
@@ -1205,9 +1213,17 @@ function GuidanceTable({
               </button>
             </TableCell>
             <TableCell>
-              <span className="block truncate text-paragraph-md text-muted-foreground" title={row.trigger}>
-                {row.trigger}
-              </span>
+              <TooltipTrigger
+                className="w-full min-w-0 max-w-full"
+                placement="top-left"
+                content={
+                  <Tooltip theme="dark" arrow="bottom-left" title={row.trigger} />
+                }
+              >
+                <span className="block min-w-0 w-full truncate text-paragraph-md text-muted-foreground">
+                  {row.trigger}
+                </span>
+              </TooltipTrigger>
             </TableCell>
             <TableCell>
               <AssignmentAvatarStack people={guidanceAssignees(row)} />
