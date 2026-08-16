@@ -386,6 +386,20 @@
   }
 }
 
+@keyframes script-listen-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.script-listen-mic {
+  animation: script-listen-pulse 1.4s ease-in-out infinite;
+}
+
 .script-check {
   overflow: visible;
 }
@@ -711,6 +725,41 @@
   animation: recap-item-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
+/* Scripts / Guidance list — filter row expands under the search bar.
+   Open: height + fade + 4px settle together. Close: fade first, then collapse
+   so the table slides without the controls hanging around. */
+.aa-filter-row {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms cubic-bezier(0.23, 1, 0.32, 1) 40ms;
+}
+
+.aa-filter-row.is-open {
+  grid-template-rows: 1fr;
+  transition-delay: 0ms;
+}
+
+.aa-filter-row-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.aa-filter-row-inner {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.aa-filter-row.is-open .aa-filter-row-inner {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .assist-faq-card {
     animation: none !important;
@@ -738,6 +787,7 @@
   .assist-prep-in,
   .assist-prep-bar::after,
   .script-step-in,
+  .script-listen-mic,
   .assist-stream-out {
     animation: none !important;
   }
@@ -746,8 +796,14 @@
     transition: none !important;
   }
 
-  .assist-card-body {
+  .assist-card-body,
+  .aa-filter-row,
+  .aa-filter-row-inner {
     transition: none !important;
+  }
+
+  .aa-filter-row-inner {
+    transform: none;
   }
 
   .script-check-dash,

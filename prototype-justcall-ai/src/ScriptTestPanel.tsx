@@ -1,11 +1,14 @@
 import * as React from "react";
 import { Modal } from "@/components/Modal";
-import { cn } from "@/lib/utils";
-import { flattenSteps, spokenLineFor, type PlaybookStep, type ScriptPlaybook } from "./scriptPlaybook";
+import { flattenSteps, spokenLineFor, type ScriptPlaybook } from "./scriptPlaybook";
+import {
+  ScriptStepRow,
+  prefersReducedMotion,
+  useScriptChecklistMotion,
+} from "./ScriptChecklist";
 import { SpeakProgressHint } from "./SpeakProgressHint";
-
-const STEP_HOLD_MS = 2400;
-const COMPLETE_HOLD_MS = 1600;
+import { matchingOpenStepIndexes } from "./scriptSpeechMatch";
+import { useSpeechListen } from "./useSpeechListen";
 
 export interface ScriptPreviewModalProps {
   open: boolean;
@@ -13,49 +16,59 @@ export interface ScriptPreviewModalProps {
   onClose: () => void;
 }
 
-function prefersReducedMotion(): boolean {
-  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
 export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewModalProps) {
   const steps = React.useMemo(() => flattenSteps(playbook), [playbook]);
-  const [activeIndex, setActiveIndex] = React.useState(0);
-  const [complete, setComplete] = React.useState(false);
+  const reduced = prefersReducedMotion();
+  const [completed, setCompleted] = React.useState<Set<number>>(() => new Set());
+  const [lastChecked, setLastChecked] = React.useState<number | null>(null);
   const activeRef = React.useRef<HTMLLIElement | null>(null);
+  const consumedRef = React.useRef("");
+
+  const complete = steps.length > 0 && completed.size >= steps.length;
+  const listening = open && steps.length > 0 && !complete;
+  const { heard, status } = useSpeechListen(listening, `${playbook.id}:${completed.size}`);
+
+  const resetPreview = React.useCallback(() => {
+    consumedRef.current = "";
+    setLastChecked(null);
+    setCompleted(new Set());
+  }, []);
 
   React.useEffect(() => {
     if (!open) return;
-    setActiveIndex(0);
-    setComplete(false);
-  }, [open, playbook.id]);
+    resetPreview();
+  }, [open, playbook.id, resetPreview]);
 
   React.useEffect(() => {
-    if (!open || steps.length === 0) return;
+    if (!listening) return;
+    if (!heard || heard === consumedRef.current) return;
+    const hits = matchingOpenStepIndexes(heard, steps, completed);
+    if (hits.length === 0) return;
+    consumedRef.current = heard;
+    setLastChecked(hits[0] ?? null);
+    setCompleted((current) => {
+      const next = new Set(current);
+      hits.forEach((index) => next.add(index));
+      return next;
+    });
+  }, [heard, listening, completed, steps]);
 
-    const delay = complete ? COMPLETE_HOLD_MS : STEP_HOLD_MS;
-    const timer = window.setTimeout(() => {
-      if (complete) {
-        setComplete(false);
-        setActiveIndex(0);
-        return;
-      }
-      if (activeIndex >= steps.length - 1) {
-        setComplete(true);
-        return;
-      }
-      setActiveIndex((index) => index + 1);
-    }, delay);
-
-    return () => window.clearTimeout(timer);
-  }, [activeIndex, complete, open, steps.length]);
+  const { phases, glowing, emphasizeIndex } = useScriptChecklistMotion({
+    completed,
+    stepCount: steps.length,
+    reduced,
+  });
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open || lastChecked == null) return;
     activeRef.current?.scrollIntoView({
-      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      behavior: reduced ? "auto" : "smooth",
       block: "nearest",
     });
-  }, [activeIndex, complete, open]);
+  }, [lastChecked, open, reduced]);
+
+  const announced = lastChecked != null ? steps[lastChecked] : undefined;
+  const announcedLine = announced ? spokenLineFor(announced) : "";
 
   return (
     <Modal
@@ -64,30 +77,49 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
       size="md"
       title={playbook.name}
       description="What the agent sees during the call"
+      bodyClassName="text-foreground"
     >
       {steps.length === 0 ? (
         <p className="rounded-lg bg-secondary-bg px-4 py-6 text-center text-paragraph-sm text-muted-foreground">
           Add steps in the editor to preview this script.
         </p>
       ) : (
-        <div className="flex flex-col gap-1.5 rounded-lg bg-secondary-bg p-2">
-          <SpeakProgressHint className="px-3 py-1.5" />
-          <ol className="flex flex-col gap-1.5" aria-label="Script preview">
+        <div className="flex flex-col gap-3">
+          <SpeakProgressHint listening={status === "listening"}>
+            {status === "denied" ? (
+              "Microphone access is needed to check the script. Allow it, then open Preview again."
+            ) : status === "unsupported" ? (
+              "Speech isn’t available in this browser. Chrome or Safari can listen for the line."
+            ) : complete ? (
+              <>
+                Script complete.{" "}
+                <button
+                  type="button"
+                  onClick={resetPreview}
+                  className="text-brand underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+                >
+                  Try again
+                </button>
+              </>
+            ) : (
+              "Speak any line. We’ll check it off when about half of it matches."
+            )}
+          </SpeakProgressHint>
+
+          <ol className="flex flex-col" aria-label="Call script">
             {steps.map((step, index) => {
-              const state = complete
-                ? "done"
-                : index < activeIndex
-                  ? "done"
-                  : index === activeIndex
-                    ? "active"
-                    : "upcoming";
+              const wording = step.suggestedWording.trim();
               return (
-                <PreviewStep
-                  key={step.id}
-                  ref={state === "active" ? activeRef : undefined}
-                  step={step}
-                  state={state}
-                />
+                <li key={step.id} ref={lastChecked === index ? activeRef : undefined}>
+                  <ScriptStepRow
+                    title={step.title || "Untitled step"}
+                    wording={wording || undefined}
+                    phase={phases[index] ?? "idle"}
+                    glow={glowing.has(index)}
+                    emphasize={emphasizeIndex === index}
+                    reduced={reduced}
+                  />
+                </li>
               );
             })}
           </ol>
@@ -97,102 +129,10 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
       <p className="sr-only" aria-live="polite">
         {complete
           ? "Script complete"
-          : steps[activeIndex]
-            ? `Now: ${steps[activeIndex].title}. ${spokenLineFor(steps[activeIndex])}`
+          : announced
+            ? `Checked: ${announced.title}.${announcedLine ? ` ${announcedLine}` : ""}`
             : ""}
       </p>
     </Modal>
-  );
-}
-
-const PreviewStep = React.forwardRef<
-  HTMLLIElement,
-  { step: PlaybookStep; state: "done" | "active" | "upcoming" }
->(function PreviewStep({ step, state }, ref) {
-  const line = spokenLineFor(step);
-  const reduced = prefersReducedMotion();
-
-  return (
-    <li
-      ref={ref}
-      className={cn(
-        "rounded-[10px] border px-3 py-2.5",
-        reduced
-          ? "transition-none"
-          : "transition-[background-color,border-color,box-shadow] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
-        state === "done" && "border-transparent bg-muted",
-        state === "active" && "border-info-border bg-info-secondary shadow-[0_0_0_1px_rgba(0,76,230,0.06)]",
-        state === "upcoming" && "border-transparent bg-white"
-      )}
-    >
-      <div className="flex items-start gap-2.5">
-        <StepMark state={state} />
-        <div className="min-w-0 flex-1 pt-px">
-          <p
-            className={cn(
-              "text-label-md-semi text-pretty",
-              reduced ? "transition-none" : "transition-colors duration-300",
-              state === "active" ? "text-foreground" : "text-muted-foreground"
-            )}
-          >
-            {step.title || "Untitled step"}
-          </p>
-          <div
-            aria-hidden={state !== "active"}
-            className={cn(
-              "grid",
-              reduced
-                ? "transition-none"
-                : "transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
-              state === "active" ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-            )}
-          >
-            <div className="overflow-hidden">
-              <p className="mt-1 text-pretty text-paragraph-sm text-brand">“{line}”</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </li>
-  );
-});
-
-function StepMark({ state }: { state: "done" | "active" | "upcoming" }) {
-  if (state === "done") {
-    return (
-      <span
-        className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-disabled-fg text-white"
-        aria-hidden="true"
-      >
-        <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
-          <path
-            d="M3.5 8.5L6.5 11.5L12.5 4.5"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </span>
-    );
-  }
-
-  return (
-    <span
-      className={cn("mt-0.5 size-5 shrink-0", state === "active" ? "text-brand" : "text-disabled-fg")}
-      aria-hidden="true"
-    >
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <circle
-          cx="10"
-          cy="10"
-          r="7"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeDasharray="1.15 2.55"
-          strokeLinecap="round"
-        />
-      </svg>
-    </span>
   );
 }
