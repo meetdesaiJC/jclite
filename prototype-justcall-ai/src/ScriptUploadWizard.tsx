@@ -86,14 +86,6 @@ export function ScriptUploadWizard({
       onClose={onClose}
       size="md"
       title="Upload a script"
-      description="We’ll turn headings, lists, or CSV rows into steps you can edit. AI is only used later to rephrase wording."
-      footer={
-        <div className="flex w-full justify-start">
-          <Button variant="grey-outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-        </div>
-      }
     >
       <div className="flex flex-col gap-4">
         <input
@@ -145,7 +137,7 @@ export function ScriptUploadWizard({
               Upload TXT, Markdown, or CSV
             </span>
             <span className="mt-1 block text-paragraph-sm text-muted-foreground">
-              Drop a file or click to browse. PDF and Word files import as a sample in this prototype.
+              Drop a file or click to browse.
             </span>
           </span>
         </button>
@@ -155,7 +147,9 @@ export function ScriptUploadWizard({
           </Banner>
         ) : null}
         <Button
+          variant="link"
           size="sm"
+          className="self-start"
           onClick={() => importText(SAMPLE_SCRIPT_DOCUMENT, "account-access-recovery.txt")}
         >
           Use sample account-access script

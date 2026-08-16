@@ -997,17 +997,21 @@ export function AgentAssistPage() {
         title={viewingResource?.name}
       >
         {viewingResource?.type === "image" ? (
-          <div className="overflow-hidden rounded-[6px] border border-line bg-secondary-bg">
-            {viewingResource.thumbnail ? (
-              <img
-                src={viewingResource.thumbnail}
-                alt={viewingResource.name}
-                className="mx-auto max-h-[70vh] w-full object-contain"
-              />
-            ) : (
-              <BattlecardVisual className="w-full" />
-            )}
-          </div>
+          viewingResource.battlecard ? (
+            <BattlecardVisual data={viewingResource.battlecard} className="w-full" />
+          ) : (
+            <div className="overflow-hidden rounded-md border border-line bg-secondary-bg">
+              {viewingResource.thumbnail ? (
+                <img
+                  src={viewingResource.thumbnail}
+                  alt={viewingResource.name}
+                  className="mx-auto max-h-[70vh] w-full object-contain"
+                />
+              ) : (
+                <BattlecardVisual className="w-full" />
+              )}
+            </div>
+          )
         ) : null}
       </Modal>
 

@@ -5,8 +5,13 @@ import { type GuidanceResource } from "./guidanceData";
 import {
   BattlecardVisual,
   GUIDANCE_AI_THEME,
+  GuidanceAiHeader,
   GuidanceFeedbackBar,
   GuidanceResourceLink,
+  GuidanceSparklesIcon,
+  GuidanceResourcePreview,
+  GuidanceSuggestedResponse,
+  GuidanceTalkingPoints,
   type GuidanceFeedback,
 } from "./GuidanceCard";
 import type { GuidanceSuggestion } from "./callSimulation";
@@ -72,31 +77,22 @@ export function LiveGuidanceCard({
         className
       )}
     >
-      <span className={GUIDANCE_AI_THEME.rail} aria-hidden="true" />
-
       {expanded ? (
-        <div
-          className={cn(
-            "flex items-start justify-between gap-2 px-3 pt-2.5 pr-2 pb-1 pl-[15px]",
-            pulse && "assist-header-attention"
-          )}
-        >
-          <div className="min-w-0">
-            <h3 className="text-pretty text-label-md-semi text-foreground">
-              {item.item.name}
-            </h3>
-          </div>
-          <DismissGuidanceButton onDismiss={onDismiss} />
-        </div>
+        <GuidanceAiHeader
+          title={item.item.name}
+          onDismiss={onDismiss}
+          className={pulse ? "assist-header-attention" : undefined}
+        />
       ) : (
-        <div className="flex items-center gap-0.5 pr-1 pl-[12px]">
+        <div className="guidance-ai-header flex items-center gap-0.5 pr-1 pl-3">
           <button
             type="button"
             aria-expanded={false}
             onClick={onExpand}
-            className="flex min-h-9 min-w-0 flex-1 cursor-pointer items-center gap-2 py-1.5 text-left hover:bg-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24"
+            className="flex min-h-9 min-w-0 flex-1 cursor-pointer items-center gap-1 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24"
           >
-            <span className="min-w-0 flex-1 truncate text-label-md-semi text-foreground">
+            <GuidanceSparklesIcon className="size-4 shrink-0" />
+            <span className="guidance-ai-title min-w-0 flex-1 truncate text-label-sm font-medium">
               {item.item.name}
             </span>
             <IconChevronRight
@@ -115,59 +111,17 @@ export function LiveGuidanceCard({
         )}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="flex flex-col gap-2 px-3 pb-2.5 pl-[15px]">
-            {response ? (
-              <p
-                className={cn(
-                  "rounded-[6px] border px-2.5 py-2 text-pretty text-[13px] leading-5 font-medium text-foreground",
-                  GUIDANCE_AI_THEME.say
-                )}
-              >
-                {response}
-              </p>
-            ) : null}
+          <div className="flex flex-col gap-4 bg-white px-4 pt-2 pb-4">
+            {response ? <GuidanceSuggestedResponse text={response} /> : null}
 
-            {hasTalking ? (
-              <div>
-                <p className="text-[11px] leading-4 font-medium tracking-[0.04em] text-muted-foreground uppercase">
-                  Talking points
-                </p>
-                <ul className="mt-0.5 flex flex-col gap-1">
-                  {talkingPoints.map((point) => (
-                    <li
-                      key={point}
-                      className="flex items-start gap-1.5 text-paragraph-sm text-foreground"
-                    >
-                      <span
-                        className={cn(
-                          "mt-[6px] size-1.5 shrink-0 rounded-full",
-                          GUIDANCE_AI_THEME.tick
-                        )}
-                      />
-                      <span className="min-w-0 text-pretty">{point}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+            {hasTalking ? <GuidanceTalkingPoints points={talkingPoints} /> : null}
 
             {images.map((resource) => (
-              <button
+              <GuidanceResourcePreview
                 key={resource.id}
-                type="button"
-                onClick={() => onViewResource(resource)}
-                className="overflow-hidden rounded-[6px] border border-ai-border bg-white text-left outline-none hover:border-ai focus-visible:ring-2 focus-visible:ring-ai/24"
-              >
-                {resource.thumbnail ? (
-                  <img
-                    src={resource.thumbnail}
-                    alt={resource.name}
-                    className="max-h-28 w-full object-contain"
-                  />
-                ) : (
-                  <BattlecardVisual className="max-h-28 w-full" />
-                )}
-              </button>
+                resource={resource}
+                onView={onViewResource}
+              />
             ))}
 
             {links.map((resource) => (
@@ -344,54 +298,10 @@ export function CriticalPin({
         !reduced && "assist-card-enter"
       )}
     >
-      <span className={GUIDANCE_AI_THEME.rail} aria-hidden="true" />
-      <div className="flex items-start justify-between gap-2 px-3 pt-2.5 pr-2 pl-[15px]">
-        <p className="min-w-0 text-pretty text-label-md-semi text-foreground">
-          {item.item.name}
-        </p>
-        <button
-          type="button"
-          aria-label="Dismiss guidance"
-          onClick={onDismiss}
-          className="-mt-0.5 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-white/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-        >
-          <IconClose size={16} />
-        </button>
-      </div>
-      <div className="px-3 pb-2.5 pl-[15px]">
-        {response ? (
-          <p
-            className={cn(
-              "mt-1.5 rounded-[6px] border px-2.5 py-2 text-pretty text-[13px] leading-5 font-medium text-foreground",
-              GUIDANCE_AI_THEME.say
-            )}
-          >
-            {response}
-          </p>
-        ) : null}
-        {talkingPoints.length > 0 ? (
-          <div className="mt-1.5">
-            <p className="text-[11px] leading-4 font-medium tracking-[0.04em] text-muted-foreground uppercase">
-              Talking points
-            </p>
-            <ul className="mt-0.5 flex flex-col gap-1">
-              {talkingPoints.map((point) => (
-                <li
-                  key={point}
-                  className="flex items-start gap-1.5 text-paragraph-sm text-foreground"
-                >
-                  <span
-                    className={cn(
-                      "mt-[6px] size-1.5 shrink-0 rounded-full",
-                      GUIDANCE_AI_THEME.tick
-                    )}
-                  />
-                  <span className="min-w-0 text-pretty">{point}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+      <GuidanceAiHeader title={item.item.name} onDismiss={onDismiss} />
+      <div className="flex flex-col gap-4 bg-white px-4 pt-2 pb-4">
+        {response ? <GuidanceSuggestedResponse text={response} /> : null}
+        <GuidanceTalkingPoints points={talkingPoints} />
       </div>
       <GuidanceFeedbackBar
         feedback={feedback}
@@ -401,7 +311,7 @@ export function CriticalPin({
         onNotHelpful={() =>
           setFeedback((current) => (current === "not-helpful" ? null : "not-helpful"))
         }
-        className={cn(GUIDANCE_AI_THEME.feedback, "pl-[12px]")}
+        className={GUIDANCE_AI_THEME.feedback}
       />
     </div>
   );
@@ -461,17 +371,21 @@ export function ResourceOverlay({
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="overflow-hidden rounded-[6px] border border-line bg-secondary-bg">
-          {resource.thumbnail ? (
-            <img
-              src={resource.thumbnail}
-              alt={resource.name}
-              className="mx-auto w-full object-contain"
-            />
-          ) : (
-            <BattlecardVisual className="w-full" />
-          )}
-        </div>
+        {resource.battlecard ? (
+          <BattlecardVisual data={resource.battlecard} className="w-full" />
+        ) : (
+          <div className="overflow-hidden rounded-md border border-line bg-secondary-bg">
+            {resource.thumbnail ? (
+              <img
+                src={resource.thumbnail}
+                alt={resource.name}
+                className="mx-auto w-full object-contain"
+              />
+            ) : (
+              <BattlecardVisual className="w-full" />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

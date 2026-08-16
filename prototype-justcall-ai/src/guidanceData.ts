@@ -1,9 +1,20 @@
 import type { DropdownListItem } from "@/components/Dropdown";
-import aircallBattlecard from "./assets/aircall-battlecard.png";
 
 export type PublishStatus = "live" | "draft";
 
 export type GuidanceResourceType = "link" | "image";
+
+export interface BattlecardRow {
+  feature: string;
+  us: string;
+  competitor: string;
+}
+
+export interface BattlecardData {
+  usLabel: string;
+  competitorLabel: string;
+  rows: BattlecardRow[];
+}
 
 export interface GuidanceResource {
   id: string;
@@ -12,7 +23,19 @@ export interface GuidanceResource {
   url?: string;
   /** Object URL or data URL for uploaded images. */
   thumbnail?: string;
+  /** Structured comparison table — used instead of a screenshot. */
+  battlecard?: BattlecardData;
 }
+
+export const AIRCALL_BATTLECARD: BattlecardData = {
+  usLabel: "JustCall",
+  competitorLabel: "Aircall",
+  rows: [
+    { feature: "Unlimited calling", us: "Yes", competitor: "Yes" },
+    { feature: "SMS campaigns", us: "Yes", competitor: "Add-on" },
+    { feature: "AI agent assist", us: "Yes", competitor: "No" },
+  ],
+};
 
 export interface GuidanceItem {
   id: string;
@@ -75,7 +98,7 @@ export const SEED_GUIDANCE: GuidanceItem[] = [
         id: "r-aircall-battlecard",
         type: "image",
         name: "Aircall comparison battlecard",
-        thumbnail: aircallBattlecard,
+        battlecard: AIRCALL_BATTLECARD,
       },
     ],
     teamMembers: [],

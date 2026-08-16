@@ -167,7 +167,7 @@ function HelpRow({
       icon
     ) : null;
   return (
-    <div id={id} className="flex items-start gap-1">
+    <div id={id} className="flex items-start gap-1 text-paragraph-sm">
       {iconNode && (
         <span
           className={cn(
@@ -178,7 +178,7 @@ function HelpRow({
           {iconNode}
         </span>
       )}
-      <p className={cn("text-paragraph-sm", toneClass)}>{children}</p>
+      <p className={cn("m-0", toneClass)}>{children}</p>
     </div>
   );
 }
