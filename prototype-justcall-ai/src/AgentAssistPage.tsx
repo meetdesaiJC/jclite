@@ -583,7 +583,8 @@ export function AgentAssistPage() {
   const isScripts = tab === "scripts";
 
   const query = search.trim().toLowerCase();
-  const hasFilters = memberFilter.length > 0 || groupFilter.length > 0;
+  const activeFilterCount = memberFilter.length + groupFilter.length;
+  const hasFilters = activeFilterCount > 0;
   // A row survives the filter row when it is assigned to at least one of the
   // picked members and at least one of the picked groups (each filter is
   // ignored while empty).
@@ -778,11 +779,25 @@ export function AgentAssistPage() {
               <Button
                 variant="grey-outline"
                 size="sm"
-                leftIcon={<IconFilter size={16} />}
+                leftIcon={
+                  <IconFilter
+                    size={16}
+                    className={cn(
+                      "origin-center motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]",
+                      filtersOpen && "rotate-180"
+                    )}
+                  />
+                }
                 aria-expanded={filtersOpen}
+                aria-controls="agent-assist-filters"
+                className={cn((filtersOpen || hasFilters) && "bg-surface-hover")}
                 onClick={() => setFiltersOpen((open) => !open)}
               >
-                {filtersOpen ? "Hide filters" : "Filters"}
+                {filtersOpen
+                  ? "Hide filters"
+                  : hasFilters
+                    ? `Filters · ${activeFilterCount}`
+                    : "Filters"}
               </Button>
             </div>
 
@@ -799,53 +814,60 @@ export function AgentAssistPage() {
             </div>
           </div>
 
-          {filtersOpen ? (
-            <div className="flex items-center gap-3 border-t border-line px-6 py-3">
-              <Dropdown
-                placeholder="Team members"
-                searchPlaceholder="Search team members"
-                options={isScripts ? SCRIPT_TEAM_MEMBERS : TEAM_MEMBERS}
-                multiple
-                searchable
-                maxVisibleTags={1}
-                value={memberFilter}
-                onValueChange={(value) => {
-                  setMemberFilter(Array.isArray(value) ? value : [value]);
-                  setPage(1);
-                }}
-                className="w-[220px]"
-                triggerClassName="h-9"
-              />
-              <Dropdown
-                placeholder="User groups"
-                searchPlaceholder="Search user groups"
-                options={isScripts ? SCRIPT_USER_GROUPS : USER_GROUPS}
-                multiple
-                searchable
-                maxVisibleTags={1}
-                value={groupFilter}
-                onValueChange={(value) => {
-                  setGroupFilter(Array.isArray(value) ? value : [value]);
-                  setPage(1);
-                }}
-                className="w-[220px]"
-                triggerClassName="h-9"
-              />
-              {hasFilters ? (
-                <Button
-                  variant="link"
-                  size="sm"
-                  onClick={() => {
-                    setMemberFilter([]);
-                    setGroupFilter([]);
+          <div
+            id="agent-assist-filters"
+            className={cn("aa-filter-row", filtersOpen && "is-open")}
+            aria-hidden={!filtersOpen}
+            inert={!filtersOpen ? true : undefined}
+          >
+            <div className="aa-filter-row-clip">
+              <div className="aa-filter-row-inner flex items-center gap-3 border-t border-line px-6 py-3">
+                <Dropdown
+                  placeholder="Team members"
+                  searchPlaceholder="Search team members"
+                  options={isScripts ? SCRIPT_TEAM_MEMBERS : TEAM_MEMBERS}
+                  multiple
+                  searchable
+                  maxVisibleTags={1}
+                  value={memberFilter}
+                  onValueChange={(value) => {
+                    setMemberFilter(Array.isArray(value) ? value : [value]);
                     setPage(1);
                   }}
-                >
-                  Clear all
-                </Button>
-              ) : null}
+                  className="w-[220px]"
+                  triggerClassName="h-9"
+                />
+                <Dropdown
+                  placeholder="User groups"
+                  searchPlaceholder="Search user groups"
+                  options={isScripts ? SCRIPT_USER_GROUPS : USER_GROUPS}
+                  multiple
+                  searchable
+                  maxVisibleTags={1}
+                  value={groupFilter}
+                  onValueChange={(value) => {
+                    setGroupFilter(Array.isArray(value) ? value : [value]);
+                    setPage(1);
+                  }}
+                  className="w-[220px]"
+                  triggerClassName="h-9"
+                />
+                {hasFilters ? (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    onClick={() => {
+                      setMemberFilter([]);
+                      setGroupFilter([]);
+                      setPage(1);
+                    }}
+                  >
+                    Clear all
+                  </Button>
+                ) : null}
+              </div>
             </div>
-          ) : null}
+          </div>
 
           <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">

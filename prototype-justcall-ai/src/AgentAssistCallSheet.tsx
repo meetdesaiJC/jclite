@@ -27,6 +27,10 @@ import {
   type GuidanceResource,
 } from "./guidanceData";
 import { InCallGuidanceSlot, ResourceOverlay } from "./LiveGuidance";
+import {
+  ScriptStepRow,
+  useScriptChecklistMotion,
+} from "./ScriptChecklist";
 
 /**
  * In-call Agent Assist — one stream. The full script stays open so any
@@ -53,16 +57,6 @@ const PREPARE_MS = 420;
 const SCRIPT_STEP_MS = 180;
 const SCRIPT_STAGGER_MS = 35;
 const SCRIPT_STAGGER_CAP = 8;
-
-const CHECKLIST_MOTION = {
-  detectMs: 160,
-  completeMs: 200,
-  glowMs: 360,
-  staggerMs: 120,
-  nextMs: 500,
-} as const;
-
-type CheckPhase = "idle" | "detecting" | "completing" | "done";
 
 function formatQuoteTime(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -767,188 +761,6 @@ function ActionItemRow({
   );
 }
 
-function useScriptChecklistMotion({
-  playhead,
-  stepCount,
-  reduced,
-}: {
-  playhead: number;
-  stepCount: number;
-  reduced: boolean;
-}) {
-  const [phases, setPhases] = useState<CheckPhase[]>(() =>
-    Array.from({ length: stepCount }, () => "idle")
-  );
-  const [glowing, setGlowing] = useState<Set<number>>(() => new Set());
-  const [emphasizeIndex, setEmphasizeIndex] = useState<number | null>(null);
-
-  const settledRef = useRef<Set<number>>(new Set());
-  const itemTimers = useRef<Map<number, number[]>>(new Map());
-  const emphasisTimers = useRef<number[]>([]);
-
-  const cancelItem = (index: number) => {
-    const timers = itemTimers.current.get(index);
-    if (!timers) return;
-    timers.forEach((id) => window.clearTimeout(id));
-    itemTimers.current.delete(index);
-  };
-
-  const cancelEmphasis = () => {
-    emphasisTimers.current.forEach((id) => window.clearTimeout(id));
-    emphasisTimers.current = [];
-  };
-
-  useEffect(
-    () => () => {
-      itemTimers.current.forEach((timers) =>
-        timers.forEach((id) => window.clearTimeout(id))
-      );
-      itemTimers.current.clear();
-      emphasisTimers.current.forEach((id) => window.clearTimeout(id));
-      settledRef.current = new Set();
-    },
-    []
-  );
-
-  useEffect(() => {
-    const target = new Set<number>();
-    for (let index = 0; index < playhead; index += 1) {
-      target.add(index);
-    }
-
-    const toRevert: number[] = [];
-    for (const index of settledRef.current) {
-      if (!target.has(index)) toRevert.push(index);
-    }
-
-    const toComplete: number[] = [];
-    for (const index of target) {
-      if (!settledRef.current.has(index)) toComplete.push(index);
-    }
-    toComplete.sort((a, b) => a - b);
-
-    if (toRevert.length > 0) {
-      for (const index of toRevert) {
-        cancelItem(index);
-        settledRef.current.delete(index);
-      }
-      setPhases((current) => {
-        const next =
-          current.length === stepCount
-            ? [...current]
-            : Array.from({ length: stepCount }, (_, i) => current[i] ?? "idle");
-        toRevert.forEach((index) => {
-          next[index] = "idle";
-        });
-        return next;
-      });
-      setGlowing((current) => {
-        const next = new Set(current);
-        toRevert.forEach((index) => next.delete(index));
-        return next;
-      });
-    }
-
-    if (toComplete.length === 0) return;
-
-    let nextIncomplete: number | null = null;
-    for (let index = 0; index < stepCount; index += 1) {
-      if (!target.has(index)) {
-        nextIncomplete = index;
-        break;
-      }
-    }
-
-    if (reduced) {
-      toComplete.forEach((index) => settledRef.current.add(index));
-      setPhases((current) => {
-        const next =
-          current.length === stepCount
-            ? [...current]
-            : Array.from({ length: stepCount }, (_, i) => current[i] ?? "idle");
-        toComplete.forEach((index) => {
-          next[index] = "done";
-        });
-        return next;
-      });
-      return;
-    }
-
-    toComplete.forEach((index, order) => {
-      settledRef.current.add(index);
-      const start = order * CHECKLIST_MOTION.staggerMs;
-      const timers: number[] = [];
-
-      timers.push(
-        window.setTimeout(() => {
-          setPhases((current) => {
-            const next = [...current];
-            next[index] = "detecting";
-            return next;
-          });
-        }, start)
-      );
-
-      timers.push(
-        window.setTimeout(() => {
-          setPhases((current) => {
-            const next = [...current];
-            next[index] = "completing";
-            return next;
-          });
-        }, start + CHECKLIST_MOTION.detectMs)
-      );
-
-      timers.push(
-        window.setTimeout(() => {
-          setPhases((current) => {
-            const next = [...current];
-            next[index] = "done";
-            return next;
-          });
-          setGlowing((current) => new Set(current).add(index));
-        }, start + CHECKLIST_MOTION.detectMs + CHECKLIST_MOTION.completeMs)
-      );
-
-      timers.push(
-        window.setTimeout(() => {
-          setGlowing((current) => {
-            const next = new Set(current);
-            next.delete(index);
-            return next;
-          });
-        }, start + CHECKLIST_MOTION.detectMs + CHECKLIST_MOTION.completeMs + CHECKLIST_MOTION.glowMs)
-      );
-
-      itemTimers.current.set(index, timers);
-    });
-
-    if (nextIncomplete == null) {
-      cancelEmphasis();
-      setEmphasizeIndex(null);
-      return;
-    }
-
-    const lastDoneAt =
-      (toComplete.length - 1) * CHECKLIST_MOTION.staggerMs +
-      CHECKLIST_MOTION.detectMs +
-      CHECKLIST_MOTION.completeMs;
-    cancelEmphasis();
-    emphasisTimers.current.push(
-      window.setTimeout(() => setEmphasizeIndex(nextIncomplete), lastDoneAt)
-    );
-    emphasisTimers.current.push(
-      window.setTimeout(() => {
-        setEmphasizeIndex((current) =>
-          current === nextIncomplete ? null : current
-        );
-      }, lastDoneAt + CHECKLIST_MOTION.nextMs)
-    );
-  }, [playhead, stepCount, reduced]);
-
-  return { phases, glowing, emphasizeIndex };
-}
-
 function FullScriptList({
   scenario,
   playhead,
@@ -1029,7 +841,8 @@ function FullScriptList({
             }
           >
             <ScriptStepRow
-              step={step}
+              title={step.title}
+              wording={step.wording}
               phase={phase}
               glow={glowing.has(index)}
               emphasize={emphasizeIndex === index}
@@ -1056,105 +869,6 @@ function FullScriptList({
         );
       })}
     </ol>
-  );
-}
-
-function ScriptCheckMark({
-  phase,
-  glow,
-}: {
-  phase: CheckPhase;
-  glow: boolean;
-}) {
-  return (
-    <span
-      className={cn(
-        "relative flex size-4 shrink-0 items-center justify-center",
-        glow && "script-check-glow"
-      )}
-    >
-      <svg
-        viewBox="0 0 16 16"
-        width={16}
-        height={16}
-        fill="none"
-        aria-hidden="true"
-        data-phase={phase}
-        className={cn(
-          "script-check size-4 overflow-visible",
-          phase === "completing" || phase === "done"
-            ? "text-success"
-            : "text-disabled-fg"
-        )}
-      >
-        <circle className="script-check-fill" cx="8" cy="8" r="6" />
-        <circle
-          className="script-check-dash"
-          cx="8"
-          cy="8"
-          r="6"
-          stroke="currentColor"
-          strokeWidth="1.15"
-          strokeDasharray="1.55 2.4"
-          strokeLinecap="round"
-        />
-        <path
-          className="script-check-mark"
-          d="M5.15 8.2 L7.1 10.15 L10.95 5.85"
-          stroke="white"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  );
-}
-
-function ScriptStepRow({
-  step,
-  phase,
-  glow,
-  emphasize,
-  reduced,
-}: {
-  step: ScriptStep;
-  phase: CheckPhase;
-  glow: boolean;
-  emphasize: boolean;
-  reduced: boolean;
-}) {
-  const complete = phase === "completing" || phase === "done";
-
-  return (
-    <div
-      className={cn(
-        "rounded-[6px] px-1 py-1.5",
-        emphasize && !reduced && "script-next-emphasis"
-      )}
-    >
-      <div className="flex items-start gap-2">
-        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center overflow-visible">
-          <ScriptCheckMark phase={phase} glow={glow} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p
-            className={cn(
-              "script-step-title min-w-0 text-pretty text-paragraph-sm",
-              complete ? "is-complete text-muted-foreground" : "text-foreground",
-              reduced && "transition-none"
-            )}
-          >
-            {step.title}
-          </p>
-          {step.wording ? (
-            <p className="mt-0.5 text-pretty text-[13px] leading-5 text-muted-foreground">
-              “{step.wording}”
-            </p>
-          ) : null}
-        </div>
-      </div>
-    </div>
   );
 }
 
