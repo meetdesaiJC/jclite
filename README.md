@@ -9,8 +9,6 @@ npm install
 npm run dev
 ```
 
-Opens the prototype at [http://localhost:5679](http://localhost:5679).
-
 ## Stack
 
 - **React 19** + **TypeScript**
