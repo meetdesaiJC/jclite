@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -197,7 +198,7 @@ export function AgentAssistCallSheet({
             />
           )}
           <p className="text-label-md-semi text-foreground">
-            {guidanceDetached && !ended ? "Script / Playbook" : "Agent Assist"}
+            {guidanceDetached && !ended ? "Script" : "Agent Assist"}
           </p>
         </div>
         {ended ? (
@@ -772,7 +773,7 @@ function FullScriptList({
   registerCard: (id: string, node: HTMLElement | null) => void;
   onViewResource: (resource: GuidanceResource) => void;
 }) {
-  const { phases, glowing, emphasizeIndex } = useScriptChecklistMotion({
+  const { phases, glowing } = useScriptChecklistMotion({
     playhead,
     stepCount: scenario.steps.length,
     reduced,
@@ -825,7 +826,6 @@ function FullScriptList({
               wording={step.wording}
               phase={phase}
               glow={glowing.has(index)}
-              emphasize={emphasizeIndex === index}
               reduced={reduced}
             />
             {stepCards.map((card) => (
@@ -861,6 +861,9 @@ export interface LiveTranscriptPanelProps {
   guidanceItems?: GuidanceItem[];
   /** Hangup — the live stream lets go before the phone changes state. */
   exiting?: boolean;
+  /** When set, the parent owns collapse so notes can take the freed height. */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   className?: string;
 }
 
@@ -869,47 +872,83 @@ export function LiveTranscriptPanel({
   scenario,
   guidanceItems = SEED_GUIDANCE,
   exiting = false,
+  expanded: expandedProp,
+  onExpandedChange,
   className,
 }: LiveTranscriptPanelProps) {
   const snapshot = simulationAt(scenario, elapsedMs, guidanceItems);
   const reduced = prefersReducedMotion();
+  const bodyId = useId();
+  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(true);
+  const expanded = expandedProp ?? uncontrolledExpanded;
+
+  const setExpanded = (next: boolean) => {
+    onExpandedChange?.(next);
+    if (expandedProp === undefined) setUncontrolledExpanded(next);
+  };
 
   return (
     <section
       aria-label="Live transcript"
       className={cn(
-        "flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white",
+        "flex min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white",
+        expanded ? "h-full" : "h-11",
         className
       )}
     >
       <header
         className={cn(
-          "flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-4",
+          "flex h-11 shrink-0 items-center border-line",
+          expanded && "border-b",
           !reduced && "assist-head-in"
         )}
       >
-        <div className="flex min-w-0 items-center gap-1.5">
-          <IconWaveform className="size-4 shrink-0 text-muted-foreground" />
-          <p className="text-label-md-semi text-foreground">Live transcript</p>
-        </div>
-        <span className="flex shrink-0 items-center gap-1.5">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={bodyId}
+          aria-label={expanded ? "Collapse live transcript" : "Expand live transcript"}
+          onClick={() => setExpanded(!expanded)}
+          className="group flex h-full min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 px-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24"
+        >
+          <div className="flex min-w-0 items-center gap-1.5">
+            <IconWaveform className="size-4 shrink-0 text-muted-foreground" />
+            <span className="text-label-md-semi text-foreground">Live transcript</span>
+          </div>
           <span
-            className={cn(
-              "size-1.5 rounded-full bg-success",
-              !reduced && "transcript-live-dot"
-            )}
+            className="flex size-6 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground transition-colors duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:bg-surface-hover group-hover:text-foreground group-active:scale-[0.97]"
             aria-hidden="true"
-          />
-          <span className="text-label-sm text-muted-foreground">Live</span>
-        </span>
+          >
+            {expanded ? <IconMinus className="size-4" /> : <IconPlus className="size-4" />}
+          </span>
+        </button>
       </header>
 
-      <TranscriptPane
-        turns={snapshot.transcript}
-        contactName={scenario.contactName}
-        reduced={reduced}
-        exiting={exiting}
-      />
+      <div
+        id={bodyId}
+        role="region"
+        aria-label="Call transcript"
+        aria-hidden={!expanded}
+        inert={!expanded || undefined}
+        hidden={!expanded}
+        className={cn(
+          "min-h-0 overflow-hidden",
+          expanded && "flex-1",
+          !reduced && expanded && "assist-card-body assist-card-body-open"
+        )}
+      >
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          {expanded && (
+            <TranscriptPane
+              turns={snapshot.transcript}
+              contactName={scenario.contactName}
+              reduced={reduced}
+              exiting={exiting}
+              active={expanded}
+            />
+          )}
+        </div>
+      </div>
     </section>
   );
 }
@@ -927,107 +966,378 @@ function IconWaveform(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function IconPlus(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M8 3.333v9.334M3.333 8h9.334"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconMinus(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M3.333 8h9.334"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 /** The signed-in agent — same initials the global header shows. */
 const AGENT_INITIALS = "SJ";
 
-/** Consecutive lines from one speaker read as one utterance — one avatar, one name. */
-interface TranscriptGroup {
-  speaker: TranscriptSpeaker;
+// ---------------------------------------------------------------------------
+// Progressive transcript — chunk-based reveal
+// ---------------------------------------------------------------------------
+
+interface ProgressiveTurn {
   atMs: number;
-  quotes: string[];
+  speaker: TranscriptSpeaker;
+  fullQuote: string;
+  visibleText: string;
+  finalized: boolean;
 }
 
-function groupTurns(turns: TranscriptTurn[]): TranscriptGroup[] {
-  const groups: TranscriptGroup[] = [];
+/**
+ * Split a quote into cumulative reveal chunks (each chunk is the full visible
+ * string up to that point). Groups 1-3 words per chunk for a natural feel.
+ */
+function buildChunks(quote: string): string[] {
+  const words = quote.split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let cursor = 0;
+  while (cursor < words.length) {
+    const r = Math.random();
+    const chunkSize = r < 0.35 ? 1 : r < 0.70 ? 2 : 3;
+    cursor = Math.min(cursor + chunkSize, words.length);
+    chunks.push(words.slice(0, cursor).join(" "));
+  }
+  return chunks;
+}
+
+/**
+ * Takes raw simulation turns (each with a complete quote) and returns
+ * ProgressiveTurn[] where each quote is revealed in word-chunks via
+ * real-time intervals, finalizing ~800ms after the last chunk appears.
+ */
+function useProgressiveTranscript(turns: TranscriptTurn[]): ProgressiveTurn[] {
+  const [state, setState] = useState<Map<number, ProgressiveTurn>>(new Map());
+  const scheduled = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    for (const turn of turns) {
+      const key = turn.atMs;
+      if (scheduled.current.has(key)) continue;
+      scheduled.current.add(key);
+
+      const chunks = buildChunks(turn.quote);
+
+      // Create the row immediately with the first chunk.
+      setState((prev) => {
+        const next = new Map(prev);
+        next.set(key, {
+          atMs: turn.atMs,
+          speaker: turn.speaker,
+          fullQuote: turn.quote,
+          visibleText: chunks[0] ?? turn.quote,
+          finalized: chunks.length <= 1,
+        });
+        return next;
+      });
+
+      if (chunks.length <= 1) {
+        setTimeout(() => {
+          setState((prev) => {
+            const next = new Map(prev);
+            const ex = next.get(key);
+            if (ex) next.set(key, { ...ex, finalized: true });
+            return next;
+          });
+        }, 820);
+        continue;
+      }
+
+      // Stream remaining chunks with 150-300ms random intervals.
+      let idx = 1;
+      const scheduleNext = () => {
+        if (idx >= chunks.length) {
+          setTimeout(() => {
+            setState((prev) => {
+              const next = new Map(prev);
+              const ex = next.get(key);
+              if (ex) next.set(key, { ...ex, finalized: true });
+              return next;
+            });
+          }, 820);
+          return;
+        }
+        const delay = 150 + Math.random() * 150;
+        setTimeout(() => {
+          const chunk = chunks[idx++];
+          setState((prev) => {
+            const next = new Map(prev);
+            const ex = next.get(key);
+            if (ex) next.set(key, { ...ex, visibleText: chunk, finalized: false });
+            return next;
+          });
+          scheduleNext();
+        }, delay);
+      };
+
+      // Small head-start so the row enter animation plays before text streams.
+      setTimeout(scheduleNext, 160);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turns.length]);
+
+  return turns.map((turn) => {
+    const p = state.get(turn.atMs);
+    return p ?? {
+      atMs: turn.atMs,
+      speaker: turn.speaker,
+      fullQuote: turn.quote,
+      visibleText: "",
+      finalized: false,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Grouping
+// ---------------------------------------------------------------------------
+
+interface ProgressiveGroup {
+  speaker: TranscriptSpeaker;
+  atMs: number;
+  quotes: ProgressiveTurn[];
+}
+
+function groupProgressiveTurns(turns: ProgressiveTurn[]): ProgressiveGroup[] {
+  const groups: ProgressiveGroup[] = [];
   for (const turn of turns) {
     const last = groups[groups.length - 1];
     if (last && last.speaker === turn.speaker) {
-      last.quotes.push(turn.quote);
+      last.quotes.push(turn);
       continue;
     }
-    groups.push({ speaker: turn.speaker, atMs: turn.atMs, quotes: [turn.quote] });
+    groups.push({ speaker: turn.speaker, atMs: turn.atMs, quotes: [turn] });
   }
   return groups;
 }
+
+// ---------------------------------------------------------------------------
+// TranscriptPane
+// ---------------------------------------------------------------------------
+
+const SCROLL_THRESHOLD = 80;
 
 function TranscriptPane({
   turns,
   contactName,
   reduced,
   exiting = false,
+  active = true,
 }: {
   turns: TranscriptTurn[];
   contactName: string;
   reduced: boolean;
   exiting?: boolean;
+  /** Collapsed — don't pull ancestor scroll while the pane is hidden. */
+  active?: boolean;
 }) {
-  const endRef = useRef<HTMLLIElement | null>(null);
-  const groups = useMemo(() => groupTurns(turns), [turns]);
+  const progressive = useProgressiveTranscript(turns);
+  const groups = useMemo(() => groupProgressiveTurns(progressive), [progressive]);
 
+  const scrollRef = useRef<HTMLOListElement | null>(null);
+  const endRef = useRef<HTMLDivElement | null>(null);
+  const autoScrollActive = useRef(true);
+  const [showJump, setShowJump] = useState(false);
+  const lastFingerprint = useRef("");
+
+  // Auto-scroll when new content appears, but only when near bottom.
   useEffect(() => {
-    endRef.current?.scrollIntoView({
+    if (!active) return;
+    const fingerprint = progressive.map((t) => t.visibleText).join("|");
+    if (fingerprint === lastFingerprint.current) return;
+    lastFingerprint.current = fingerprint;
+    if (!autoScrollActive.current || !endRef.current) return;
+    endRef.current.scrollIntoView({
       behavior: reduced ? "auto" : "smooth",
       block: "end",
     });
-  }, [turns.length, reduced]);
+  }, [progressive, reduced, active]);
+
+  // Detect manual upward scroll to disable auto-scroll.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (dist > SCROLL_THRESHOLD) {
+        autoScrollActive.current = false;
+        setShowJump(true);
+      } else {
+        autoScrollActive.current = true;
+        setShowJump(false);
+      }
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const jumpToLatest = () => {
+    endRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "end" });
+    autoScrollActive.current = true;
+    setShowJump(false);
+  };
 
   if (turns.length === 0) {
     return (
       <div className="flex flex-1 items-start px-4 py-4">
         <p className="text-pretty text-paragraph-sm text-muted-foreground">
-          Nothing to replay yet. Open this if you miss a sentence — it won’t
-          sit beside you while you’re talking.
+          Nothing to replay yet. Open this if you miss a sentence — it won't
+          sit beside you while you're talking.
         </p>
       </div>
     );
   }
 
   return (
-    <ol
-      className={cn(
-        "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4",
-        !reduced &&
-          !exiting &&
-          "animate-[assist-now-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]",
-        !reduced && exiting && "assist-stream-out"
-      )}
-      aria-label="Call transcript"
-    >
-      {groups.map((group, index) => {
-        const isCustomer = group.speaker === "customer";
-        const name = isCustomer ? contactName : "You";
-        return (
-          <li
-            key={`${group.atMs}-${group.speaker}`}
-            ref={index === groups.length - 1 ? endRef : undefined}
-            className="flex gap-2.5"
-          >
-            <Avatar
-              size="sm"
-              color={isCustomer ? "indigo" : "purple"}
-              initials={isCustomer ? initialsFromName(name) : AGENT_INITIALS}
-              className="mt-px"
-            />
-            <div className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
-              <p className="truncate text-label-xs uppercase tracking-[0.06em] text-muted-foreground">
-                {name}
-              </p>
-              {group.quotes.map((quote, quoteIndex) => (
-                <p
-                  key={`${quote}-${quoteIndex}`}
-                  className={cn(
-                    "text-pretty text-paragraph-md",
-                    isCustomer ? "text-foreground" : "text-muted-foreground"
-                  )}
-                >
-                  {quote}
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <ol
+        ref={scrollRef}
+        className={cn(
+          "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4",
+          !reduced && !exiting && "animate-[assist-now-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]",
+          !reduced && exiting && "assist-stream-out"
+        )}
+        aria-label="Call transcript"
+      >
+        {groups.map((group, gIndex) => {
+          const isCustomer = group.speaker === "customer";
+          const name = isCustomer ? contactName : "You";
+          return (
+            <li
+              key={`${group.atMs}-${group.speaker}`}
+              className="flex gap-2.5"
+              style={{ marginTop: gIndex === 0 ? 0 : "22px" }}
+            >
+              <Avatar
+                size="sm"
+                color={isCustomer ? "indigo" : "purple"}
+                initials={isCustomer ? initialsFromName(name) : AGENT_INITIALS}
+                className="mt-px shrink-0"
+              />
+              <div className="flex min-w-0 flex-1 flex-col pt-0.5">
+                <p className="mb-1 truncate text-label-xs uppercase tracking-[0.06em] text-muted-foreground">
+                  {name}
                 </p>
-              ))}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+                {group.quotes.map((turn, qIndex) => (
+                  <ProgressiveQuote
+                    key={turn.atMs}
+                    turn={turn}
+                    isCustomer={isCustomer}
+                    isFirst={qIndex === 0}
+                    reduced={reduced}
+                  />
+                ))}
+              </div>
+            </li>
+          );
+        })}
+        <div ref={endRef} aria-hidden="true" />
+      </ol>
+
+      {showJump && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+          <button
+            onClick={jumpToLatest}
+            className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1.5 text-label-xs text-foreground shadow-sm transition-colors duration-100 hover:bg-surface-1"
+          >
+            <span aria-hidden="true">&#x2193;</span>
+            <span>Jump to latest</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ProgressiveQuote — single utterance paragraph with chunk-fade animation
+// ---------------------------------------------------------------------------
+
+function ProgressiveQuote({
+  turn,
+  isCustomer,
+  isFirst,
+  reduced,
+}: {
+  turn: ProgressiveTurn;
+  isCustomer: boolean;
+  isFirst: boolean;
+  reduced: boolean;
+}) {
+  const [entered, setEntered] = useState(false);
+  const prevTextRef = useRef("");
+
+  useEffect(() => {
+    if (reduced) { setEntered(true); return; }
+    const id = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(id);
+  }, [reduced]);
+
+  const text = turn.visibleText;
+  const prev = prevTextRef.current;
+  const newSuffix = text.length > prev.length ? text.slice(prev.length) : null;
+  prevTextRef.current = text;
+
+  const opacity = turn.finalized ? 1 : 0.72;
+
+  return (
+    <p
+      className={cn(
+        "text-pretty text-paragraph-md",
+        isCustomer ? "text-foreground" : "text-muted-foreground"
+      )}
+      style={{
+        marginTop: isFirst ? 0 : "9px",
+        opacity: entered ? opacity : 0,
+        transform: entered ? "translateY(0)" : "translateY(4px)",
+        transition: reduced
+          ? "none"
+          : `opacity ${turn.finalized ? 150 : 130}ms ease-out, transform 130ms ease-out`,
+      }}
+    >
+      {reduced ? (
+        <span>{text}</span>
+      ) : (
+        <>
+          {prev && <span>{prev}</span>}
+          {newSuffix && (
+            <span
+              key={text}
+              style={{
+                display: "inline",
+                opacity: 0,
+                animation: "transcript-chunk-in 120ms ease-out forwards",
+              }}
+            >
+              {newSuffix}
+            </span>
+          )}
+        </>
+      )}
+    </p>
   );
 }
 
