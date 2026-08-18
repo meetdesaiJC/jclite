@@ -18,6 +18,27 @@ import {
   type GuidancePriority,
   type GuidanceStance,
 } from "./guidanceData";
+import {
+  SEED_KNOWLEDGE_SOURCES,
+  looksLikeQuestion,
+  retrieveKnowledge,
+  type KnowledgeConfidence,
+  type KnowledgeEntry,
+  type KnowledgeSourceRecord,
+} from "./knowledgeData";
+import {
+  SEED_COACHING_RULES,
+  liveCoachingRules,
+  type CoachingRule,
+} from "./coachingData";
+import {
+  SEED_INTEGRATIONS,
+  actionFromGuidanceConfig,
+  capabilityById,
+  integrationById,
+  type Integration,
+  type SuggestedAction,
+} from "./actionsData";
 
 export interface ScriptStep {
   title: string;
@@ -34,6 +55,37 @@ export interface GuidanceSuggestion {
   item: GuidanceItem;
   priority: GuidancePriority;
   stance: GuidanceStance;
+}
+
+/**
+ * Knowledge surfaced from an approved source. No admin wrote a trigger for
+ * this — it was retrieved because the customer asked something factual.
+ */
+export interface KnowledgeSurface {
+  id: string;
+  atMs: number;
+  entry: KnowledgeEntry;
+  sourceName: string;
+  /** The admin can publish a source without exposing where it came from. */
+  showSource: boolean;
+  confidence: KnowledgeConfidence;
+  /** Retrieval question — used to tell when the topic has moved on. */
+  query: string;
+}
+
+/** A behaviour nudge. Temporary by design — never a card. */
+export interface CoachingCue {
+  id: string;
+  atMs: number;
+  rule: CoachingRule;
+  /** The measured reading behind the nudge, e.g. "78% over the last 2 min". */
+  detail: string;
+}
+
+export interface ActionSurface {
+  id: string;
+  atMs: number;
+  action: SuggestedAction;
 }
 
 export type TranscriptSpeaker = "customer" | "agent";
@@ -54,6 +106,20 @@ export interface SimulationEvent {
   guidanceIds?: string[];
   /** AI detected the agent already covered this guidance. */
   handledGuidanceId?: string;
+  /**
+   * Retrieve knowledge for this line even though no Guidance was configured.
+   * Left unset, a customer question still retrieves on its own — this is only
+   * for choreographing which line the demo answers.
+   */
+  knowledgeQuery?: string;
+  /** Keep retrieval out of this beat, even if the line reads as a question. */
+  skipKnowledge?: boolean;
+  /** Fire a coaching banner from a live rule. */
+  coachingRuleId?: string;
+  /** Reading shown under the coaching message. */
+  coachingDetail?: string;
+  /** Surface one of the scenario's conversation-detected actions. */
+  actionId?: string;
 }
 
 export interface CallMoment {
@@ -85,9 +151,13 @@ export interface CallScenario {
   scriptName: string;
   contactName: string;
   contactMeta: string;
+  /** The CRM record actions on this call write to. */
+  crmRecordLabel?: string;
   steps: ScriptStep[];
   events: SimulationEvent[];
   moments: CallMoment[];
+  /** Actions the conversation itself suggests, referenced by event actionId. */
+  conversationActions?: SuggestedAction[];
   wrapUp: CallWrapUp;
 }
 
@@ -98,6 +168,18 @@ export interface SimulationSnapshot {
   latestQuote: { atMs: number; quote: string } | null;
   transcript: TranscriptTurn[];
   wrapped: boolean;
+  /** Auto-retrieved answers, newest last. */
+  knowledge: KnowledgeSurface[];
+  /** Every cue fired so far — the panel decides which is still on screen. */
+  coaching: CoachingCue[];
+  actions: ActionSurface[];
+}
+
+/** Live libraries the runtime reads. Defaults to the seeded admin setup. */
+export interface SimulationLibraries {
+  knowledge?: KnowledgeSourceRecord[];
+  coaching?: CoachingRule[];
+  integrations?: Integration[];
 }
 
 function step(
@@ -160,13 +242,34 @@ export const CALL_SCENARIOS: CallScenario[] = [
         "Let's lock a time this week. If we can show the missed-call workflow in their language, we'll know whether a trial is worth it."
       ),
     ],
+    crmRecordLabel: "Elena Vasquez",
     moments: [
       { id: "default", label: "Script only", atMs: 800 },
       { id: "competitor", label: "Current tool — Aircall", atMs: 13500 },
       { id: "pain", label: "Missed after-hours calls", atMs: 25000 },
       { id: "crm", label: "Salesforce logging", atMs: 44500 },
-      { id: "objection", label: "Pricing vs Aircall", atMs: 57500 },
-      { id: "end", label: "End of call", atMs: 70000 },
+      { id: "knowledge", label: "Recording retention question", atMs: 50500 },
+      { id: "coaching", label: "Talk ratio nudge", atMs: 59000 },
+      { id: "objection", label: "Pricing vs Aircall", atMs: 61000 },
+      { id: "end", label: "End of call", atMs: 74000 },
+    ],
+    conversationActions: [
+      {
+        id: "act-followup-task",
+        integrationId: "hubspot",
+        capabilityId: "hs-task",
+        title: "Create HubSpot follow-up task",
+        summary: "Working session · due Thursday",
+        recordLabel: "Contact",
+        recordValue: "Elena Vasquez",
+        fields: [
+          { label: "Task", value: "Working session with Elena and her ops lead" },
+          { label: "Due", value: "Thursday" },
+          { label: "Owner", value: "Sarah Johnson" },
+        ],
+        origin: "conversation",
+        requiresConfirmation: true,
+      },
     ],
     events: [
       { atMs: 0, scriptIndex: 0 },
@@ -260,40 +363,61 @@ export const CALL_SCENARIOS: CallScenario[] = [
           "Yes — native Salesforce integration. Calls and SMS log to the contact automatically.",
       },
       { atMs: 49500, handledGuidanceId: "g-salesforce" },
-      { atMs: 51000, scriptIndex: 6 },
+      // Nobody configured guidance for recording retention — and nobody should
+      // have to. This is retrieved straight from the published knowledge base.
       {
-        atMs: 52500,
+        atMs: 50500,
+        speaker: "customer",
+        quote: "Before I forget — how long do you keep call recordings?",
+      },
+      {
+        atMs: 53000,
+        speaker: "agent",
+        quote:
+          "Twelve months on standard plans, and we can extend that to twenty-four if your policy needs it.",
+      },
+      { atMs: 54500, scriptIndex: 6 },
+      {
+        atMs: 56000,
         speaker: "agent",
         quote:
           "If this still looks relevant, the useful next step is a 30-minute working session with your ops lead.",
       },
+      // The agent has carried the last stretch on their own.
       {
-        atMs: 57500,
+        atMs: 59000,
+        coachingRuleId: "cr-overtalking",
+        coachingDetail: "You've held 78% of the last 2 minutes.",
+      },
+      {
+        atMs: 61000,
         speaker: "customer",
         quote:
           "A working session could work, but Aircall is cheaper. Not sure I can sell a more expensive tool internally.",
         guidanceIds: ["g-pricing"],
       },
       {
-        atMs: 60500,
+        atMs: 64000,
         speaker: "agent",
         quote:
           "Pricing includes calling, messaging, and CRM in one place — so you're not stacking extra tools. We can size the plan to the seats you'd actually use.",
       },
-      { atMs: 62500, handledGuidanceId: "g-pricing" },
-      { atMs: 64000, scriptIndex: 7 },
+      { atMs: 66000, handledGuidanceId: "g-pricing" },
+      { atMs: 67500, scriptIndex: 7 },
       {
-        atMs: 65500,
+        atMs: 69000,
         speaker: "agent",
         quote:
           "Let's lock a time this week. If we can show the missed-call workflow in their language, we'll know whether a trial is worth it.",
       },
       {
-        atMs: 68000,
+        atMs: 71500,
         speaker: "customer",
         quote: "Thursday afternoon is open. I'll bring the ops lead.",
+        skipKnowledge: true,
+        actionId: "act-followup-task",
       },
-      { atMs: 70000, scriptIndex: 8 },
+      { atMs: 74000, scriptIndex: 8 },
     ],
     wrapUp: {
       summary:
@@ -349,12 +473,35 @@ export const CALL_SCENARIOS: CallScenario[] = [
         "Were you able to sign in with the new password?"
       ),
     ],
+    crmRecordLabel: "Priya Sharma",
     moments: [
       { id: "default", label: "Script only", atMs: 800 },
       { id: "refund", label: "Refund guidance", atMs: 5600 },
       { id: "pci", label: "Card details warning", atMs: 17200 },
+      { id: "frustration", label: "Sentiment nudge", atMs: 20000 },
       { id: "handled", label: "Compliance covered", atMs: 30000 },
-      { id: "end", label: "End of call", atMs: 42000 },
+      { id: "porting", label: "Number porting question", atMs: 39000 },
+      { id: "end", label: "End of call", atMs: 49200 },
+    ],
+    conversationActions: [
+      {
+        id: "act-billing-ticket",
+        integrationId: "hubspot",
+        capabilityId: "hs-ticket",
+        title: "Create HubSpot ticket",
+        summary: "Duplicate charge review",
+        recordLabel: "Contact",
+        recordValue: "Priya Sharma",
+        fields: [
+          { label: "Subject", value: "Review duplicate charge" },
+          { label: "Priority", value: "Medium" },
+          // Nothing in the conversation says which company this contact
+          // belongs to, and HubSpot needs it — so the agent fills it in.
+          { label: "Company", value: "", missing: true },
+        ],
+        origin: "conversation",
+        requiresConfirmation: true,
+      },
     ],
     events: [
       { atMs: 0, scriptIndex: 0 },
@@ -394,17 +541,41 @@ export const CALL_SCENARIOS: CallScenario[] = [
         quote:
           "Please don't share card details on this call. I'll send a secure payment link instead.",
       },
+      // Two failed resets and a blocked refund — the customer is losing patience.
+      {
+        atMs: 20000,
+        coachingRuleId: "cr-frustration",
+        coachingDetail: "Sentiment turned negative over the last minute.",
+      },
       {
         atMs: 30000,
         handledGuidanceId: "g-pci",
       },
       { atMs: 32800, scriptIndex: 3 },
       { atMs: 35600, speaker: "customer", quote: "Okay — I won't read the card." },
-      { atMs: 38000, scriptIndex: 4 },
-      { atMs: 40400, speaker: "customer", quote: "I see the reset email now." },
-      { atMs: 42800, scriptIndex: 5 },
-      { atMs: 44800, speaker: "customer", quote: "I'm in. Thank you." },
-      { atMs: 47200, scriptIndex: 6 },
+      // Guidance exists for lockouts, so it answers this rather than Knowledge.
+      {
+        atMs: 37000,
+        speaker: "customer",
+        quote: "Is the account locked, then?",
+      },
+      // Nothing was ever configured for porting — retrieved from the KB.
+      {
+        atMs: 39000,
+        speaker: "customer",
+        quote: "One more thing — do you support number porting?",
+      },
+      { atMs: 41500, scriptIndex: 4 },
+      { atMs: 43500, speaker: "customer", quote: "I see the reset email now." },
+      { atMs: 45500, scriptIndex: 5 },
+      {
+        atMs: 47000,
+        speaker: "customer",
+        quote: "I'm in. Thank you.",
+        skipKnowledge: true,
+        actionId: "act-billing-ticket",
+      },
+      { atMs: 49200, scriptIndex: 6 },
     ],
     wrapUp: {
       summary:
@@ -458,10 +629,34 @@ export const CALL_SCENARIOS: CallScenario[] = [
         "I'll watch that pending charge and email you when it's gone. Is there anything else on billing?"
       ),
     ],
+    crmRecordLabel: "Marcus Chen",
     moments: [
       { id: "default", label: "Script only", atMs: 800 },
       { id: "question", label: "Billing question", atMs: 6500 },
+      { id: "uncertain", label: "Low-confidence answer", atMs: 18600 },
       { id: "end", label: "End of call", atMs: 30000 },
+    ],
+    conversationActions: [
+      {
+        id: "act-billing-note",
+        integrationId: "hubspot",
+        capabilityId: "hs-contact-note",
+        title: "Add HubSpot note",
+        summary: "Pending $49 charge to watch",
+        recordLabel: "Contact",
+        recordValue: "Marcus Chen",
+        fields: [
+          {
+            label: "Note",
+            value:
+              "Second $49 charge still pending. Reverse it if it posts, then email confirmation.",
+          },
+        ],
+        origin: "conversation",
+        requiresConfirmation: true,
+        // Shows the agent what happens when the CRM is unreachable mid-call.
+        simulateFailure: true,
+      },
     ],
     events: [
       { atMs: 0, scriptIndex: 0 },
@@ -485,17 +680,31 @@ export const CALL_SCENARIOS: CallScenario[] = [
         quote: "It's $49 on the 12th, and another $49 yesterday.",
       },
       { atMs: 17600, scriptIndex: 3 },
+      // Close enough to the refund policy to be worth showing, not close
+      // enough to state as the answer — the card says so instead of guessing.
+      {
+        atMs: 18600,
+        speaker: "customer",
+        quote: "Can you walk me through the refund process?",
+      },
       {
         atMs: 20400,
         speaker: "customer",
         quote: "Oh — so I might not actually be billed twice?",
+        skipKnowledge: true,
       },
       { atMs: 22600, scriptIndex: 4 },
+      { atMs: 24000, actionId: "act-billing-note" },
       {
         atMs: 25400,
         handledGuidanceId: "g-refund",
       },
-      { atMs: 27200, speaker: "customer", quote: "That's all, thank you." },
+      {
+        atMs: 27200,
+        speaker: "customer",
+        quote: "That's all, thank you.",
+        skipKnowledge: true,
+      },
       { atMs: 29400, scriptIndex: 6 },
     ],
     wrapUp: {
@@ -552,15 +761,40 @@ export function sortSuggestions(items: GuidanceSuggestion[]): GuidanceSuggestion
 export function simulationAt(
   scenario: CallScenario,
   elapsedMs: number,
-  library: GuidanceItem[] = []
+  library: GuidanceItem[] = [],
+  libraries: SimulationLibraries = {}
 ): SimulationSnapshot {
   let scriptIndex = 0;
   const suggestions: GuidanceSuggestion[] = [];
   const handledIds: string[] = [];
   const transcript: TranscriptTurn[] = [];
+  const knowledge: KnowledgeSurface[] = [];
+  const coaching: CoachingCue[] = [];
+  const actions: ActionSurface[] = [];
   let latestQuote: SimulationSnapshot["latestQuote"] = null;
   const shown = new Set<string>();
+  const knownEntryIds = new Set<string>();
+  const firedActionIds = new Set<string>();
   const live = liveGuidance(library);
+
+  const knowledgeSources = libraries.knowledge ?? SEED_KNOWLEDGE_SOURCES;
+  const coachingRules = liveCoachingRules(libraries.coaching ?? SEED_COACHING_RULES);
+  const integrations = libraries.integrations ?? SEED_INTEGRATIONS;
+  const recordLabel = "Contact";
+  const recordValue = scenario.crmRecordLabel ?? scenario.contactName;
+
+  /** Guidance that carries an action proposes it as soon as the card lands. */
+  const surfaceGuidanceAction = (item: GuidanceItem, atMs: number) => {
+    if (!item.recommendedAction) return;
+    const action = actionFromGuidanceConfig(item.recommendedAction, integrations, {
+      guidanceId: item.id,
+      recordLabel,
+      recordValue,
+    });
+    if (!action || firedActionIds.has(action.id)) return;
+    firedActionIds.add(action.id);
+    actions.push({ id: action.id, atMs, action });
+  };
 
   const surfaceGuidance = (ids: string[], atMs: number, quote: string) => {
     for (const id of ids) {
@@ -569,6 +803,27 @@ export function simulationAt(
       if (!match) continue;
       shown.add(id);
       suggestions.push(toSuggestion(match, atMs, quote));
+      surfaceGuidanceAction(match, atMs);
+    }
+  };
+
+  /**
+   * Knowledge only answers what Guidance didn't. Strategic wording wins when
+   * the two would speak to the same moment (§36).
+   */
+  const surfaceKnowledge = (query: string, atMs: number) => {
+    for (const hit of retrieveKnowledge(query, knowledgeSources)) {
+      if (knownEntryIds.has(hit.entry.id)) continue;
+      knownEntryIds.add(hit.entry.id);
+      knowledge.push({
+        id: hit.entry.id,
+        atMs,
+        entry: hit.entry,
+        sourceName: hit.source.name,
+        showSource: hit.source.showSourceToAgents,
+        confidence: hit.confidence,
+        query,
+      });
     }
   };
 
@@ -589,14 +844,66 @@ export function simulationAt(
     }
 
     const quote = event.quote ?? latestQuote?.quote ?? "";
+    let matchedGuidance = false;
     if (event.guidanceIds?.length) {
+      const before = suggestions.length;
       surfaceGuidance(event.guidanceIds.slice(0, 1), event.atMs, quote);
+      matchedGuidance = suggestions.length > before;
     } else if (event.quote && (event.speaker ?? "customer") === "customer") {
       const unused = live.filter((item) => !shown.has(item.id));
       const match = rankGuidanceMatches(unused, event.quote)[0];
       if (match) {
         shown.add(match.id);
         suggestions.push(toSuggestion(match, event.atMs, event.quote));
+        surfaceGuidanceAction(match, event.atMs);
+        matchedGuidance = true;
+      }
+    }
+
+    if (event.knowledgeQuery) {
+      surfaceKnowledge(event.knowledgeQuery, event.atMs);
+    } else if (
+      !event.skipKnowledge &&
+      !matchedGuidance &&
+      event.quote &&
+      (event.speaker ?? "customer") === "customer" &&
+      looksLikeQuestion(event.quote)
+    ) {
+      surfaceKnowledge(event.quote, event.atMs);
+    }
+
+    if (event.coachingRuleId) {
+      const rule = coachingRules.find((item) => item.id === event.coachingRuleId);
+      if (rule) {
+        coaching.push({
+          id: `${rule.id}-${event.atMs}`,
+          atMs: event.atMs,
+          rule,
+          detail: event.coachingDetail ?? coachingReading(rule),
+        });
+      }
+    }
+
+    if (event.actionId) {
+      const candidate = scenario.conversationActions?.find(
+        (item) => item.id === event.actionId
+      );
+      if (candidate && !firedActionIds.has(candidate.id)) {
+        const capability = capabilityById(
+          integrations,
+          candidate.integrationId,
+          candidate.capabilityId
+        );
+        const integration = integrationById(integrations, candidate.integrationId);
+        // Actions only appear when the admin left that capability switched on.
+        if (capability?.enabled && integration?.connected) {
+          firedActionIds.add(candidate.id);
+          actions.push({
+            id: candidate.id,
+            atMs: event.atMs,
+            action: { ...candidate, recordLabel, recordValue },
+          });
+        }
       }
     }
   }
@@ -608,7 +915,14 @@ export function simulationAt(
     latestQuote,
     transcript,
     wrapped: scriptIndex >= scenario.steps.length,
+    knowledge,
+    coaching,
+    actions,
   };
+}
+
+function coachingReading(rule: CoachingRule): string {
+  return `${rule.metricLabel} ${rule.threshold} · ${rule.window.toLowerCase()}`;
 }
 
 export function nearestMoment(scenario: CallScenario, elapsedMs: number): CallMoment {
