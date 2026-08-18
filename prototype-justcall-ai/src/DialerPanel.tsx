@@ -1212,7 +1212,7 @@ function LiveCallStage({
           />
         </StagePane>
         <StagePane index={2} reduced={reduced} grow={5} surface={false}>
-          <div ref={notesMotion.stageRef} className="notes-transcript-stage">
+          <div ref={notesMotion.stageRef} className="notes-transcript-stage min-h-0 flex-1">
             <div
               ref={notesMotion.notesRef}
               className="notes-slot"
@@ -1239,8 +1239,11 @@ function LiveCallStage({
                 </header>
                 <div
                   ref={notesMotion.notesInnerRef}
-                  className="notes-inner flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-4"
-                  style={{ pointerEvents: notesMotion.interactive ? "auto" : "none" }}
+                  className={cn(
+                    "notes-inner flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-4",
+                    notesMotion.interactive && "is-ready"
+                  )}
+                  inert={!notesMotion.interactive || undefined}
                 >
                   <TextArea
                     ref={notesAreaRef}
@@ -1263,12 +1266,7 @@ function LiveCallStage({
               </div>
             </div>
             <div ref={notesMotion.transcriptRef} className="transcript-slot">
-              <div
-                className={cn(
-                  "w-full min-w-0 overflow-hidden rounded-[16px] bg-white shadow-600",
-                  transcriptExpanded ? "h-full min-h-0" : "h-11"
-                )}
-              >
+              <div className="h-full min-h-0 w-full overflow-hidden rounded-[16px] bg-white shadow-600">
                 <LiveTranscriptPanel
                   key={scenario.id}
                   elapsedMs={elapsedMs}
@@ -1448,7 +1446,18 @@ function CallBar({
         />
         <BarControl morphKey="keypad" label="Keypad" src={keypadIcon} />
         <BarControl morphKey="transfer" label="Transfer" src={transferIcon} />
-        <BarControl label="Notes" src={noteWhiteIcon} pressed={notesOpen} onClick={onNotesToggle} className="call-bar-notes" {...detail(BAR_DETAIL_DELAY_MS)} />
+        <BarControl
+          label="Notes"
+          src={noteWhiteIcon}
+          pressed={notesOpen}
+          onClick={onNotesToggle}
+          className={cn("call-bar-notes", revealing && "call-bar-detail-in")}
+          style={
+            revealing
+              ? ({ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties)
+              : undefined
+          }
+        />
         <BarControl
           label="Voicemail"
           src={voicemailWhiteIcon}

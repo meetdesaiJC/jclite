@@ -402,6 +402,54 @@
   animation: transcript-live-dot 1.8s ease-in-out infinite;
 }
 
+/* Notes opens as a layout split: transcript vacates height, then Notes fills it. */
+.notes-transcript-stage {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
+.notes-slot,
+.transcript-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-width: 0;
+}
+
+.notes-slot {
+  top: 0;
+  height: 0;
+}
+
+.transcript-slot {
+  top: 0;
+  height: 100%;
+}
+
+.notes-inner {
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+}
+
+.notes-inner.is-ready {
+  pointer-events: auto;
+}
+
+button.call-bar-notes {
+  transition-property: background-color, box-shadow;
+  transition-duration: 120ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+button.call-bar-notes[aria-pressed="true"] {
+  transition-duration: 150ms;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16);
+}
+
 /* The call bar takes its width as the stage turns horizontal. Only used when
    there was no phone to morph from (resumed call, reduced motion). */
 @keyframes call-bar-in {
@@ -930,8 +978,18 @@
 
   .assist-card-body,
   .aa-filter-row,
-  .aa-filter-row-inner {
+  .aa-filter-row-inner,
+  button.call-bar-notes {
     transition: none !important;
+  }
+
+  button.call-bar-notes {
+    box-shadow: none;
+  }
+
+  .notes-inner {
+    transform: none;
+    pointer-events: auto;
   }
 
   .aa-filter-row-inner {

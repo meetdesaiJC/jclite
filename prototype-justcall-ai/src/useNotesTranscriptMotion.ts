@@ -132,6 +132,8 @@ export function useNotesTranscriptMotion({
     const card = notes.firstElementChild as HTMLElement | null;
 
     notes.style.height = `${frame.notesH}px`;
+    notes.style.overflow =
+      animatingRef.current || frame.notesH < 1 ? "hidden" : "visible";
     notes.style.visibility =
       frame.notesH < 0.5 && frame.notesOpacity < 0.02 ? "hidden" : "visible";
     if (card) card.style.opacity = String(frame.notesOpacity);
@@ -220,7 +222,7 @@ export function useNotesTranscriptMotion({
 
     const timing = timingFor(nextOpen, stagger);
     const innerFromY = from.innerY;
-    const innerToY = to.innerY;
+    const innerToY = nextOpen ? 0 : -2;
     const start = performance.now();
     let armedInput = nextOpen && (from.notesH > to.notesH * 0.35);
 
@@ -254,8 +256,13 @@ export function useNotesTranscriptMotion({
         return;
       }
 
+      rafRef.current = 0;
+      animatingRef.current = false;
       applyFrame(to);
-      stop();
+      const notesEl = notesRef.current;
+      const transcriptEl = transcriptRef.current;
+      if (notesEl) notesEl.style.willChange = "";
+      if (transcriptEl) transcriptEl.style.willChange = "";
       setInteractive(nextOpen);
       setAnnounced(nextOpen);
     };
@@ -291,9 +298,18 @@ export function useNotesTranscriptMotion({
     if (!stage || typeof ResizeObserver === "undefined") return;
 
     const ro = new ResizeObserver(() => {
-      if (animatingRef.current) return;
       const columnH = measureColumn();
       if (!columnH) return;
+      if (!bootedRef.current) {
+        bootedRef.current = true;
+        prevOpenRef.current = open;
+        prevExpandedRef.current = transcriptExpanded;
+        applyFrame(targetFrame(open, transcriptExpanded, columnH));
+        setInteractive(open);
+        setAnnounced(open);
+        return;
+      }
+      if (animatingRef.current) return;
       applyFrame(targetFrame(open, transcriptExpanded, columnH));
     });
     ro.observe(stage);
