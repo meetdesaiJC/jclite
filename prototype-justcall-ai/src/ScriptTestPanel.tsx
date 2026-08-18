@@ -53,7 +53,7 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
     });
   }, [heard, listening, completed, steps]);
 
-  const { phases, glowing, emphasizeIndex } = useScriptChecklistMotion({
+  const { phases, glowing } = useScriptChecklistMotion({
     completed,
     stepCount: steps.length,
     reduced,
@@ -116,7 +116,6 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
                     wording={wording || undefined}
                     phase={phases[index] ?? "idle"}
                     glow={glowing.has(index)}
-                    emphasize={emphasizeIndex === index}
                     reduced={reduced}
                   />
                 </li>

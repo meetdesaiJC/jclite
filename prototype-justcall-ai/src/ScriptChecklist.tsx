@@ -6,7 +6,6 @@ export const CHECKLIST_MOTION = {
   completeMs: 200,
   glowMs: 360,
   staggerMs: 120,
-  nextMs: 500,
 } as const;
 
 export type CheckPhase = "idle" | "detecting" | "completing" | "done";
@@ -41,11 +40,9 @@ export function useScriptChecklistMotion({
     Array.from({ length: stepCount }, () => "idle")
   );
   const [glowing, setGlowing] = useState<Set<number>>(() => new Set());
-  const [emphasizeIndex, setEmphasizeIndex] = useState<number | null>(null);
 
   const settledRef = useRef<Set<number>>(new Set());
   const itemTimers = useRef<Map<number, number[]>>(new Map());
-  const emphasisTimers = useRef<number[]>([]);
 
   const cancelItem = (index: number) => {
     const timers = itemTimers.current.get(index);
@@ -54,18 +51,12 @@ export function useScriptChecklistMotion({
     itemTimers.current.delete(index);
   };
 
-  const cancelEmphasis = () => {
-    emphasisTimers.current.forEach((id) => window.clearTimeout(id));
-    emphasisTimers.current = [];
-  };
-
   useEffect(
     () => () => {
       itemTimers.current.forEach((timers) =>
         timers.forEach((id) => window.clearTimeout(id))
       );
       itemTimers.current.clear();
-      emphasisTimers.current.forEach((id) => window.clearTimeout(id));
       settledRef.current = new Set();
     },
     []
@@ -108,14 +99,6 @@ export function useScriptChecklistMotion({
     }
 
     if (toComplete.length === 0) return;
-
-    let nextIncomplete: number | null = null;
-    for (let index = 0; index < stepCount; index += 1) {
-      if (!target.has(index)) {
-        nextIncomplete = index;
-        break;
-      }
-    }
 
     if (reduced) {
       toComplete.forEach((index) => settledRef.current.add(index));
@@ -180,31 +163,9 @@ export function useScriptChecklistMotion({
 
       itemTimers.current.set(index, timers);
     });
-
-    if (nextIncomplete == null) {
-      cancelEmphasis();
-      setEmphasizeIndex(null);
-      return;
-    }
-
-    const lastDoneAt =
-      (toComplete.length - 1) * CHECKLIST_MOTION.staggerMs +
-      CHECKLIST_MOTION.detectMs +
-      CHECKLIST_MOTION.completeMs;
-    cancelEmphasis();
-    emphasisTimers.current.push(
-      window.setTimeout(() => setEmphasizeIndex(nextIncomplete), lastDoneAt)
-    );
-    emphasisTimers.current.push(
-      window.setTimeout(() => {
-        setEmphasizeIndex((current) =>
-          current === nextIncomplete ? null : current
-        );
-      }, lastDoneAt + CHECKLIST_MOTION.nextMs)
-    );
   }, [playhead, completed, stepCount, reduced]);
 
-  return { phases, glowing, emphasizeIndex };
+  return { phases, glowing };
 }
 
 function ScriptCheckMark({
@@ -264,25 +225,18 @@ export function ScriptStepRow({
   wording,
   phase,
   glow,
-  emphasize,
   reduced,
 }: {
   title: string;
   wording?: string;
   phase: CheckPhase;
   glow: boolean;
-  emphasize: boolean;
   reduced: boolean;
 }) {
   const complete = phase === "completing" || phase === "done";
 
   return (
-    <div
-      className={cn(
-        "rounded-[6px] px-1 py-1.5",
-        emphasize && !reduced && "script-next-emphasis"
-      )}
-    >
+    <div className="px-1 py-1.5">
       <div className="flex items-start gap-2">
         <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center overflow-visible">
           <ScriptCheckMark phase={phase} glow={glow} />

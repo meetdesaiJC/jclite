@@ -28,6 +28,7 @@ import { IconJcaiSettings } from "./icons/JustCallAiNavIcons";
 import { AgentAssistCallSheet, LiveTranscriptPanel } from "./AgentAssistCallSheet";
 import { LiveGuidancePanel } from "./LiveGuidance";
 import { CallWaveform } from "./CallWaveform";
+import { useNotesTranscriptMotion } from "./useNotesTranscriptMotion";
 import { CALL_SCENARIOS, scenarioById, type CallScenario } from "./callSimulation";
 import usFlag from "./assets/dialer/us-flag.svg";
 import phoneFilled from "./assets/dialer/phone-filled.svg";
@@ -43,10 +44,10 @@ import noteWhiteIcon from "./assets/dialer/note-white.svg";
 import voicemailWhiteIcon from "./assets/dialer/voicemail-white.svg";
 
 /**
- * Dialer page — compact 360px webphone, pinned top-center.
- * Once the callee picks up, Agent Assist opens to the right at the same
- * height as the phone. Hangup keeps the panel open: the phone takes notes
- * and disposition, the panel writes the recap.
+ * Dialer page — compact 360px webphone, pinned top-center while idle
+ * (and while the line is still ringing). Once the callee picks up, the
+ * call workspace — script, guidance, transcript, then wrap-up — sits
+ * centered so those panes read as one object.
  */
 
 type DialerTab = "dialer" | "call-logs" | "contacts" | "messages" | "settings";
@@ -638,16 +639,20 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
               onCloseWrapUp={resetToIdle}
             />
           ) : (
-            <IdleDialer
-              className={enter}
-              inputId={inputId}
-              number={number}
-              tab={tab}
-              onNumberChange={setNumber}
-              onTabChange={setTab}
-              onDigit={appendDigit}
-              onCall={startCall}
-            />
+            // Compact phone (idle keypad, and ringing via CallMorphStage)
+            // sits at the top. The live script and wrap-up stay centered.
+            <div className="flex h-full w-full items-start justify-center self-stretch">
+              <IdleDialer
+                className={enter}
+                inputId={inputId}
+                number={number}
+                tab={tab}
+                onNumberChange={setNumber}
+                onTabChange={setTab}
+                onDigit={appendDigit}
+                onCall={startCall}
+              />
+            </div>
           )
         }
       </ShellSwap>
@@ -999,7 +1004,8 @@ function CallMorphStage({
     <div
       ref={rootRef}
       className={cn(
-        "relative flex h-full min-h-0 w-full items-center justify-center",
+        "relative flex h-full min-h-0 w-full justify-center",
+        live ? "items-center" : "items-start",
         className
       )}
     >
@@ -1106,6 +1112,53 @@ function LiveCallStage({
   onHoldToggle: () => void;
   onHangup: () => void;
 }) {
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [transcriptExpanded, setTranscriptExpanded] = useState(true);
+  const notesAreaRef = useRef<HTMLTextAreaElement>(null);
+  const notesCaret = useRef({ start: 0, end: 0, scroll: 0 });
+  const notesMotion = useNotesTranscriptMotion({
+    open: notesOpen,
+    transcriptExpanded,
+    reduced,
+  });
+
+  const saveNotesCaret = () => {
+    const el = notesAreaRef.current;
+    if (!el) return;
+    notesCaret.current = {
+      start: el.selectionStart,
+      end: el.selectionEnd,
+      scroll: el.scrollTop,
+    };
+  };
+
+  const toggleNotes = () => {
+    if (notesOpen) saveNotesCaret();
+    setNotesOpen((v) => !v);
+  };
+
+  useLayoutEffect(() => {
+    if (!notesOpen) return;
+    const el = notesAreaRef.current;
+    if (!el) return;
+    if (!transcriptExpanded) {
+      el.style.height = "";
+      return;
+    }
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [notes, notesOpen, transcriptExpanded]);
+
+  useLayoutEffect(() => {
+    if (!notesMotion.interactive) return;
+    const el = notesAreaRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(notesCaret.current.start, notesCaret.current.end);
+    el.scrollTop = notesCaret.current.scroll;
+  }, [notesMotion.interactive]);
+
   return (
     <div
       className={cn(
@@ -1128,9 +1181,11 @@ function LiveCallStage({
         contactName={contactName}
         muted={muted}
         onHold={onHold}
+        notesOpen={notesOpen}
         onMute={onMute}
         onHoldToggle={onHoldToggle}
         onHangup={onHangup}
+        onNotesToggle={toggleNotes}
       />
 
       <div className="flex min-h-0 flex-1 gap-3">
@@ -1156,14 +1211,76 @@ function LiveCallStage({
             className="h-full"
           />
         </StagePane>
-        <StagePane index={2} reduced={reduced} grow={5}>
-          <LiveTranscriptPanel
-            key={scenario.id}
-            elapsedMs={elapsedMs}
-            scenario={scenario}
-            exiting={assistCollapsing}
-            className="h-full"
-          />
+        <StagePane index={2} reduced={reduced} grow={5} surface={false}>
+          <div ref={notesMotion.stageRef} className="notes-transcript-stage">
+            <div
+              ref={notesMotion.notesRef}
+              className="notes-slot"
+              aria-hidden={!notesMotion.announced}
+              inert={!notesMotion.announced || undefined}
+            >
+              <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[16px] bg-white shadow-600">
+                <header className="flex h-11 shrink-0 items-center justify-between gap-1.5 border-b border-line px-4">
+                  <div className="flex items-center gap-1.5">
+                    <NotesPaneIcon className="size-4 shrink-0 text-muted-foreground" />
+                    <p className="text-label-md-semi text-foreground">Notes</p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Close notes"
+                    onClick={() => {
+                      saveNotesCaret();
+                      setNotesOpen(false);
+                    }}
+                    className="flex size-6 items-center justify-center rounded-[4px] text-muted-foreground outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+                  >
+                    <IconClose size={16} />
+                  </button>
+                </header>
+                <div
+                  ref={notesMotion.notesInnerRef}
+                  className="notes-inner flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-4"
+                  style={{ pointerEvents: notesMotion.interactive ? "auto" : "none" }}
+                >
+                  <TextArea
+                    ref={notesAreaRef}
+                    placeholder="Type your notes here..."
+                    maxLength={NOTES_MAX}
+                    rows={3}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    wrapperClassName={cn("min-h-0", !transcriptExpanded && "flex-1")}
+                    className={cn(
+                      "resize-none overflow-y-auto",
+                      transcriptExpanded ? "h-auto min-h-[72px] max-h-full" : "h-full min-h-0"
+                    )}
+                    aria-label="Call notes"
+                  />
+                  <p className="shrink-0 text-right text-label-sm text-muted-foreground tabular-nums">
+                    {notes.length}/{NOTES_MAX}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div ref={notesMotion.transcriptRef} className="transcript-slot">
+              <div
+                className={cn(
+                  "w-full min-w-0 overflow-hidden rounded-[16px] bg-white shadow-600",
+                  transcriptExpanded ? "h-full min-h-0" : "h-11"
+                )}
+              >
+                <LiveTranscriptPanel
+                  key={scenario.id}
+                  elapsedMs={elapsedMs}
+                  scenario={scenario}
+                  exiting={assistCollapsing}
+                  expanded={transcriptExpanded}
+                  onExpandedChange={setTranscriptExpanded}
+                  className={transcriptExpanded ? "h-full" : "h-11"}
+                />
+              </div>
+            </div>
+          </div>
         </StagePane>
       </div>
     </div>
@@ -1175,17 +1292,21 @@ function StagePane({
   index,
   grow,
   reduced,
+  surface = true,
   children,
 }: {
   index: number;
   grow: number;
   reduced: boolean;
+  /** White card chrome. Off when this column stacks its own cards. */
+  surface?: boolean;
   children: ReactNode;
 }) {
   return (
     <div
       className={cn(
-        "flex min-h-0 min-w-0 overflow-hidden rounded-[16px] bg-white shadow-600",
+        "flex min-h-0 min-w-0 flex-col",
+        surface && "overflow-hidden rounded-[16px] bg-white shadow-600",
         !reduced && "call-stage-pane-in"
       )}
       style={
@@ -1215,9 +1336,11 @@ function CallBar({
   contactName,
   muted,
   onHold,
+  notesOpen,
   onMute,
   onHoldToggle,
   onHangup,
+  onNotesToggle,
 }: {
   className?: string;
   morphing?: boolean;
@@ -1226,9 +1349,11 @@ function CallBar({
   contactName: string;
   muted: boolean;
   onHold: boolean;
+  notesOpen?: boolean;
   onMute: () => void;
   onHoldToggle: () => void;
   onHangup: () => void;
+  onNotesToggle?: () => void;
 }) {
   const detail = (delay: number) =>
     revealing
@@ -1247,6 +1372,29 @@ function CallBar({
         className
       )}
     >
+      <div
+        data-morph="identity"
+        data-morph-scale="none"
+        className="min-w-0 max-w-[220px] shrink-0"
+      >
+        <p className="truncate text-[14px] leading-5 font-medium text-white">
+          {contactName}
+        </p>
+        <p className="truncate text-[12px] leading-4 text-white/60 tabular-nums">
+          {onHold ? "On hold · " : ""}
+          {formatDuration(elapsedMs)}
+        </p>
+      </div>
+
+      <span
+        style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+        className={cn(
+          "h-8 w-px shrink-0 bg-white/15",
+          revealing && "call-bar-detail-in"
+        )}
+        aria-hidden="true"
+      />
+
       <div className="flex shrink-0 items-center gap-2.5">
         <button
           type="button"
@@ -1276,29 +1424,6 @@ function CallBar({
       <span
         style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
         className={cn(
-          "h-8 w-px shrink-0 bg-white/15",
-          revealing && "call-bar-detail-in"
-        )}
-        aria-hidden="true"
-      />
-
-      <div
-        data-morph="identity"
-        data-morph-scale="none"
-        className="min-w-0 max-w-[220px] shrink-0"
-      >
-        <p className="truncate text-[14px] leading-5 font-medium text-white">
-          {contactName}
-        </p>
-        <p className="truncate text-[12px] leading-4 text-white/60 tabular-nums">
-          {onHold ? "On hold · " : ""}
-          {formatDuration(elapsedMs)}
-        </p>
-      </div>
-
-      <span
-        style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
-        className={cn(
           "hidden min-w-0 flex-1 px-2 md:block",
           revealing && "call-bar-detail-in"
         )}
@@ -1323,7 +1448,7 @@ function CallBar({
         />
         <BarControl morphKey="keypad" label="Keypad" src={keypadIcon} />
         <BarControl morphKey="transfer" label="Transfer" src={transferIcon} />
-        <BarControl label="Notes" src={noteWhiteIcon} {...detail(BAR_DETAIL_DELAY_MS)} />
+        <BarControl label="Notes" src={noteWhiteIcon} pressed={notesOpen} onClick={onNotesToggle} className="call-bar-notes" {...detail(BAR_DETAIL_DELAY_MS)} />
         <BarControl
           label="Voicemail"
           src={voicemailWhiteIcon}
@@ -1939,6 +2064,25 @@ function CallControl({
       </span>
       <span className="text-[10px] leading-3 whitespace-nowrap text-white">{label}</span>
     </button>
+  );
+}
+
+/** Sticky-note mark for the light Notes pane — same shape as the dialer asset, muted like sibling headers. */
+function NotesPaneIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M11.167 6.5V1.833A1.333 1.333 0 0 0 9.833.5H1.833A1.333 1.333 0 0 0 .5 1.833v8A1.333 1.333 0 0 0 1.833 11.167H6.5L11.167 6.5ZM6.5 11.167V7.167c0-.177.07-.347.195-.472.125-.125.295-.195.472-.195h4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
