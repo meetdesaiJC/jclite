@@ -430,6 +430,13 @@ export interface TooltipTriggerProps {
   placement?: TriggerPlacement;
   /** Open delay in ms (Figma: brief delay on hover). */
   delay?: number;
+  /**
+   * Keep the bubble open while the pointer is over it, and allow clicking
+   * content inside (CTAs). Off by default — labels shouldn't steal clicks.
+   */
+  interactive?: boolean;
+  /** Close delay in ms when `interactive` (covers the gap to the bubble). */
+  closeDelay?: number;
   /** Controlled open state. */
   open?: boolean;
   /** Default open for uncontrolled usage. */
@@ -444,6 +451,8 @@ export function TooltipTrigger({
   children,
   placement = "top",
   delay = 200,
+  interactive = false,
+  closeDelay = 120,
   open: openProp,
   defaultOpen = false,
   onOpenChange,
@@ -477,6 +486,21 @@ export function TooltipTrigger({
   const close = () => {
     clearTimer();
     setOpen(false);
+  };
+
+  const scheduleClose = () => {
+    if (!interactive) {
+      close();
+      return;
+    }
+    clearTimer();
+    timerRef.current = setTimeout(() => setOpen(false), closeDelay);
+  };
+
+  const cancelClose = () => {
+    if (disabled) return;
+    clearTimer();
+    setOpen(true);
   };
 
   React.useEffect(() => () => clearTimer(), []);
@@ -516,7 +540,7 @@ export function TooltipTrigger({
         | ((e: React.MouseEvent) => void)
         | undefined;
       prev?.(event);
-      close();
+      scheduleClose();
     },
     onFocus: (event: React.FocusEvent) => {
       const prev = children.props.onFocus as
@@ -530,6 +554,12 @@ export function TooltipTrigger({
         | ((e: React.FocusEvent) => void)
         | undefined;
       prev?.(event);
+      if (interactive) {
+        const next = event.relatedTarget;
+        if (next instanceof Node && bubbleRef.current?.contains(next)) return;
+        scheduleClose();
+        return;
+      }
       close();
     },
   });
@@ -541,8 +571,13 @@ export function TooltipTrigger({
         ? createPortal(
             <span
               ref={bubbleRef}
-              className="pointer-events-none fixed z-[100]"
+              className={cn(
+                "fixed z-[100]",
+                interactive ? "pointer-events-auto" : "pointer-events-none"
+              )}
               style={{ top: 0, left: 0 }}
+              onMouseEnter={interactive ? cancelClose : undefined}
+              onMouseLeave={interactive ? scheduleClose : undefined}
             >
               {content}
             </span>,

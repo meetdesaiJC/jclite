@@ -1,46 +1,62 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
+import { Checkbox } from "@/components/Checkbox";
 import { Dropdown } from "@/components/Dropdown";
 import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
 import { Radio } from "@/components/Radio";
+import { Tag } from "@/components/Tag";
 import { Toggle } from "@/components/Toggle";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import {
   IconClose,
+  IconCopy,
+  IconDotsVertical,
   IconFile,
+  IconFilter,
+  IconPencil,
   IconSearch,
-  IconSparkles,
-  IconWebToDevice,
 } from "@/components/Icon";
 import {
   Table,
   TableBody,
+  TableBulkBar,
   TableCell,
-  TableCellText,
   TableHead,
   TableHeader,
+  TablePagination,
   TableRow,
 } from "@/components/Table";
 import { cn } from "@/lib/utils";
 import faqsEmptyIllustration from "./assets/faqs-empty.png";
 import { AdminPageHeader } from "./AgentAssistAdmin";
+import { useAgentAssistTakeover } from "./agentAssistTakeover";
+import { AssignmentAvatarStack } from "./AssignmentAvatarStack";
+import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
 import {
-  KNOWLEDGE_SOURCE_KINDS,
+  KNOWLEDGE_ENTITLEMENTS,
   KNOWLEDGE_TEAMS,
+  KNOWLEDGE_USED_BY_OPTIONS,
   KNOWLEDGE_USERS,
-  createEmptyKnowledgeSource,
+  knowledgeAssignees,
   knowledgeAudienceLabel,
   knowledgeKindMeta,
+  knowledgeUsedByLabel,
+  newKnowledgeSourceId,
   sampleEntriesForSource,
+  usedByAgentAssist,
+  usedByVoiceAgent,
+  voiceAgentKbLimitReached,
   type KnowledgeAudience,
-  type KnowledgeSourceKind,
   type KnowledgeSourceRecord,
 } from "./knowledgeData";
 
 /**
- * Knowledge admin — connect a source, say who it serves, publish. There is no
+ * Knowledge admin — one JustCall knowledge base, shared. Each KB says which
+ * products may read it, so switching Agent Assist on is an availability change
+ * on the existing record rather than a second copy to maintain. There is no
  * trigger to write and no question to enumerate: retrieval finds the answer
  * when a customer asks for it.
  */
@@ -48,30 +64,68 @@ import {
 export interface KnowledgePageProps {
   sources: KnowledgeSourceRecord[];
   onSourcesChange: (next: KnowledgeSourceRecord[]) => void;
-  onBack: () => void;
 }
 
 export function KnowledgePage({
   sources,
   onSourcesChange,
-  onBack,
 }: KnowledgePageProps) {
   const [search, setSearch] = React.useState("");
-  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [statusFilter, setStatusFilter] = React.useState<string[]>([]);
+  const [agentFilter, setAgentFilter] = React.useState<string[]>([]);
+  const [groupFilter, setGroupFilter] = React.useState<string[]>([]);
+  const [selected, setSelected] = React.useState<string[]>([]);
+  /** Percent complete per knowledge base while ingestion re-runs. */
+  const [training, setTraining] = React.useState<Record<string, number>>({});
+  const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(10);
+  const [assigning, setAssigning] = React.useState<KnowledgeSourceRecord | null>(
+    null
+  );
+  const [deleting, setDeleting] = React.useState<KnowledgeSourceRecord[] | null>(
+    null
+  );
   const [editing, setEditing] = React.useState<{
     source: KnowledgeSourceRecord;
     mode: "create" | "edit";
   } | null>(null);
 
   const query = search.trim().toLowerCase();
-  const filtered = sources.filter(
-    (source) =>
+  const matchesAssignment = (members: string[], groups: string[]) =>
+    (agentFilter.length === 0 ||
+      agentFilter.some((value) => members.includes(value))) &&
+    (groupFilter.length === 0 ||
+      groupFilter.some((value) => groups.includes(value)));
+  const filtered = sources.filter((source) => {
+    const matchesQuery =
       !query ||
       source.name.toLowerCase().includes(query) ||
-      source.origin.toLowerCase().includes(query) ||
-      knowledgeKindMeta(source.kind).label.toLowerCase().includes(query)
-  );
+      source.origin.toLowerCase().includes(query);
+    const matchesStatus =
+      statusFilter.length === 0 ||
+      (statusFilter.includes("success") && source.status === "live") ||
+      (statusFilter.includes("failed") && source.status === "failed") ||
+      (statusFilter.includes("draft") && source.status === "draft");
+    const matchesAudience =
+      source.audience === "everyone" ||
+      matchesAssignment(source.audienceUsers, source.audienceTeams);
+    return matchesQuery && matchesStatus && matchesAudience;
+  });
   const isEmpty = sources.length === 0;
+  const activeFilterCount =
+    statusFilter.length + agentFilter.length + groupFilter.length;
+  const hasFilters = activeFilterCount > 0;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const start = (currentPage - 1) * pageSize;
+  const visible = filtered.slice(start, start + pageSize);
+  // Selection and the header checkbox act on the page in front of the admin.
+  const visibleIds = visible.map((source) => source.id);
+  const selectedVisible = selected.filter((id) => visibleIds.includes(id));
+  const allSelected =
+    visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+  const someSelected = selectedVisible.length > 0 && !allSelected;
 
   const saveSource = (next: KnowledgeSourceRecord) => {
     const exists = sources.some((source) => source.id === next.id);
@@ -91,10 +145,66 @@ export function KnowledgePage({
     );
   };
 
+  const toggleAll = () => {
+    setSelected(allSelected ? [] : visibleIds);
+  };
+
+  const toggleRow = (id: string) => {
+    setSelected((current) =>
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
+    );
+  };
+
+  const duplicateSource = (source: KnowledgeSourceRecord) => {
+    onSourcesChange([
+      {
+        ...source,
+        id: newKnowledgeSourceId(),
+        name: `${source.name} (copy)`,
+        status: "draft",
+        updated: "Just now",
+      },
+      ...sources,
+    ]);
+  };
+
+  /**
+   * Ingestion stands in for the real crawl: the pie fills, then the knowledge
+   * base lands published — which is also how a failed source gets retried.
+   */
+  const retrainSource = (id: string) => {
+    if (training[id] != null) return;
+    const steps = [12, 34, 58, 79, 100];
+    setTraining((current) => ({ ...current, [id]: steps[0]! }));
+    steps.slice(1).forEach((value, index) => {
+      window.setTimeout(
+        () =>
+          setTraining((current) =>
+            current[id] == null ? current : { ...current, [id]: value }
+          ),
+        (index + 1) * 280
+      );
+    });
+    window.setTimeout(() => {
+      setTraining((current) => {
+        const { [id]: _done, ...rest } = current;
+        return rest;
+      });
+      patchSource(id, { status: "live" });
+    }, steps.length * 280);
+  };
+
+  const removeSources = (ids: string[]) => {
+    onSourcesChange(sources.filter((source) => !ids.includes(source.id)));
+    setSelected((current) => current.filter((id) => !ids.includes(id)));
+    setDeleting(null);
+  };
+
   if (editing) {
     return (
       <KnowledgeSourcePage
         source={editing.source}
+        sources={sources}
         mode={editing.mode}
         onCancel={() => setEditing(null)}
         onSave={saveSource}
@@ -103,15 +213,14 @@ export function KnowledgePage({
   }
 
   return (
-    <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
+    <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <AdminPageHeader
         title="Knowledge"
-        description="Give AI the information it needs to answer customer questions. Anything published here can be retrieved on a live call without a trigger."
-        onBack={onBack}
+        description="Add knowledge that Voice Agents can use to answer customers and Agent Assist can surface to agents during calls."
         actions={
-          <Button size="sm" onClick={() => setPickerOpen(true)}>
-            Add source
-          </Button>
+          isEmpty ? null : (
+            <Button size="sm">Create Knowledge Base</Button>
+          )
         }
       />
 
@@ -127,211 +236,744 @@ export function KnowledgePage({
             />
             <div className="flex flex-col gap-2">
               <p className="text-[16px] leading-6 font-semibold text-foreground">
-                No knowledge sources yet
+                No knowledge bases yet
               </p>
               <p className="text-[14px] leading-5 text-muted-foreground">
-                Connect a help center, upload a document, or point at your
-                existing knowledge base. AI reads it and answers the routine
-                questions on its own.
+                Connect a help center, upload a document, or start from what
+                JustCall already publishes. AI reads it and answers the routine
+                questions on its own — for Voice Agent, Agent Assist, or both.
               </p>
             </div>
-            <Button size="md" onClick={() => setPickerOpen(true)}>
-              Add source
-            </Button>
+            <Button size="md">Create Knowledge Base</Button>
           </div>
         </div>
       ) : (
         <>
-          <div className="flex items-center justify-between gap-3 px-6 py-3">
-            <InputField
-              placeholder="Search sources"
-              leadingIcon={<IconSearch size={16} />}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              clearable={false}
-              wrapperClassName="w-[280px]"
-            />
-            <p className="text-label-sm text-muted-foreground tabular-nums">
-              {sources.filter((source) => source.status === "live" && source.useDuringCalls)
-                .length}{" "}
-              live on calls
-            </p>
+          <div className="flex items-center px-6 py-3">
+            <div className="flex h-9 items-center gap-3">
+              <InputField
+                placeholder="Search Knowledge Base"
+                leadingIcon={<IconSearch size={16} />}
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(1);
+                }}
+                clearable={false}
+                wrapperClassName="w-[280px]"
+              />
+              <span className="h-full w-px shrink-0 bg-line" aria-hidden="true" />
+              <Button
+                variant="grey-outline"
+                size="sm"
+                leftIcon={
+                  <IconFilter
+                    size={16}
+                    className={cn(
+                      "origin-center motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]",
+                      filtersOpen && "rotate-180"
+                    )}
+                  />
+                }
+                aria-expanded={filtersOpen}
+                aria-controls="knowledge-filters"
+                aria-label={
+                  hasFilters
+                    ? `${filtersOpen ? "Hide filters" : "Filters"}, ${activeFilterCount} active`
+                    : undefined
+                }
+                className={cn((filtersOpen || hasFilters) && "bg-surface-hover")}
+                onClick={() => setFiltersOpen((open) => !open)}
+              >
+                {filtersOpen ? "Hide filters" : "Filters"}
+                {hasFilters ? (
+                  <Badge variant="blue-grey" className="tabular-nums">
+                    {activeFilterCount}
+                  </Badge>
+                ) : null}
+              </Button>
+            </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-auto px-6 pb-6">
-            <Table className="table-fixed">
-              <TableHeader className="[&_tr]:border-b-0">
-                <TableRow>
-                  <TableHead className="sticky top-0 z-10 w-[260px]">Source</TableHead>
-                  <TableHead className="sticky top-0 z-10 w-[160px]">Type</TableHead>
-                  <TableHead className="sticky top-0 z-10 w-[90px]">Answers</TableHead>
-                  <TableHead className="sticky top-0 z-10 w-[170px]">
-                    Available to
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-10 w-[130px]">
-                    Use on calls
-                  </TableHead>
-                  <TableHead className="sticky top-0 z-10 w-[110px]">Status</TableHead>
-                  <TableHead className="sticky top-0 z-10 w-[110px]">Updated</TableHead>
-                  <TableHead className="sticky top-0 z-10 w-[90px] text-center">
-                    Edit
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((source) => (
-                  <TableRow key={source.id} className="border-b-0">
-                    <TableCell>
-                      <button
-                        type="button"
-                        onClick={() => setEditing({ source, mode: "edit" })}
-                        className="max-w-full min-w-0 bg-transparent p-0 text-left font-medium hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-                      >
-                        <TableCellText
-                          primary={source.name}
-                          supporting={source.origin}
+          <div
+            id="knowledge-filters"
+            className={cn("aa-filter-row", filtersOpen && "is-open")}
+            aria-hidden={!filtersOpen}
+            inert={!filtersOpen ? true : undefined}
+          >
+            <div className="aa-filter-row-clip">
+              <div className="aa-filter-row-inner flex flex-wrap items-center gap-3 border-t border-line px-6 py-3">
+                <Dropdown
+                  placeholder="Status"
+                  appliedField="Status"
+                  options={STATUS_FILTER_OPTIONS}
+                  multiple
+                  value={statusFilter}
+                  onValueChange={(value) => {
+                    setStatusFilter(Array.isArray(value) ? value : [value]);
+                    setPage(1);
+                  }}
+                  className="w-[180px] shrink-0"
+                  triggerClassName="h-9"
+                />
+                <Dropdown
+                  placeholder="Agents"
+                  searchPlaceholder="Search agents"
+                  appliedField="Agents"
+                  options={KNOWLEDGE_USERS}
+                  multiple
+                  searchable
+                  value={agentFilter}
+                  onValueChange={(value) => {
+                    setAgentFilter(Array.isArray(value) ? value : [value]);
+                    setPage(1);
+                  }}
+                  className="w-[220px] shrink-0"
+                  triggerClassName="h-9"
+                />
+                <Dropdown
+                  placeholder="User Groups"
+                  searchPlaceholder="Search user groups"
+                  appliedField="User Groups"
+                  options={KNOWLEDGE_TEAMS}
+                  multiple
+                  searchable
+                  value={groupFilter}
+                  onValueChange={(value) => {
+                    setGroupFilter(Array.isArray(value) ? value : [value]);
+                    setPage(1);
+                  }}
+                  className="w-[220px] shrink-0"
+                  triggerClassName="h-9"
+                />
+                {hasFilters ? (
+                  <Button
+                    variant="grey-outline"
+                    size="sm"
+                    onClick={() => {
+                      setStatusFilter([]);
+                      setAgentFilter([]);
+                      setGroupFilter([]);
+                      setPage(1);
+                    }}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="relative flex min-h-0 flex-1 flex-col px-6 pb-6">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+              <div className="min-h-0 flex-1 overflow-auto">
+                <Table className="table-fixed">
+                  <TableHeader className="[&_tr]:border-b-0">
+                    <TableRow>
+                      <TableHead className="sticky top-0 z-10 w-11">
+                        <Checkbox
+                          size="sm"
+                          checked={allSelected}
+                          indeterminate={someSelected}
+                          onCheckedChange={toggleAll}
+                          aria-label="Select all knowledge bases"
                         />
-                      </button>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="blue-grey">
-                        {knowledgeKindMeta(source.kind).label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-paragraph-md tabular-nums">
-                      {source.entries.length}
-                    </TableCell>
-                    <TableCell className="truncate text-paragraph-md text-muted-foreground">
-                      {knowledgeAudienceLabel(source)}
-                    </TableCell>
-                    <TableCell>
-                      <Toggle
-                        size="sm"
-                        checked={source.useDuringCalls}
-                        aria-label={`${source.name} available during live calls`}
-                        onCheckedChange={(useDuringCalls) =>
-                          patchSource(source.id, { useDuringCalls })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <StatusToggle
-                        name={source.name}
-                        checked={source.status === "live"}
-                        disabled={source.status !== "live" && source.entries.length === 0}
-                        disabledReason="Add content to this source before publishing"
-                        onCheckedChange={(live) =>
-                          patchSource(source.id, { status: live ? "live" : "draft" })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell className="text-paragraph-md">{source.updated}</TableCell>
-                    <TableCell className="text-center">
-                      <Button
-                        variant="grey-outline"
-                        size="sm"
-                        onClick={() => setEditing({ source, mode: "edit" })}
-                      >
-                        Open
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      </TableHead>
+                      <TableHead className="sticky top-0 z-10">Knowledge Base</TableHead>
+                      <TableHead className="sticky top-0 z-10 w-[132px]">Status</TableHead>
+                      <TableHead className="sticky top-0 z-10 w-[160px]">
+                        Assigned Agents
+                      </TableHead>
+                      <TableHead className="sticky top-0 z-10 w-[150px]">
+                        Last Updated
+                      </TableHead>
+                      <TableHead className="sticky top-0 z-10 w-[142px] text-center">
+                        Actions
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {visible.length === 0 ? (
+                      <TableRow className="border-b-0 hover:bg-transparent">
+                        <TableCell
+                          colSpan={6}
+                          className="text-paragraph-md text-muted-foreground"
+                        >
+                          No matching knowledge bases
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      visible.map((source) => {
+                        const isSelected = selected.includes(source.id);
+                        const progress = training[source.id] ?? null;
+                        return (
+                          <TableRow
+                            key={source.id}
+                            state={isSelected ? "selected" : "default"}
+                            className="border-b-0"
+                          >
+                            <TableCell className="w-11">
+                              <Checkbox
+                                size="sm"
+                                checked={isSelected}
+                                onCheckedChange={() => toggleRow(source.id)}
+                                aria-label={`Select ${source.name}`}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <span className="block max-w-full min-w-0 truncate text-label-md font-medium">
+                                {source.name}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <KnowledgeStatusCell
+                                status={source.status}
+                                progress={progress}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <AssignmentAvatarStack
+                                people={knowledgeAssignees(source)}
+                              />
+                            </TableCell>
+                            <TableCell className="text-paragraph-md text-muted-foreground">
+                              {source.updated}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <RowActions
+                                source={source}
+                                retraining={progress != null}
+                                onAssign={() => setAssigning(source)}
+                                onRetrain={() => retrainSource(source.id)}
+                                onDuplicate={() => duplicateSource(source)}
+                                onEdit={() => setEditing({ source, mode: "edit" })}
+                                onDelete={() => setDeleting([source])}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="shrink-0 border-t border-line">
+                <TablePagination
+                  page={currentPage}
+                  pageCount={pageCount}
+                  onPageChange={setPage}
+                  pageSize={pageSize}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setPage(1);
+                  }}
+                  rangeLabel={`${filtered.length === 0 ? 0 : start + 1}-${Math.min(
+                    start + pageSize,
+                    filtered.length
+                  )} of ${filtered.length} items`}
+                />
+              </div>
+            </div>
+            <TableBulkBar
+              count={selectedVisible.length}
+              label="selected"
+              actions={
+                <Button
+                  variant="grey-outline"
+                  size="sm"
+                  className="bg-white"
+                  onClick={() =>
+                    setDeleting(
+                      sources.filter((source) => selectedVisible.includes(source.id))
+                    )
+                  }
+                >
+                  Delete
+                </Button>
+              }
+            />
           </div>
         </>
       )}
 
-      <KnowledgeSourcePicker
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={(kind) => {
-          setPickerOpen(false);
-          setEditing({ source: createEmptyKnowledgeSource(kind), mode: "create" });
-        }}
-      />
+      {assigning ? (
+        <AssignAgentsModal
+          source={assigning}
+          onClose={() => setAssigning(null)}
+          onSave={(next) => {
+            patchSource(assigning.id, next);
+            setAssigning(null);
+          }}
+        />
+      ) : null}
+
+      {deleting && deleting.length > 0 ? (
+        <Modal
+          open
+          onClose={() => setDeleting(null)}
+          size="sm"
+          title={deleting.length === 1 ? "Delete knowledge base" : "Delete knowledge bases"}
+          description={
+            deleting.length === 1
+              ? `“${deleting[0]!.name}” will be removed from Voice Agent and Agent Assist.`
+              : `${deleting.length} knowledge bases will be removed from Voice Agent and Agent Assist.`
+          }
+          footer={
+            <>
+              <Button variant="grey-outline" size="sm" onClick={() => setDeleting(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="error"
+                size="sm"
+                onClick={() => removeSources(deleting.map((source) => source.id))}
+              >
+                Delete
+              </Button>
+            </>
+          }
+        />
+      ) : null}
     </main>
   );
 }
 
-function StatusToggle({
-  name,
-  checked,
-  disabled,
-  disabledReason,
-  onCheckedChange,
+const STATUS_FILTER_OPTIONS = [
+  { value: "success", label: "Success" },
+  { value: "failed", label: "Failed" },
+  { value: "draft", label: "Draft" },
+];
+
+function KnowledgeStatusCell({
+  status,
+  progress,
 }: {
-  name: string;
-  checked: boolean;
-  disabled?: boolean;
-  disabledReason?: string;
-  onCheckedChange: (checked: boolean) => void;
+  status: KnowledgeSourceRecord["status"];
+  /** Percent complete while ingestion runs; `null` when it isn't running. */
+  progress: number | null;
 }) {
-  const toggle = (
-    <Toggle
-      size="sm"
-      checked={checked}
-      disabled={disabled}
-      onCheckedChange={onCheckedChange}
-      aria-label={`${name} ${checked ? "live" : "draft"}`}
-    />
-  );
-  if (!disabled || !disabledReason) return toggle;
+  if (progress != null) {
+    return (
+      <span className="flex items-center gap-2">
+        <TrainingPie value={progress} />
+        <span className="text-paragraph-md text-muted-foreground">Training</span>
+      </span>
+    );
+  }
+  if (status === "live") {
+    return (
+      <Tag size="sm" color="green">
+        Success
+      </Tag>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <Tag size="sm" color="red">
+        Failed
+      </Tag>
+    );
+  }
   return (
-    <TooltipTrigger
-      content={<Tooltip theme="dark" arrow="top-center" title={disabledReason} />}
-    >
-      <span className="inline-flex">{toggle}</span>
-    </TooltipTrigger>
+    <Tag size="sm" color="blue-grey">
+      Draft
+    </Tag>
   );
 }
 
-function KnowledgeSourcePicker({
-  open,
-  onClose,
-  onSelect,
+/** How far through ingestion a knowledge base is, as a 24px dial. */
+function TrainingPie({ value }: { value: number }) {
+  const radius = 9;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.max(0, Math.min(100, value));
+  return (
+    <svg
+      width={24}
+      height={24}
+      viewBox="0 0 24 24"
+      fill="none"
+      role="img"
+      aria-label={`Training ${Math.round(clamped)}% complete`}
+      className="shrink-0"
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r={radius}
+        stroke="currentColor"
+        strokeWidth="3"
+        className="text-line"
+      />
+      <circle
+        cx="12"
+        cy="12"
+        r={radius}
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        className="text-brand"
+        strokeDasharray={circumference}
+        strokeDashoffset={circumference * (1 - clamped / 100)}
+        transform="rotate(-90 12 12)"
+        style={{ transition: "stroke-dashoffset 260ms linear" }}
+      />
+    </svg>
+  );
+}
+
+function RowActions({
+  source,
+  retraining,
+  onAssign,
+  onRetrain,
+  onDuplicate,
+  onEdit,
+  onDelete,
 }: {
-  open: boolean;
-  onClose: () => void;
-  onSelect: (kind: KnowledgeSourceKind) => void;
+  source: KnowledgeSourceRecord;
+  retraining: boolean;
+  onAssign: () => void;
+  onRetrain: () => void;
+  onDuplicate: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      size="md"
-      title="Add a knowledge source"
-      description="Point AI at information you already have. Nothing goes live until you publish it."
+    <div
+      className="inline-flex items-center"
+      role="group"
+      aria-label={`Actions for ${source.name}`}
     >
-      <ul className="grid grid-cols-2 gap-2">
-        {KNOWLEDGE_SOURCE_KINDS.map((kind) => (
-          <li key={kind.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(kind.id)}
-              className="flex h-full w-full cursor-pointer flex-col gap-1 rounded-lg border border-line bg-white p-3 text-left outline-none transition-colors hover:border-brand hover:bg-brand-subtle/30 focus-visible:ring-2 focus-visible:ring-brand/24"
-            >
-              <span className="flex items-center gap-1.5">
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-[4px] bg-secondary-bg text-muted-foreground">
-                  {kind.input === "url" ? (
-                    <IconWebToDevice size={16} className="size-3.5" />
-                  ) : kind.input === "file" ? (
-                    <IconFile size={16} className="size-3.5" />
-                  ) : (
-                    <IconSparkles size={16} className="size-3.5" />
-                  )}
-                </span>
-                <span className="text-label-md-semi text-foreground">{kind.label}</span>
-              </span>
-              <span className="text-pretty text-paragraph-sm text-muted-foreground">
-                {kind.description}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      <TooltipTrigger
+        placement="bottom"
+        className="-mr-px"
+        content={<Tooltip theme="dark" arrow="top-center" title="Assign Agents" />}
+      >
+        <button
+          type="button"
+          aria-label={`Assign agents to ${source.name}`}
+          onClick={onAssign}
+          className="flex size-9 items-center justify-center rounded-l-[4px] border border-line bg-white text-foreground hover:bg-secondary-bg focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+        >
+          <IconUserPlus />
+        </button>
+      </TooltipTrigger>
+      <TooltipTrigger
+        placement="bottom"
+        className="-mr-px"
+        content={<Tooltip theme="dark" arrow="top-center" title="Retrain" />}
+      >
+        <button
+          type="button"
+          aria-label={`Retrain ${source.name}`}
+          disabled={retraining}
+          onClick={onRetrain}
+          className="flex size-9 items-center justify-center border border-line bg-white text-foreground hover:bg-secondary-bg focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24 disabled:cursor-not-allowed disabled:text-disabled-fg"
+        >
+          <IconRefresh className={retraining ? "animate-spin" : undefined} />
+        </button>
+      </TooltipTrigger>
+      <ActionMenu
+        label={`More actions for ${source.name}`}
+        items={[
+          {
+            key: "duplicate",
+            label: "Duplicate",
+            icon: <IconCopy size={16} />,
+            onSelect: onDuplicate,
+          },
+          {
+            key: "edit",
+            label: "Edit",
+            icon: <IconPencil size={16} />,
+            onSelect: onEdit,
+          },
+          {
+            key: "delete",
+            label: "Delete",
+            icon: <IconTrash size={16} />,
+            onSelect: onDelete,
+            destructive: true,
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+function AssignAgentsModal({
+  source,
+  onClose,
+  onSave,
+}: {
+  source: KnowledgeSourceRecord;
+  onClose: () => void;
+  onSave: (patch: Partial<KnowledgeSourceRecord>) => void;
+}) {
+  const [members, setMembers] = React.useState(source.audienceUsers);
+  const [groups, setGroups] = React.useState(source.audienceTeams);
+
+  const save = () => {
+    if (members.length === 0 && groups.length === 0) {
+      onSave({ audience: "everyone", audienceTeams: [], audienceUsers: [] });
+      return;
+    }
+    if (members.length > 0) {
+      onSave({ audience: "users", audienceUsers: members, audienceTeams: groups });
+      return;
+    }
+    onSave({ audience: "teams", audienceTeams: groups, audienceUsers: [] });
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      className="overflow-visible"
+      bodyClassName="overflow-visible"
+      title="Assign Agents"
+      description="Only assigned agents can be helped by this knowledge base on a call."
+      footer={
+        <>
+          <Button variant="grey-outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={save}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <dl className="flex flex-col gap-3">
+        <div>
+          <dt className="text-label-sm text-muted-foreground">Knowledge Base</dt>
+          <dd className="text-paragraph-md text-foreground">{source.name}</dd>
+        </div>
+        <AssignTeamAndGroups
+          variant="summary"
+          members={KNOWLEDGE_USERS}
+          groups={KNOWLEDGE_TEAMS}
+          selectedMembers={members}
+          selectedGroups={groups}
+          onMembersChange={setMembers}
+          onGroupsChange={setGroups}
+        />
+      </dl>
     </Modal>
+  );
+}
+
+interface ActionMenuItem {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  onSelect?: () => void;
+  destructive?: boolean;
+}
+
+function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }) {
+  const [open, setOpen] = React.useState(false);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const trigger = triggerRef.current;
+      const menu = menuRef.current;
+      if (!trigger || !menu) return;
+      const rect = trigger.getBoundingClientRect();
+      const { offsetWidth: width, offsetHeight: height } = menu;
+      const left = Math.max(
+        8,
+        Math.min(rect.right - width, window.innerWidth - width - 8)
+      );
+      const below = rect.bottom + 4;
+      const top =
+        below + height > window.innerHeight - 8 ? rect.top - height - 4 : below;
+      menu.style.top = `${top}px`;
+      menu.style.left = `${left}px`;
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <TooltipTrigger
+        placement="bottom"
+        disabled={open}
+        content={<Tooltip theme="dark" arrow="top-center" title="More actions" />}
+      >
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={label}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+          className={cn(
+            "flex size-9 items-center justify-center rounded-r-[4px] border border-line bg-white text-foreground hover:bg-secondary-bg focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+            open && "bg-secondary-bg"
+          )}
+        >
+          <IconDotsVertical size={20} />
+        </button>
+      </TooltipTrigger>
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              aria-label={label}
+              className="fixed z-[100] min-w-[180px] rounded-[6px] border border-line bg-white py-1 shadow-400"
+              style={{ top: 0, left: 0 }}
+            >
+              {items.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    item.onSelect?.();
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 px-3 py-2 text-left text-paragraph-md",
+                    item.destructive
+                      ? "text-error hover:bg-error-subtle"
+                      : "text-foreground hover:bg-secondary-bg"
+                  )}
+                >
+                  <span className="flex size-4 shrink-0 items-center justify-center">
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </button>
+              ))}
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  );
+}
+
+function IconUserPlus() {
+  return (
+    <svg
+      width={20}
+      height={20}
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M6.667 5.833a3.333 3.333 0 1 0 6.666 0 3.333 3.333 0 0 0-6.666 0"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M13.333 15.833h5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M15.833 13.333v5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 17.5v-1.667a3.333 3.333 0 0 1 3.333-3.333h3.334"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconRefresh({ className }: { className?: string }) {
+  return (
+    <svg
+      width={20}
+      height={20}
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M16.667 9.167a6.75 6.75 0 0 0-12.917-1.667m-.417-3.333v3.333h3.333"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M3.333 10.833a6.75 6.75 0 0 0 12.917 1.667m.417 3.333v-3.333h-3.333"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconTrash({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M3.333 5.833h13.334M8.333 9.167v5M11.667 9.167v5M4.167 5.833l.833 10a1.667 1.667 0 0 0 1.667 1.667h6.666a1.667 1.667 0 0 0 1.667-1.667l.833-10M7.5 5.833V3.333A.833.833 0 0 1 8.333 2.5h3.334a.833.833 0 0 1 .833.833v2.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -342,20 +984,24 @@ const AUDIENCE_OPTIONS: { value: KnowledgeAudience; label: string; hint: string 
 ];
 
 /**
- * Source setup — name it, say who it serves, and decide whether AI may use it
- * live and whether the agent gets to see where an answer came from.
+ * Knowledge base setup — name it, say which products use it, say who it serves,
+ * and decide whether the agent gets to see where an answer came from.
  */
 function KnowledgeSourcePage({
   source,
+  sources,
   mode,
   onCancel,
   onSave,
 }: {
   source: KnowledgeSourceRecord;
+  /** Needed to price the Voice Agent slot before it is claimed. */
+  sources: KnowledgeSourceRecord[];
   mode: "create" | "edit";
   onCancel: () => void;
   onSave: (next: KnowledgeSourceRecord) => void;
 }) {
+  useAgentAssistTakeover();
   const [draft, setDraft] = React.useState<KnowledgeSourceRecord>(source);
   const [publishOpen, setPublishOpen] = React.useState(false);
   const meta = knowledgeKindMeta(draft.kind);
@@ -403,7 +1049,7 @@ function KnowledgeSourcePage({
             <IconClose size={20} />
           </button>
           <h1 className="truncate text-heading-lg text-foreground">
-            {mode === "edit" ? draft.name || "Knowledge source" : `Add ${meta.label}`}
+            {mode === "edit" ? draft.name || "Knowledge base" : `Add ${meta.label}`}
           </h1>
         </div>
         <Button size="sm" disabled={!canPublish} onClick={() => setPublishOpen(true)}>
@@ -413,13 +1059,13 @@ function KnowledgeSourcePage({
 
       <div className="flex min-h-0 flex-1 justify-center overflow-auto px-6 py-8">
         <div className="flex w-full max-w-[680px] flex-col gap-4">
-          <SectionCard title="Source">
+          <SectionCard title="Knowledge base">
             <InputField
-              label="Source name"
+              label="Name"
               placeholder="e.g. Sales competitive knowledge"
               value={draft.name}
               onChange={(event) => patch({ name: event.target.value })}
-              helpText="An internal name so your team can tell sources apart."
+              helpText="An internal name so your team can tell knowledge bases apart."
               helpIcon
               clearable={false}
             />
@@ -485,14 +1131,48 @@ function KnowledgeSourcePage({
               <p className="text-pretty text-paragraph-sm text-muted-foreground">
                 {draft.kind === "justcall-kb"
                   ? "Everything already published in your JustCall knowledge base is included — no upload needed."
-                  : "You'll add question and answer pairs after this source is created."}
+                  : "You'll add question and answer pairs after this knowledge base is created."}
               </p>
             ) : null}
           </SectionCard>
 
           <SectionCard
+            title="Used by"
+            description="The same knowledge base can serve both products. Switching one on never creates a duplicate."
+          >
+            <div className="flex flex-col gap-2">
+              {KNOWLEDGE_USED_BY_OPTIONS.map((option) => {
+                const claimsVoiceSlot =
+                  option.value !== "agent-assist" && !usedByVoiceAgent(source);
+                const blocked = claimsVoiceSlot && voiceAgentKbLimitReached(sources);
+                return (
+                  <Radio
+                    key={option.value}
+                    name="knowledge-used-by"
+                    label={option.label}
+                    description={
+                      blocked
+                        ? `${KNOWLEDGE_ENTITLEMENTS.voiceAgentTier} includes ${KNOWLEDGE_ENTITLEMENTS.voiceAgentKbLimit} knowledge bases — upgrade the add-on to add another.`
+                        : option.hint
+                    }
+                    disabled={blocked}
+                    checked={draft.usedBy === option.value}
+                    onCheckedChange={() => patch({ usedBy: option.value })}
+                  />
+                );
+              })}
+            </div>
+            <p className="text-pretty text-paragraph-sm text-muted-foreground">
+              Voice Agent knowledge base limits follow your{" "}
+              {KNOWLEDGE_ENTITLEMENTS.voiceAgentTier}. Agent Assist is included
+              with {KNOWLEDGE_ENTITLEMENTS.agentAssistPlan} and doesn't consume a
+              Voice Agent slot.
+            </p>
+          </SectionCard>
+
+          <SectionCard
             title="Available to"
-            description="Only assigned agents can be helped by this source on a call."
+            description="Only assigned agents can be helped by this knowledge base on a call."
           >
             <div className="flex flex-col gap-2">
               {AUDIENCE_OPTIONS.map((option) => (
@@ -540,20 +1220,20 @@ function KnowledgeSourcePage({
             ) : null}
           </SectionCard>
 
-          <SectionCard title="How Agent Assist uses this">
-            <Toggle
-              controlPosition="end"
-              label="Use during live calls"
-              description="AI searches this source while the agent is on a call and surfaces the answer."
-              checked={draft.useDuringCalls}
-              onCheckedChange={(useDuringCalls) => patch({ useDuringCalls })}
-              wrapperClassName="justify-between"
-            />
+          <SectionCard
+            title="How Agent Assist uses this"
+            description={
+              usedByAgentAssist(draft)
+                ? "AI searches this knowledge base while the agent is on a call and surfaces the answer."
+                : "Add Agent Assist under Used by to surface these answers on live agent calls."
+            }
+          >
             <Toggle
               controlPosition="end"
               label="Show source to agents"
-              description="Agents see which source an answer came from and can open the original."
+              description="Agents see which knowledge base an answer came from and can open the original."
               checked={draft.showSourceToAgents}
+              disabled={!usedByAgentAssist(draft)}
               onCheckedChange={(showSourceToAgents) => patch({ showSourceToAgents })}
               wrapperClassName="justify-between"
             />
@@ -562,7 +1242,7 @@ function KnowledgeSourcePage({
           {draft.entries.length > 0 ? (
             <SectionCard
               title="What AI found here"
-              description={`${draft.entries.length} answers are retrievable from this source.`}
+              description={`${draft.entries.length} answers are retrievable from this knowledge base.`}
             >
               <ul className="flex flex-col gap-2">
                 {draft.entries.map((entry) => (
@@ -587,7 +1267,7 @@ function KnowledgeSourcePage({
         onClose={() => setPublishOpen(false)}
         size="sm"
         title={mode === "edit" ? "Save changes" : "Ready to publish"}
-        description="Agents start getting answers from this source on matching questions."
+        description="Agents start getting answers from this knowledge base on matching questions."
         footer={
           <>
             <Button variant="grey-outline" size="sm" onClick={() => setPublishOpen(false)}>
@@ -600,13 +1280,17 @@ function KnowledgeSourcePage({
         }
       >
         <dl className="flex flex-col gap-3">
-          <SummaryRow label="Source" value={draft.name || "Untitled source"} />
+          <SummaryRow label="Knowledge base" value={draft.name || "Untitled knowledge base"} />
           <SummaryRow label="Type" value={meta.label} />
-          <SummaryRow label="Available to" value={knowledgeAudienceLabel(draft)} />
           <SummaryRow
-            label="Live calls"
-            value={draft.useDuringCalls ? "AI can use this on calls" : "Off for live calls"}
+            label="Used by"
+            value={
+              draft.usedBy === "both"
+                ? "Voice Agent and Agent Assist"
+                : knowledgeUsedByLabel(draft.usedBy)
+            }
           />
+          <SummaryRow label="Available to" value={knowledgeAudienceLabel(draft)} />
         </dl>
       </Modal>
     </main>

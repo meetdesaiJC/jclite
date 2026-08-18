@@ -28,12 +28,21 @@ import { IconJcaiSettings } from "./icons/JustCallAiNavIcons";
 import { AgentAssistCallSheet, LiveTranscriptPanel } from "./AgentAssistCallSheet";
 import { LiveAgentAssistPanel } from "./LiveAgentAssistPanel";
 import { CallWaveform } from "./CallWaveform";
+import { CallWorkspaceResizeHandle } from "./CallWorkspaceResizeHandle";
+import { type CallPaneId } from "./callWorkspaceLayout";
+import { useCallWorkspaceResize } from "./useCallWorkspaceResize";
 import {
   NOTES_TEXTAREA_MAX_H,
   NOTES_TEXTAREA_MIN_H,
   useNotesTranscriptMotion,
 } from "./useNotesTranscriptMotion";
-import { CALL_SCENARIOS, scenarioById, type CallScenario } from "./callSimulation";
+import {
+  CALL_SCENARIOS,
+  POST_WRAP_COMPLETED_DELAY_MS,
+  scenarioById,
+  simulationAt,
+  type CallScenario,
+} from "./callSimulation";
 import usFlag from "./assets/dialer/us-flag.svg";
 import phoneFilled from "./assets/dialer/phone-filled.svg";
 import hangupIcon from "./assets/dialer/hangup.svg";
@@ -91,6 +100,8 @@ const DEFAULT_NUMBER = "919773110910";
 const CALL_PRESS_MS = 120;
 /** Hangup — Agent Assist lets go first, then the phone changes state. */
 const ASSIST_COLLAPSE_MS = 200;
+/** After completed cards land, hold them on screen before hangup. */
+const POST_COMPLETED_HANGUP_MS = 2800;
 /** How long the outgoing card stays on top while the next one resolves. */
 const SHELL_CROSSFADE_MS = 180;
 /** Save & close — the button confirms before the wrap-up lets go. */
@@ -436,10 +447,12 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
   const [onHold, setOnHold] = useState(false);
   const [scenarioId, setScenarioId] = useState(CALL_SCENARIOS[0].id);
   const [assistCollapsing, setAssistCollapsing] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const collapseTimer = useRef<number | null>(null);
   const callStartedAt = useRef<number | null>(null);
   const holdStartedAt = useRef<number | null>(null);
   const pausedMs = useRef(0);
+  const autoEnded = useRef(false);
   const inCall = phase !== "idle";
   const connecting = phase === "connecting";
   const talking = phase === "talking";
@@ -453,10 +466,17 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose?.();
+      if (event.key !== "Escape") return;
+      // A dialog opened from inside the call — the battle card zoom, say —
+      // owns Escape first. Only the topmost surface should close. Capture
+      // phase, so this runs while that dialog is still mounted.
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      const topmost = dialogs[dialogs.length - 1];
+      if (topmost && topmost !== rootRef.current) return;
+      onClose?.();
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
 
   useEffect(() => {
@@ -522,6 +542,7 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
     setScenarioId(opts?.scenarioId ?? CALL_SCENARIOS[0].id);
     holdStartedAt.current = null;
     pausedMs.current = 0;
+    autoEnded.current = false;
     if (opts?.skipRinging) {
       callStartedAt.current = Date.now() - RINGING_MS - seek;
       setPhase("talking");
@@ -536,6 +557,7 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
     callStartedAt.current = null;
     holdStartedAt.current = null;
     pausedMs.current = 0;
+    autoEnded.current = false;
     setPhase("idle");
     setElapsedMs(0);
     setMuted(false);
@@ -573,6 +595,18 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
     resetToIdle();
   };
 
+  const callWrapped = talking && simulationAt(scenario, elapsedMs).wrapped;
+
+  useEffect(() => {
+    if (!callWrapped || autoEnded.current) return;
+    autoEnded.current = true;
+    const timer = window.setTimeout(
+      hangup,
+      POST_WRAP_COMPLETED_DELAY_MS + POST_COMPLETED_HANGUP_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [callWrapped]);
+
   useEffect(
     () => () => {
       if (collapseTimer.current) window.clearTimeout(collapseTimer.current);
@@ -585,17 +619,22 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
     pausedMs.current = 0;
     holdStartedAt.current = null;
     if (onHold) setOnHold(false);
+    autoEnded.current = false;
     callStartedAt.current = Date.now() - RINGING_MS;
     setElapsedMs(0);
   };
 
   return createPortal(
     <div
+      ref={rootRef}
       role="dialog"
       aria-modal="true"
       aria-label="Dialer"
       className={cn(
-        "fixed inset-0 z-[100] flex flex-col items-center overflow-hidden bg-secondary-bg pt-8 pb-8",
+        // Page-level surface, so it sits under dialogs (Modal/Sidesheet, z-50)
+        // and popovers (tooltips, z-100) — otherwise anything opened from
+        // inside the call workspace, like the battle card zoom, renders behind it.
+        "fixed inset-0 z-40 flex flex-col items-center overflow-hidden bg-secondary-bg pt-8 pb-8",
         className
       )}
     >
@@ -1085,7 +1124,9 @@ function CallMorphStage({
  * Live call — the call bar owns the top edge, then three columns split the rest:
  * the Script, Agent Assist, and the live transcript. Agent Assist is the single
  * runtime surface: knowledge, guidance, coaching, and suggested actions all
- * arrive there, with no tabs for the agent to choose between.
+ * arrive there, with no tabs for the agent to choose between. Column widths
+ * are a shared tokenized model (A + divider + B + divider + C); dragging one
+ * divider only trades space between its two neighbours.
  */
 function LiveCallStage({
   className,
@@ -1119,6 +1160,7 @@ function LiveCallStage({
   const [notesOpen, setNotesOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [transcriptExpanded, setTranscriptExpanded] = useState(true);
+  const workspace = useCallWorkspaceResize();
   const notesAreaRef = useRef<HTMLTextAreaElement>(null);
   const notesCaret = useRef({ start: 0, end: 0, scroll: 0 });
   const notesMotion = useNotesTranscriptMotion({
@@ -1166,8 +1208,9 @@ function LiveCallStage({
         // settles the stage at 1440 once there is room for it. The stage takes
         // the height its content needs rather than the whole window, and sits
         // in the middle of it — the three panes read as one object, not as
-        // three columns stretched to the viewport.
-        "flex h-[700px] max-h-full min-h-0 w-full max-w-[1504px] flex-col gap-3 px-16",
+        // three columns stretched to the viewport. Horizontal overflow is
+        // clipped so a resize never introduces a workspace scrollbar.
+        "flex h-[700px] max-h-full min-h-0 w-full max-w-[1504px] flex-col gap-3 overflow-x-hidden px-16",
         className
       )}
     >
@@ -1188,8 +1231,22 @@ function LiveCallStage({
         onNotesToggle={toggleNotes}
       />
 
-      <div className="flex min-h-0 flex-1 gap-3">
-        <StagePane index={0} reduced={reduced} grow={5}>
+      <div
+        ref={workspace.containerRef}
+        className={cn(
+          "call-workspace-row flex min-h-0 min-w-0 flex-1",
+          workspace.resizable ? "call-workspace-panes" : "gap-3"
+        )}
+      >
+        <StagePane
+          index={0}
+          paneId="script"
+          reduced={reduced}
+          grow={5}
+          fraction={workspace.fractions.script}
+          widthPx={workspace.resizable ? workspace.widths.script : undefined}
+          settling={workspace.settling}
+        >
           <AgentAssistCallSheet
             key={scenario.id}
             elapsedMs={elapsedMs}
@@ -1202,7 +1259,18 @@ function LiveCallStage({
             className="h-full"
           />
         </StagePane>
-        <StagePane index={1} reduced={reduced} grow={4}>
+        {workspace.resizable ? (
+          <CallWorkspaceResizeHandle {...workspace.handleProps(0)} />
+        ) : null}
+        <StagePane
+          index={1}
+          paneId="suggestions"
+          reduced={reduced}
+          grow={4}
+          fraction={workspace.fractions.suggestions}
+          widthPx={workspace.resizable ? workspace.widths.suggestions : undefined}
+          settling={workspace.settling}
+        >
           <LiveAgentAssistPanel
             key={scenario.id}
             elapsedMs={elapsedMs}
@@ -1211,7 +1279,19 @@ function LiveCallStage({
             className="h-full"
           />
         </StagePane>
-        <StagePane index={2} reduced={reduced} grow={5} surface={false}>
+        {workspace.resizable ? (
+          <CallWorkspaceResizeHandle {...workspace.handleProps(1)} />
+        ) : null}
+        <StagePane
+          index={2}
+          paneId="transcript"
+          reduced={reduced}
+          grow={5}
+          fraction={workspace.fractions.transcript}
+          widthPx={workspace.resizable ? workspace.widths.transcript : undefined}
+          settling={workspace.settling}
+          surface={false}
+        >
           <div ref={notesMotion.stageRef} className="notes-transcript-stage min-h-0 flex-1">
             <div
               ref={notesMotion.notesRef}
@@ -1289,28 +1369,42 @@ function LiveCallStage({
 /** Panels wait out the call bar, then arrive left to right. */
 function StagePane({
   index,
+  paneId,
   grow,
+  fraction,
+  widthPx,
+  settling = false,
   reduced,
   surface = true,
   children,
 }: {
   index: number;
+  paneId?: CallPaneId;
   grow: number;
+  /** Stored proportion — used before the row has a measured pixel width. */
+  fraction?: number;
+  widthPx?: number;
+  settling?: boolean;
   reduced: boolean;
   /** White card chrome. Off when this column stacks its own cards. */
   surface?: boolean;
   children: ReactNode;
 }) {
+  const sized = widthPx != null;
   return (
     <div
+      id={paneId ? `call-pane-${paneId}` : undefined}
       className={cn(
-        "flex min-h-0 min-w-0 flex-col",
+        "call-stage-pane flex min-h-0 min-w-0 flex-col",
         surface && "overflow-hidden rounded-[16px] border border-line bg-white",
-        !reduced && "call-stage-pane-in"
+        !reduced && "call-stage-pane-in",
+        settling && sized && "is-settling"
       )}
       style={
         {
-          flex: `${grow} 1 0px`,
+          flex: sized
+            ? `0 0 ${widthPx}px`
+            : `${fraction != null ? Math.round(fraction * 100) : grow} 1 0px`,
           "--pane-delay": `${PANE_REVEAL_DELAYS_MS[index] ?? 0}ms`,
         } as CSSProperties
       }

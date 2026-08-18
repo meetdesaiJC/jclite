@@ -1,19 +1,35 @@
 /**
- * Integrations & Actions — the permission layer, not a content type. Admins
- * say what Agent Assist is allowed to do in a connected system; Guidance and
- * live conversation only ever propose actions from what is enabled here.
+ * Actions — independent, reusable work an agent can perform in a connected
+ * system. They live alongside Scripts, Response Cards, and Live Coaching, but
+ * they are not a property of any of those. Actions fire from conversation
+ * moments; Response Cards never attach or configure them.
  */
 
-export type IntegrationId = "hubspot" | "salesforce" | "zendesk";
+import type { DropdownListItem } from "@/components/Dropdown";
+import { TEAM_MEMBERS, USER_GROUPS } from "./guidanceData";
 
-export type CapabilityGroup = "Contacts" | "Deals" | "Tasks" | "Tickets" | "Calendar";
+export type IntegrationId =
+  | "hubspot"
+  | "salesforce"
+  | "zendesk"
+  | "pipedrive";
+
+export type CapabilityGroup =
+  | "Contacts"
+  | "Deals"
+  | "Tasks"
+  | "Tickets"
+  | "Notes"
+  | "Companies";
 
 export interface IntegrationCapability {
   id: string;
   group: CapabilityGroup;
   label: string;
-  /** What the agent sees on the action card, e.g. "Update HubSpot". */
+  /** Verb on the agent's confirm button, e.g. "Update HubSpot". */
   actionVerb: string;
+  /** Objects this operation can target. Empty = the operation is the object. */
+  objects?: string[];
   enabled: boolean;
 }
 
@@ -21,7 +37,6 @@ export interface Integration {
   id: IntegrationId;
   name: string;
   connected: boolean;
-  /** Shown when the integration is not connected. */
   connectHint: string;
   capabilities: IntegrationCapability[];
 }
@@ -31,35 +46,15 @@ export const SEED_INTEGRATIONS: Integration[] = [
     id: "hubspot",
     name: "HubSpot",
     connected: true,
-    connectHint: "Connect HubSpot to log calls and update records from a call.",
+    connectHint: "Connect HubSpot to update records from a call.",
     capabilities: [
       {
-        id: "hs-contact-property",
-        group: "Contacts",
-        label: "Update property",
+        id: "hs-update-property",
+        group: "Deals",
+        label: "Update a record",
         actionVerb: "Update HubSpot",
+        objects: ["Deal", "Contact", "Company"],
         enabled: true,
-      },
-      {
-        id: "hs-contact-note",
-        group: "Contacts",
-        label: "Add note",
-        actionVerb: "Add HubSpot note",
-        enabled: true,
-      },
-      {
-        id: "hs-deal-stage",
-        group: "Deals",
-        label: "Update stage",
-        actionVerb: "Move HubSpot deal",
-        enabled: true,
-      },
-      {
-        id: "hs-deal-property",
-        group: "Deals",
-        label: "Update property",
-        actionVerb: "Update HubSpot deal",
-        enabled: false,
       },
       {
         id: "hs-task",
@@ -69,33 +64,73 @@ export const SEED_INTEGRATIONS: Integration[] = [
         enabled: true,
       },
       {
-        id: "hs-ticket",
-        group: "Tickets",
-        label: "Create ticket",
-        actionVerb: "Create HubSpot ticket",
+        id: "hs-contact-note",
+        group: "Notes",
+        label: "Create note",
+        actionVerb: "Add HubSpot note",
         enabled: true,
+      },
+      {
+        id: "hs-send-email",
+        group: "Contacts",
+        label: "Send email",
+        actionVerb: "Send email",
+        objects: ["Contact"],
+        enabled: true,
+      },
+      {
+        id: "hs-update-deal",
+        group: "Deals",
+        label: "Update deal",
+        actionVerb: "Update HubSpot deal",
+        objects: ["Deal"],
+        enabled: false,
+      },
+      {
+        id: "hs-update-contact",
+        group: "Contacts",
+        label: "Update contact",
+        actionVerb: "Update HubSpot",
+        objects: ["Contact"],
+        enabled: false,
+      },
+      {
+        id: "hs-update-company",
+        group: "Companies",
+        label: "Update company",
+        actionVerb: "Update HubSpot company",
+        objects: ["Company"],
+        enabled: false,
       },
     ],
   },
   {
     id: "salesforce",
     name: "Salesforce",
-    connected: false,
+    connected: true,
     connectHint: "Connect Salesforce to update opportunities without leaving the call.",
     capabilities: [
-      {
-        id: "sf-contact-property",
-        group: "Contacts",
-        label: "Update field",
-        actionVerb: "Update Salesforce",
-        enabled: false,
-      },
       {
         id: "sf-task",
         group: "Tasks",
         label: "Create task",
         actionVerb: "Create Salesforce task",
-        enabled: false,
+        enabled: true,
+      },
+      {
+        id: "sf-event",
+        group: "Tasks",
+        label: "Schedule meeting",
+        actionVerb: "Schedule meeting",
+        enabled: true,
+      },
+      {
+        id: "sf-contact-property",
+        group: "Contacts",
+        label: "Update a record",
+        actionVerb: "Update Salesforce",
+        objects: ["Contact", "Opportunity", "Account"],
+        enabled: true,
       },
     ],
   },
@@ -110,7 +145,30 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Tickets",
         label: "Create ticket",
         actionVerb: "Create Zendesk ticket",
-        enabled: false,
+        enabled: true,
+      },
+    ],
+  },
+  {
+    id: "pipedrive",
+    name: "Pipedrive",
+    connected: false,
+    connectHint: "Connect Pipedrive to update deals from a call.",
+    capabilities: [
+      {
+        id: "pd-update-property",
+        group: "Deals",
+        label: "Update a record",
+        actionVerb: "Update Pipedrive",
+        objects: ["Deal", "Person", "Organization"],
+        enabled: true,
+      },
+      {
+        id: "pd-activity",
+        group: "Tasks",
+        label: "Create activity",
+        actionVerb: "Create Pipedrive activity",
+        enabled: true,
       },
     ],
   },
@@ -137,25 +195,412 @@ export function enabledCapabilityCount(integration: Integration): number {
   return integration.capabilities.filter((item) => item.enabled).length;
 }
 
-/** Every capability an admin could attach to Guidance right now. */
-export function availableCapabilities(integrations: Integration[]): {
-  integration: Integration;
-  capability: IntegrationCapability;
-}[] {
-  return integrations
-    .filter((integration) => integration.connected)
-    .flatMap((integration) =>
-      integration.capabilities
-        .filter((capability) => capability.enabled)
-        .map((capability) => ({ integration, capability }))
-    );
+export function operationsForIntegration(
+  integration: Integration
+): IntegrationCapability[] {
+  if (!integration.connected) return [];
+  return integration.capabilities.filter((item) => item.enabled);
 }
 
 // ---------------------------------------------------------------------------
-// Suggested actions
+// Values written by an Action
 // ---------------------------------------------------------------------------
 
-/** One row in the review sheet — label plus the value being written. */
+export type ConversationVariableId =
+  | "competitor_name"
+  | "customer_name"
+  | "email"
+  | "phone"
+  | "company"
+  | "product_mentioned";
+
+export type ActionValueSource =
+  | { kind: "fixed"; value: string }
+  | { kind: "from_conversation"; extractPrompt: string };
+
+
+export const VALUE_SOURCE_OPTIONS: DropdownListItem[] = [
+  { value: "from_conversation", label: "From conversation" },
+  { value: "fixed", label: "Fixed value" },
+];
+
+export function defaultExtractPrompt(property: string): string {
+  const key = property.trim().toLowerCase();
+  if (key === "competitor") {
+    return "The competitor the customer is currently using or evaluating.";
+  }
+  if (key === "subject") {
+    return "A short subject that captures what the customer needs next.";
+  }
+  if (key === "note") {
+    return "A concise note summarizing what was discussed.";
+  }
+  if (key) return `The ${key} mentioned in the conversation.`;
+  return "";
+}
+
+export function suggestedAgentLabel(
+  action: { property: string; capabilityId: string },
+  capability?: IntegrationCapability
+): string {
+  const property = action.property.trim();
+  if (capability?.label.toLowerCase().startsWith("create")) {
+    return capability.label;
+  }
+  if (property) return `Update ${property.toLowerCase()}`;
+  if (capability?.label.toLowerCase().startsWith("update")) {
+    return "Update record";
+  }
+  return capability?.label ?? "";
+}
+
+export function suggestedInternalName(
+  integrationName: string,
+  agentLabel: string
+): string {
+  if (!agentLabel.trim()) return "";
+  return `${integrationName} · ${agentLabel.trim()}`;
+}
+
+export function capabilityNeedsRecord(
+  capability?: IntegrationCapability
+): boolean {
+  return Boolean(capability?.objects && capability.objects.length > 0);
+}
+
+export function defaultPropertyForCapability(
+  capability?: IntegrationCapability
+): string {
+  if (!capability) return "";
+  const label = capability.label.toLowerCase();
+  if (label.includes("task") || label.includes("ticket") || label.includes("activity")) {
+    return "Subject";
+  }
+  if (label.includes("note")) return "Note";
+  return "";
+}
+
+export function previewSampleUtterance(action: {
+  detectExamples: string[];
+  property: string;
+}): string {
+  const fromExamples = action.detectExamples.find((item) => item.trim());
+  if (fromExamples) return fromExamples;
+  if (action.property.toLowerCase() === "competitor") {
+    return "We're also evaluating Dialpad.";
+  }
+  return "We're also evaluating Dialpad.";
+}
+
+export function extractFromConversation(
+  extractPrompt: string,
+  utterance: string,
+  fallbacks: { customerName?: string; company?: string } = {}
+): string | undefined {
+  if (!extractPrompt.trim()) return undefined;
+  const hay = extractPrompt.toLowerCase();
+  if (/\bcompetitor/.test(hay)) {
+    return extractVariableValue("competitor_name", utterance, fallbacks);
+  }
+  if (/\bemail/.test(hay)) {
+    return extractVariableValue("email", utterance, fallbacks);
+  }
+  if (/\bphone/.test(hay)) {
+    return extractVariableValue("phone", utterance, fallbacks);
+  }
+  if (/\bcompany/.test(hay)) {
+    return extractVariableValue("company", utterance, fallbacks);
+  }
+  if (/\bproduct/.test(hay)) {
+    return extractVariableValue("product_mentioned", utterance, fallbacks);
+  }
+  if (/\bname|customer/.test(hay)) {
+    return extractVariableValue("customer_name", utterance, fallbacks);
+  }
+  return (
+    extractVariableValue("competitor_name", utterance, fallbacks) ??
+    extractVariableValue("email", utterance, fallbacks)
+  );
+}
+
+export function previewExtractedValue(action: {
+  property: string;
+  detectExamples: string[];
+  value: ActionValueSource;
+}): string {
+  if (action.value.kind === "fixed") return action.value.value.trim();
+  const sample = previewSampleUtterance(action);
+  return (
+    extractFromConversation(action.value.extractPrompt, sample) ??
+    (action.property.toLowerCase() === "competitor" ? "Dialpad" : "")
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Admin-configured Action
+// ---------------------------------------------------------------------------
+
+export type ActionTriggerKind = "ai_recommended";
+
+export type ActionAssignmentScope = "everyone" | "teams" | "users";
+
+export type ActionPublishStatus = "active" | "inactive";
+
+export interface AgentAction {
+  id: string;
+  name: string;
+  /** What the agent sees during a live conversation. */
+  agentLabel: string;
+  description: string;
+  integrationId: IntegrationId;
+  capabilityId: string;
+  object: string;
+  property: string;
+  value: ActionValueSource;
+  trigger: ActionTriggerKind;
+  detectWhen: string;
+  detectExamples: string[];
+  assignmentScope: ActionAssignmentScope;
+  teamMembers: string[];
+  userGroups: string[];
+  /** External writes require agent confirmation by default. */
+  requiresConfirmation: boolean;
+  status: ActionPublishStatus;
+  updated: string;
+}
+
+export function createEmptyAction(): AgentAction {
+  return {
+    id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: "",
+    agentLabel: "",
+    description: "",
+    integrationId: "hubspot",
+    capabilityId: "",
+    object: "",
+    property: "",
+    value: { kind: "from_conversation", extractPrompt: "" },
+    trigger: "ai_recommended",
+    detectWhen: "",
+    detectExamples: [],
+    assignmentScope: "everyone",
+    teamMembers: [],
+    userGroups: [],
+    requiresConfirmation: true,
+    status: "active",
+    updated: "Just now",
+  };
+}
+
+export function cloneAction(action: AgentAction): AgentAction {
+  return {
+    ...action,
+    id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: `${action.name} (copy)`,
+    status: "inactive",
+    updated: "Just now",
+  };
+}
+
+export const SEED_ACTIONS: AgentAction[] = [
+  {
+    id: "act-update-competitor",
+    name: "HubSpot · Update competitor",
+    agentLabel: "Update competitor",
+    description:
+      "Update the competitor being evaluated on the associated HubSpot deal.",
+    integrationId: "hubspot",
+    capabilityId: "hs-update-property",
+    object: "Deal",
+    property: "Competitor",
+    value: {
+      kind: "from_conversation",
+      extractPrompt:
+        "The competitor the customer is currently using or evaluating.",
+    },
+    trigger: "ai_recommended",
+    detectWhen: "Customer mentions a competitor they use or are evaluating",
+    detectExamples: [
+      "We currently use Aircall.",
+      "We're also evaluating Dialpad.",
+    ],
+    assignmentScope: "teams",
+    teamMembers: [],
+    userGroups: ["sales"],
+    requiresConfirmation: true,
+    status: "active",
+    updated: "2 days ago",
+  },
+  {
+    id: "act-followup-task",
+    name: "Salesforce · Create follow-up task",
+    agentLabel: "Create follow-up task",
+    description: "Log a follow-up task on the Salesforce contact after the call.",
+    integrationId: "salesforce",
+    capabilityId: "sf-task",
+    object: "Task",
+    property: "Subject",
+    value: { kind: "fixed", value: "Working session with ops lead" },
+    trigger: "ai_recommended",
+    detectWhen:
+      "The customer agrees to a follow-up, next step, or working session.",
+    detectExamples: [
+      "Let's set up a working session.",
+      "Can we follow up next week?",
+    ],
+    assignmentScope: "teams",
+    teamMembers: [],
+    userGroups: ["sales"],
+    requiresConfirmation: true,
+    status: "active",
+    updated: "Yesterday",
+  },
+  {
+    id: "act-send-comparison",
+    name: "HubSpot · Send comparison",
+    agentLabel: "Send Aircall comparison",
+    description: "Email the Aircall comparison one-pager to the contact on the call.",
+    integrationId: "hubspot",
+    capabilityId: "hs-send-email",
+    object: "Contact",
+    property: "Asset",
+    value: { kind: "fixed", value: "Aircall comparison one-pager" },
+    trigger: "ai_recommended",
+    detectWhen: "The agent offers to send a comparison, recap, or one-pager.",
+    detectExamples: ["I'll send you a one-page comparison."],
+    assignmentScope: "teams",
+    teamMembers: [],
+    userGroups: ["sales"],
+    requiresConfirmation: true,
+    status: "active",
+    updated: "Today",
+  },
+  {
+    id: "act-schedule-meeting",
+    name: "Salesforce · Schedule meeting",
+    agentLabel: "Schedule working session",
+    description: "Book a working session on the Salesforce contact when a time is agreed.",
+    integrationId: "salesforce",
+    capabilityId: "sf-event",
+    object: "Event",
+    property: "Subject",
+    value: { kind: "fixed", value: "Working session with ops lead" },
+    trigger: "ai_recommended",
+    detectWhen: "The customer agrees to a working session or names a time to meet.",
+    detectExamples: ["Thursday afternoon is open.", "Let's lock a time this week."],
+    assignmentScope: "teams",
+    teamMembers: [],
+    userGroups: ["sales"],
+    requiresConfirmation: true,
+    status: "active",
+    updated: "Today",
+  },
+  {
+    id: "act-support-ticket",
+    name: "Zendesk · Create support ticket",
+    agentLabel: "Create support ticket",
+    description: "Open a Zendesk ticket when a billing or access issue needs follow-up.",
+    integrationId: "zendesk",
+    capabilityId: "zd-ticket",
+    object: "Ticket",
+    property: "Subject",
+    value: {
+      kind: "from_conversation",
+      extractPrompt: "The issue the customer needs a ticket for.",
+    },
+    trigger: "ai_recommended",
+    detectWhen:
+      "The customer reports a billing issue, duplicate charge, or needs a support ticket.",
+    detectExamples: ["I was charged twice.", "Can I get a refund?"],
+    assignmentScope: "teams",
+    teamMembers: [],
+    userGroups: ["support"],
+    requiresConfirmation: true,
+    status: "active",
+    updated: "5 days ago",
+  },
+];
+
+export function liveActions(actions: AgentAction[]): AgentAction[] {
+  return actions.filter((item) => item.status === "active");
+}
+
+export function actionLibraryStatus(
+  action: AgentAction,
+  integrations: Integration[]
+): "active" | "inactive" | "needs_attention" {
+  if (action.status === "inactive") return "inactive";
+  const integration = integrationById(integrations, action.integrationId);
+  if (!integration?.connected) return "needs_attention";
+  const capability = capabilityById(
+    integrations,
+    action.integrationId,
+    action.capabilityId
+  );
+  if (!capability?.enabled) return "needs_attention";
+  return "active";
+}
+
+export function actionAssignees(action: AgentAction): {
+  id: string;
+  name: string;
+  kind: "member" | "group";
+}[] {
+  if (action.assignmentScope === "everyone") return [];
+  const groups = USER_GROUPS.filter(
+    (option) =>
+      (!option.type || option.type === "option") &&
+      action.userGroups.includes(option.value)
+  ).map((option) => ({
+    id: option.value,
+    name: option.label,
+    kind: "group" as const,
+  }));
+  const members = TEAM_MEMBERS.filter(
+    (option) =>
+      (!option.type || option.type === "option") &&
+      action.teamMembers.includes(option.value)
+  ).map((option) => ({
+    id: option.value,
+    name: option.label,
+    kind: "member" as const,
+  }));
+  return [...groups, ...members];
+}
+
+export function actionAssignmentLabel(action: AgentAction): string {
+  if (action.assignmentScope === "everyone") return "Everyone";
+  const people = actionAssignees(action);
+  if (people.length === 0) return "Unassigned";
+  return people.map((person) => person.name).join(", ");
+}
+
+export const ACTION_OBJECT_OPTIONS: DropdownListItem[] = [
+  { value: "Deal", label: "Deal" },
+  { value: "Contact", label: "Contact" },
+  { value: "Company", label: "Company" },
+  { value: "Opportunity", label: "Opportunity" },
+  { value: "Account", label: "Account" },
+  { value: "Person", label: "Person" },
+  { value: "Organization", label: "Organization" },
+  { value: "Task", label: "Task" },
+  { value: "Event", label: "Event" },
+  { value: "Ticket", label: "Ticket" },
+];
+
+export const ACTION_PROPERTY_OPTIONS: DropdownListItem[] = [
+  { value: "Competitor", label: "Competitor" },
+  { value: "Lead status", label: "Lead status" },
+  { value: "Stage", label: "Stage" },
+  { value: "Subject", label: "Subject" },
+  { value: "Priority", label: "Priority" },
+  { value: "Note", label: "Note" },
+];
+
+// ---------------------------------------------------------------------------
+// Suggested actions (live agent runtime)
+// ---------------------------------------------------------------------------
+
 export interface ActionField {
   label: string;
   value: string;
@@ -163,67 +608,24 @@ export interface ActionField {
   missing?: boolean;
 }
 
-export type ActionOrigin = "guidance" | "conversation";
+export type ActionOrigin = "ai" | "guidance" | "always" | "conversation";
 
 export interface SuggestedAction {
   id: string;
+  actionId: string;
   integrationId: IntegrationId;
   capabilityId: string;
-  /** Button-level title, e.g. "Update HubSpot". */
   title: string;
-  /** One line under the title, e.g. "Competitor → Aircall". */
   summary: string;
-  /** Record the write lands on. */
   recordLabel: string;
   recordValue: string;
   fields: ActionField[];
   origin: ActionOrigin;
-  /** Which guidance card this hangs off, when it came from one. */
   guidanceId?: string;
   requiresConfirmation: boolean;
-  /** Set to make the integration fail on execute, so retry can be shown. */
   simulateFailure?: boolean;
-}
-
-/** Admin-side config that lives on a Guidance item. */
-export interface GuidanceActionConfig {
-  integrationId: IntegrationId;
-  capabilityId: string;
-  /** Property or field name being written. */
-  property: string;
-  value: string;
-  requiresConfirmation: boolean;
-}
-
-export function actionFromGuidanceConfig(
-  config: GuidanceActionConfig,
-  integrations: Integration[],
-  context: { guidanceId: string; recordLabel: string; recordValue: string }
-): SuggestedAction | null {
-  const capability = capabilityById(
-    integrations,
-    config.integrationId,
-    config.capabilityId
-  );
-  const integration = integrationById(integrations, config.integrationId);
-  if (!capability || !integration?.connected || !capability.enabled) return null;
-
-  return {
-    id: `act-${context.guidanceId}-${config.capabilityId}`,
-    integrationId: config.integrationId,
-    capabilityId: config.capabilityId,
-    title: capability.actionVerb,
-    summary: `${config.property} → ${config.value}`,
-    recordLabel: context.recordLabel,
-    recordValue: context.recordValue,
-    fields: [
-      { label: "Property", value: config.property },
-      { label: "Suggested value", value: config.value },
-    ],
-    origin: "guidance",
-    guidanceId: context.guidanceId,
-    requiresConfirmation: config.requiresConfirmation,
-  };
+  simulatePermissionDenied?: boolean;
+  viewUrl?: string;
 }
 
 export type ActionState =
@@ -232,14 +634,266 @@ export type ActionState =
   | "executing"
   | "done"
   | "failed"
+  | "permission_denied"
   | "dismissed";
 
 export function actionHasMissingFields(action: SuggestedAction): boolean {
   return action.fields.some((field) => field.missing);
 }
 
-export function actionOriginLabel(action: SuggestedAction): string {
-  return action.origin === "guidance"
-    ? "Recommended by guidance"
-    : "Detected from live conversation";
+const COMPETITOR_NAMES = [
+  "Aircall",
+  "Dialpad",
+  "RingCentral",
+  "Talkdesk",
+  "Zoom Phone",
+  "8x8",
+];
+
+export function extractVariableValue(
+  variableId: ConversationVariableId,
+  utterance: string,
+  fallbacks: { customerName?: string; company?: string } = {}
+): string | undefined {
+  const hay = utterance.toLowerCase();
+  switch (variableId) {
+    case "competitor_name": {
+      const hit = COMPETITOR_NAMES.find((name) =>
+        hay.includes(name.toLowerCase())
+      );
+      return hit;
+    }
+    case "customer_name":
+      return fallbacks.customerName;
+    case "company":
+      return fallbacks.company;
+    case "email": {
+      const match = utterance.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+      return match?.[0];
+    }
+    case "phone": {
+      const match = utterance.match(
+        /(\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/
+      );
+      return match?.[0];
+    }
+    case "product_mentioned":
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
+export function suggestedActionFromLibrary(
+  action: AgentAction,
+  integrations: Integration[],
+  context: {
+    recordLabel: string;
+    recordValue: string;
+    utterance?: string;
+    customerName?: string;
+    company?: string;
+    origin?: ActionOrigin;
+    guidanceId?: string;
+  }
+): SuggestedAction | null {
+  const integration = integrationById(integrations, action.integrationId);
+  const capability = capabilityById(
+    integrations,
+    action.integrationId,
+    action.capabilityId
+  );
+  if (!integration?.connected || !capability?.enabled) return null;
+  if (action.status !== "active") return null;
+
+  let proposed = "";
+  let missing = false;
+  if (action.value.kind === "fixed") {
+    proposed = action.value.value;
+  } else {
+    proposed =
+      extractFromConversation(action.value.extractPrompt, context.utterance ?? "", {
+        customerName: context.customerName,
+        company: context.company,
+      }) ?? "";
+    missing = !proposed.trim();
+  }
+
+  const objectLabel = action.object || integration.name;
+  const property = action.property || capability.label;
+  const summary = missing
+    ? property
+    : `${property} · ${proposed}`;
+
+  return {
+    id: action.id,
+    actionId: action.id,
+    integrationId: action.integrationId,
+    capabilityId: action.capabilityId,
+    title: action.agentLabel || action.name,
+    summary,
+    recordLabel: context.recordLabel || objectLabel,
+    recordValue: context.recordValue,
+    fields: [
+      { label: "Property", value: property },
+      {
+        label: "New value",
+        value: proposed,
+        missing,
+      },
+    ],
+    origin: context.origin ?? "ai",
+    guidanceId: context.guidanceId,
+    requiresConfirmation: action.requiresConfirmation,
+    viewUrl: integrationDeepLink(action.integrationId),
+  };
+}
+
+export function integrationDeepLink(id: IntegrationId): string | undefined {
+  if (id === "hubspot") return "https://app.hubspot.com";
+  if (id === "salesforce") return "https://login.salesforce.com";
+  if (id === "zendesk") return "https://www.zendesk.com";
+  if (id === "pipedrive") return "https://app.pipedrive.com";
+  return undefined;
+}
+
+export function integrationWriteLabel(
+  action: SuggestedAction,
+  integrations: Integration[]
+): string {
+  const name =
+    integrationById(integrations, action.integrationId)?.name ??
+    action.integrationId;
+  const capability = capabilityById(
+    integrations,
+    action.integrationId,
+    action.capabilityId
+  );
+  if (capability?.label.toLowerCase().startsWith("create")) {
+    return `Create ${name} ${capability.label.replace(/^Create /i, "").toLowerCase()}`;
+  }
+  if (capability?.label.toLowerCase().startsWith("send")) {
+    return capability.actionVerb;
+  }
+  if (/schedule|meeting/i.test(capability?.label ?? "")) {
+    return capability?.actionVerb ?? `Schedule in ${name}`;
+  }
+  return `Update ${name}`;
+}
+
+export function integrationDoneLabel(
+  action: SuggestedAction,
+  integrations: Integration[]
+): string {
+  const name =
+    integrationById(integrations, action.integrationId)?.name ??
+    action.integrationId;
+  const capability = capabilityById(
+    integrations,
+    action.integrationId,
+    action.capabilityId
+  );
+  if (capability?.label.toLowerCase().startsWith("create")) {
+    return `${name} ${capability.label.replace(/^Create /i, "").toLowerCase()} created`;
+  }
+  if (capability?.label.toLowerCase().startsWith("send")) {
+    return "Email sent";
+  }
+  if (/schedule|meeting/i.test(capability?.label ?? "")) {
+    return "Meeting scheduled";
+  }
+  return `${name} updated`;
+}
+
+export function integrationFailedLabel(
+  action: SuggestedAction,
+  integrations: Integration[]
+): string {
+  const name =
+    integrationById(integrations, action.integrationId)?.name ??
+    action.integrationId;
+  return `Couldn’t update ${name}`;
+}
+
+const STOP_WORDS = new Set([
+  "this",
+  "that",
+  "with",
+  "from",
+  "your",
+  "what",
+  "when",
+  "does",
+  "have",
+  "about",
+  "should",
+  "would",
+  "could",
+  "customer",
+  "mentions",
+  "currently",
+  "using",
+  "evaluating",
+  "they",
+  "are",
+  "the",
+  "that",
+  "also",
+]);
+
+function tokens(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function distinctiveTokens(text: string): string[] {
+  return tokens(text).filter(
+    (word) => !STOP_WORDS.has(word) && (word.length >= 4 || word === "sms")
+  );
+}
+
+export function actionMatchScore(action: AgentAction, utterance: string): number {
+  const hay = new Set(distinctiveTokens(utterance));
+  if (hay.size === 0) return 0;
+  const source = [action.detectWhen, action.name, ...action.detectExamples].join(
+    " "
+  );
+  return distinctiveTokens(source).reduce(
+    (score, token) => score + (hay.has(token) ? 1 : 0),
+    0
+  );
+}
+
+export function actionMatchesUtterance(
+  action: AgentAction,
+  utterance: string
+): boolean {
+  if (action.trigger !== "ai_recommended") return false;
+  if (actionMatchScore(action, utterance) >= 1) return true;
+  return COMPETITOR_NAMES.some(
+    (name) =>
+      utterance.toLowerCase().includes(name.toLowerCase()) &&
+      (action.property.toLowerCase() === "competitor" ||
+        action.name.toLowerCase().includes("competitor"))
+  );
+}
+
+export function patchSuggestedValue(
+  current: SuggestedAction,
+  next: SuggestedAction
+): SuggestedAction {
+  const nextValue = next.fields.find((field) => field.label === "New value");
+  if (!nextValue || nextValue.missing) return current;
+  const currentValue = current.fields.find((field) => field.label === "New value");
+  if (currentValue?.value === nextValue.value) return current;
+  return {
+    ...current,
+    summary: next.summary,
+    fields: current.fields.map((field) =>
+      field.label === "New value" ? nextValue : field
+    ),
+  };
 }

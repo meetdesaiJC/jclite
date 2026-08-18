@@ -3,6 +3,7 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconCircleCheckFilled,
+  IconMessageCircle2,
 } from "@/components/Icon";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
@@ -162,12 +163,28 @@ export function GuidanceSectionLabel({
   return (
     <p
       className={cn(
-        "text-label-sm font-medium tracking-[0.04em] text-disabled-fg uppercase",
+        "text-label-sm font-medium tracking-[0.04em] text-muted-foreground uppercase",
         className
       )}
     >
       {children}
     </p>
+  );
+}
+
+function AiGlyphGradient({ id }: { id: string }) {
+  return (
+    <linearGradient
+      id={id}
+      x1="-0.979"
+      y1="-5.715"
+      x2="20.879"
+      y2="-3.737"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stopColor="#3318FF" />
+      <stop offset="1" stopColor="#B46DFF" />
+    </linearGradient>
   );
 }
 
@@ -197,19 +214,25 @@ export function GuidanceSparklesIcon({
         strokeLinejoin="round"
       />
       <defs>
-        <linearGradient
-          id={id}
-          x1="-0.979"
-          y1="-5.715"
-          x2="20.879"
-          y2="-3.737"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop stopColor="#3318FF" />
-          <stop offset="1" stopColor="#B46DFF" />
-        </linearGradient>
+        <AiGlyphGradient id={id} />
       </defs>
     </svg>
+  );
+}
+
+/** Outlined speech bubble — Design System `message-circle-2`, brand stroke. */
+export function GuidanceSpeechBubbleIcon({
+  size = 16,
+  className,
+}: {
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <IconMessageCircle2
+      size={size === 20 || size === 24 ? size : 16}
+      className={className}
+    />
   );
 }
 
@@ -221,19 +244,24 @@ export function GuidanceAiHeader({
   title,
   expanded,
   onToggle,
+  badge,
   className,
 }: {
   title: string;
   expanded?: boolean;
   onToggle?: () => void;
+  /** Card state at a glance — New, Relevant again, Earlier. */
+  badge?: React.ReactNode;
   className?: string;
 }) {
+  const open = expanded !== false;
   const row = cn(
-    "guidance-ai-header flex w-full items-center gap-1 overflow-hidden px-4 py-1.5 text-left",
+    "flex w-full items-center gap-1 overflow-hidden px-4 py-1.5 text-left",
+    open && "bg-info-secondary",
     className
   );
   const label = (
-    <span className="guidance-ai-title min-w-0 flex-1 truncate text-label-sm font-medium">
+    <span className="min-w-0 flex-1 truncate text-label-md font-medium text-brand">
       {title}
     </span>
   );
@@ -241,8 +269,9 @@ export function GuidanceAiHeader({
   if (!onToggle) {
     return (
       <div className={row}>
-        <GuidanceSparklesIcon className="size-4 shrink-0" />
+        <GuidanceSpeechBubbleIcon className="size-4 shrink-0 text-brand" />
         {label}
+        {badge}
       </div>
     );
   }
@@ -261,8 +290,9 @@ export function GuidanceAiHeader({
         "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24"
       )}
     >
-      <GuidanceSparklesIcon className="size-4 shrink-0" />
+      <GuidanceSpeechBubbleIcon className="size-4 shrink-0 text-brand" />
       {label}
+      {badge}
       <span
         className="-mr-1 flex size-6 shrink-0 items-center justify-center text-muted-foreground"
         aria-hidden="true"
@@ -316,7 +346,7 @@ export function GuidanceTalkingPoints({
           >
             <IconCircleCheckFilled
               size={16}
-              className="mt-0.5 size-4 shrink-0 text-success"
+              className="mt-0.5 size-4 shrink-0 text-brand"
             />
             <span className="min-w-0 flex-1 text-pretty text-label-md font-medium text-foreground">
               {point}
@@ -453,13 +483,14 @@ export interface GuidanceCardProps {
   className?: string;
 }
 
-/** Shared AI tone — every guidance card uses the same wash and accent. */
+/** Shared response-card tone — solid brand blue, no gradient wash. */
 export const GUIDANCE_AI_THEME = {
-  card: "relative overflow-hidden rounded-lg border border-brand bg-indigo-50",
-  rail: "absolute inset-y-0 left-0 w-[3px] bg-ai",
-  badge: "bg-white/80 text-ai",
-  tick: "bg-ai",
-  say: "border-ai-border bg-white",
+  card: "relative overflow-hidden rounded-lg border border-brand bg-white",
+  cardCollapsed: "relative overflow-hidden rounded-lg border border-line bg-white",
+  rail: "absolute inset-y-0 left-0 w-[3px] bg-brand",
+  badge: "bg-white/80 text-brand",
+  tick: "bg-brand",
+  say: "border-info-border bg-white",
   feedback: "border-line bg-white",
 } as const;
 

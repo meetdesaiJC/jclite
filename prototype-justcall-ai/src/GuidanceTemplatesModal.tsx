@@ -1,4 +1,5 @@
 import { Modal } from "@/components/Modal";
+import { IconSparkles } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import {
   GUIDANCE_TEMPLATES,
@@ -7,7 +8,9 @@ import {
 
 export type GuidanceStartChoice =
   | { type: "template"; templateId: GuidanceTemplateId }
-  | { type: "scratch" };
+  | { type: "scratch" }
+  /** AI drafts the whole thing from selected knowledge bases (§13). */
+  | { type: "generate" };
 
 const choiceCardClass =
   "rounded-lg border border-line bg-white text-left transition-[border-color,background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-brand/40 hover:bg-brand-subtle/40 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24";
@@ -46,7 +49,7 @@ export function GuidanceTemplatesModal({
       onClose={onClose}
       size="md"
       title="What would you like to help agents with?"
-      description="Choose a starting point. You can customize everything later."
+      description="Start from a template, write it yourself, or let AI draft it from your knowledge bases. You can change everything later."
     >
       <div className="flex flex-col gap-5">
         <div className="grid grid-cols-2 items-stretch gap-2">
@@ -77,23 +80,43 @@ export function GuidanceTemplatesModal({
           <span className="h-px flex-1 bg-line" />
         </div>
 
-        <button
-          type="button"
-          onClick={() => onSelect({ type: "scratch" })}
-          className={cn("flex items-start gap-3 px-4 py-3.5", choiceCardClass)}
-        >
-          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[6px] bg-secondary-bg text-foreground">
-            <PlusIcon size={20} />
-          </span>
-          <span className="min-w-0">
-            <span className="block text-label-md-semi text-foreground">
-              Start from scratch
+        <div className="grid grid-cols-2 items-stretch gap-2">
+          <button
+            type="button"
+            onClick={() => onSelect({ type: "scratch" })}
+            className={cn("flex h-full items-start gap-3 px-4 py-3.5", choiceCardClass)}
+          >
+            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[6px] bg-secondary-bg text-foreground">
+              <PlusIcon size={20} />
             </span>
-            <span className="mt-0.5 block text-pretty text-paragraph-sm text-muted-foreground">
-              Write your own trigger, response, and talking points.
+            <span className="min-w-0">
+              <span className="block text-label-md-semi text-foreground">
+                Create manually
+              </span>
+              <span className="mt-0.5 block text-pretty text-paragraph-sm text-muted-foreground">
+                Write your own trigger, response, and talking points.
+              </span>
             </span>
-          </span>
-        </button>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onSelect({ type: "generate" })}
+            className={cn("flex h-full items-start gap-3 px-4 py-3.5", choiceCardClass)}
+          >
+            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[6px] bg-brand-subtle text-brand">
+              <IconSparkles size={20} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-label-md-semi text-foreground">
+                Generate from Knowledge
+              </span>
+              <span className="mt-0.5 block text-pretty text-paragraph-sm text-muted-foreground">
+                Pick knowledge bases and AI drafts it for you to review.
+              </span>
+            </span>
+          </button>
+        </div>
       </div>
     </Modal>
   );

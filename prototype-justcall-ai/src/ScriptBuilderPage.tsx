@@ -3,6 +3,7 @@ import { Button } from "@/components/Button";
 import { IconClose, IconEye } from "@/components/Icon";
 import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
+import { useAgentAssistTakeover } from "./agentAssistTakeover";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
 import { PlaybookEditor } from "./PlaybookEditor";
 import { ScriptPreviewModal } from "./ScriptTestPanel";
@@ -30,6 +31,7 @@ export interface ScriptBuilderPageProps {
 }
 
 export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderPageProps) {
+  useAgentAssistTakeover();
   const [playbook, setPlaybook] = React.useState<ScriptPlaybook>(() => {
     if (launch.type === "edit") return launch.playbook;
     if (launch.type === "template") return createPlaybookFromTemplate(launch.templateId);

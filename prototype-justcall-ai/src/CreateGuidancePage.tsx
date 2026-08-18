@@ -1,11 +1,11 @@
 import * as React from "react";
 import { Banner } from "@/components/Banner";
 import { Button } from "@/components/Button";
+import { Checkbox } from "@/components/Checkbox";
 import { Dropdown } from "@/components/Dropdown";
 import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
 import {
-  IconCircleCheckFilled,
   IconClose,
   IconEye,
   IconFile,
@@ -13,6 +13,7 @@ import {
   IconSparkles,
 } from "@/components/Icon";
 import { cn } from "@/lib/utils";
+import { useAgentAssistTakeover } from "./agentAssistTakeover";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
 import {
   GUIDANCE_TRIGGERED_BY_OPTIONS,
@@ -25,26 +26,18 @@ import {
   priorityForGuidance,
   proposeGuidanceFromKnowledge,
   stanceForGuidance,
-  testGuidanceAgainstSample,
   type GuidanceItem,
   type GuidanceResource,
   type GuidanceTemplateId,
   type GuidanceTriggeredBy,
 } from "./guidanceData";
 import {
-  SEED_INTEGRATIONS,
-  availableCapabilities,
-  capabilityById,
-  integrationById,
-  type GuidanceActionConfig,
-  type Integration,
-  type IntegrationId,
-} from "./actionsData";
-import {
   SEED_KNOWLEDGE_SOURCES,
+  knowledgeCoverageForTrigger,
   liveKnowledgeSources,
   type KnowledgeSourceRecord,
 } from "./knowledgeData";
+import { IconKnowledge } from "./LiveAgentAssistPanel";
 import { BattlecardThumb, GuidanceResourceModal } from "./GuidanceCard";
 import { LiveGuidanceCard } from "./LiveGuidance";
 
@@ -53,10 +46,12 @@ export interface CreateGuidancePageProps {
   /** Defaults to edit when `initial` is set, create otherwise. */
   mode?: "create" | "edit";
   templateId?: GuidanceTemplateId | null;
-  /** Sources AI can draft guidance from (§13). */
+  /** Sources AI can draft response cards from (§13). */
   knowledgeSources?: KnowledgeSourceRecord[];
-  /** Only capabilities the admin enabled can be attached as an action (§19). */
-  integrations?: Integration[];
+  /** Opens the AI drafting flow immediately — "Generate from Knowledge" (§13). */
+  startWithGenerate?: boolean;
+  /** Offered when Knowledge already covers the trigger. Optional escape hatch. */
+  onUseKnowledgeInstead?: () => void;
   onClose: () => void;
   onSave: (item: GuidanceItem) => void;
 }
@@ -159,21 +154,18 @@ export function CreateGuidancePage({
   mode,
   templateId = null,
   knowledgeSources = SEED_KNOWLEDGE_SOURCES,
-  integrations = SEED_INTEGRATIONS,
+  startWithGenerate = false,
+  onUseKnowledgeInstead,
   onClose,
   onSave,
 }: CreateGuidancePageProps) {
+  useAgentAssistTakeover();
   const isEditing = mode ? mode === "edit" : Boolean(initial);
   const placeholders = placeholdersForGuidance(templateId);
   const [draft, setDraft] = React.useState<GuidanceItem>(
     () => initial ?? createEmptyGuidance()
   );
-  const [advancedOpen, setAdvancedOpen] = React.useState(
-    () => Boolean(initial?.triggeredBy && initial.triggeredBy !== "customer")
-  );
-  const [generateOpen, setGenerateOpen] = React.useState(false);
-  const [testOpen, setTestOpen] = React.useState(false);
-  const [actionOpen, setActionOpen] = React.useState(false);
+  const [generateOpen, setGenerateOpen] = React.useState(startWithGenerate);
   const [linkOpen, setLinkOpen] = React.useState(false);
   const [linkName, setLinkName] = React.useState("");
   const [linkUrl, setLinkUrl] = React.useState("");
@@ -189,10 +181,25 @@ export function CreateGuidancePage({
     React.useState<GuidanceResource | null>(null);
   const imageInputRef = React.useRef<HTMLInputElement>(null);
 
+  const [keepGuidanceFor, setKeepGuidanceFor] = React.useState<string[]>([]);
+
   const patch = (partial: Partial<GuidanceItem>) => {
     setDraft((current) => ({ ...current, ...partial }));
     setTestPreviewOpen(false);
   };
+
+  /**
+   * Nothing here blocks the admin (§2). When the trigger reads like a factual
+   * question that Knowledge already answers, we say so once and let them pick;
+   * dismissing is remembered per matched answer so the hint never nags.
+   */
+  const coverage = React.useMemo(
+    () => knowledgeCoverageForTrigger(draft.trigger, knowledgeSources),
+    [draft.trigger, knowledgeSources]
+  );
+  const showCoverage = Boolean(
+    coverage && !keepGuidanceFor.includes(coverage.entry.id)
+  );
 
   const canSave =
     draft.name.trim().length > 0 &&
@@ -274,7 +281,7 @@ export function CreateGuidancePage({
     resetImageModal(false);
   };
 
-  const runTest = () => {
+  const openPreview = () => {
     if (!canSave) return;
     setTestPreviewOpen(true);
   };
@@ -292,24 +299,16 @@ export function CreateGuidancePage({
             <IconClose size={20} />
           </button>
           <h1 className="truncate text-heading-lg text-foreground">
-            {isEditing ? "Edit guidance" : "Create guidance"}
+            {isEditing ? "Edit response card" : "Create response card"}
           </h1>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Button
             variant="grey-outline"
             size="sm"
-            disabled={!draft.trigger.trim()}
-            onClick={() => setTestOpen(true)}
-          >
-            Test
-          </Button>
-          <Button
-            variant="grey-outline"
-            size="sm"
             disabled={!canSave}
             leftIcon={<IconEye size={16} />}
-            onClick={runTest}
+            onClick={openPreview}
           >
             Preview
           </Button>
@@ -339,16 +338,14 @@ export function CreateGuidancePage({
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-auto pr-1">
-          {/* Guidance is for the moments a business wants to control. Routine
-              questions belong in Knowledge, and saying so here keeps admins
-              from rebuilding their help centre one rule at a time. */}
+          {/* Response cards can cover anything the business wants control over —
+              including integrations and FAQs. AI drafting stays available
+              rather than being the thing that decides what's allowed. */}
           {!isEditing ? (
-            <div className="flex items-start gap-2 rounded-lg border border-info-border bg-info-secondary px-3 py-2.5">
-              <IconInfoCircle size={16} className="mt-px size-4 shrink-0 text-info" />
-              <p className="min-w-0 flex-1 text-pretty text-paragraph-sm text-foreground">
-                Use Guidance for important business moments — competitor
-                objections, pricing, cancellation, compliance, upsell. Factual
-                questions are answered automatically from Knowledge.
+            <div className="flex items-center gap-2 rounded-lg border border-line bg-secondary-bg px-3 py-2.5">
+              <p className="min-w-0 flex-1 text-pretty text-paragraph-sm text-muted-foreground">
+                Build a response card for anything you want agents to handle a
+                particular way — objections, policies, integrations, FAQs.
               </p>
               <Button
                 variant="link"
@@ -357,7 +354,7 @@ export function CreateGuidancePage({
                 leftIcon={<IconSparkles size={16} />}
                 onClick={() => setGenerateOpen(true)}
               >
-                Draft from Knowledge
+                Generate from Knowledge
               </Button>
             </div>
           ) : null}
@@ -365,11 +362,11 @@ export function CreateGuidancePage({
           <SectionCard>
             <div className="flex flex-col gap-2">
               <InputField
-                label="Guidance name"
+                label="Response card name"
                 placeholder={placeholders.name}
                 value={draft.name}
                 onChange={(e) => patch({ name: e.target.value })}
-                helpText="Give this guidance an internal name so your team can identify it."
+                helpText="Give this response card an internal name so your team can identify it."
                 helpIcon
                 clearable={false}
               />
@@ -387,43 +384,41 @@ export function CreateGuidancePage({
               />
               <HelpText>
                 Describe the conversation or customer intent that should trigger this
-                guidance.
+                response card.
               </HelpText>
+              {showCoverage && coverage ? (
+                <KnowledgeCoverageHint
+                  entryTitle={coverage.entry.title}
+                  sourceName={coverage.source.name}
+                  onUseKnowledge={onUseKnowledgeInstead}
+                  onContinue={() =>
+                    setKeepGuidanceFor((current) => [...current, coverage.entry.id])
+                  }
+                />
+              ) : null}
             </div>
 
-            <div className="flex flex-col gap-3">
-              <button
-                type="button"
-                aria-expanded={advancedOpen}
-                onClick={() => setAdvancedOpen((open) => !open)}
-                className="w-fit cursor-pointer text-label-md text-brand outline-none hover:text-brand-hover focus-visible:ring-2 focus-visible:ring-brand/24"
-              >
-                {advancedOpen ? "Hide advanced controls" : "Advanced controls"}
-              </button>
-              {advancedOpen ? (
-                <div className="flex flex-col gap-3 rounded-[4px] border border-line bg-secondary-bg p-3">
-                  <Dropdown
-                    label="Triggered by"
-                    searchable={false}
-                    options={GUIDANCE_TRIGGERED_BY_OPTIONS}
-                    value={guidanceTriggeredBy(draft)}
-                    onValueChange={(value) =>
-                      patch({
-                        triggeredBy: (Array.isArray(value)
-                          ? value[0]
-                          : value) as GuidanceTriggeredBy,
-                      })
-                    }
-                    className="w-full max-w-[240px]"
-                    triggerClassName="h-9"
-                  />
-                  <p className="text-pretty text-paragraph-sm text-muted-foreground">
-                    Who has to say it before this fires. Apply-to is set by the
-                    assignment on the left. CRM property, call stage, sentiment,
-                    and plan conditions are coming later.
-                  </p>
-                </div>
-              ) : null}
+            <div className="flex flex-col gap-2">
+              <Dropdown
+                label="Triggered by"
+                searchable={false}
+                options={GUIDANCE_TRIGGERED_BY_OPTIONS}
+                value={guidanceTriggeredBy(draft)}
+                onValueChange={(value) =>
+                  patch({
+                    triggeredBy: (Array.isArray(value)
+                      ? value[0]
+                      : value) as GuidanceTriggeredBy,
+                  })
+                }
+                className="w-full max-w-[240px]"
+                triggerClassName="h-9"
+              />
+              <HelpText>
+                Who has to say it before this fires. Apply-to is set by the
+                assignment on the left. CRM property, call stage, sentiment, and
+                plan conditions are coming later.
+              </HelpText>
             </div>
           </SectionCard>
 
@@ -567,30 +562,8 @@ export function CreateGuidancePage({
               </ul>
             )}
           </SectionCard>
-
-          <SectionCard
-            title="Recommended action"
-            description="Optionally propose one thing the agent can do in a connected system when this guidance fires. They always review before it runs."
-          >
-            <RecommendedActionEditor
-              config={draft.recommendedAction}
-              integrations={integrations}
-              onOpenPicker={() => setActionOpen(true)}
-              onChange={(recommendedAction) => patch({ recommendedAction })}
-            />
-          </SectionCard>
         </div>
       </div>
-
-      <ActionPickerModal
-        open={actionOpen}
-        integrations={integrations}
-        onClose={() => setActionOpen(false)}
-        onSelect={(config) => {
-          patch({ recommendedAction: config });
-          setActionOpen(false);
-        }}
-      />
 
       <GenerateFromKnowledgeModal
         open={generateOpen}
@@ -609,12 +582,6 @@ export function CreateGuidancePage({
           }));
           setGenerateOpen(false);
         }}
-      />
-
-      <GuidanceTestModal
-        open={testOpen}
-        draft={draft}
-        onClose={() => setTestOpen(false)}
       />
 
       <Modal
@@ -779,7 +746,7 @@ export function CreateGuidancePage({
         className="overflow-visible"
         bodyClassName="overflow-visible"
         title="Ready to publish"
-        description="Agents will start seeing this guidance on matching conversations."
+        description="Agents will start seeing this response card on matching conversations."
         footer={
           <>
             <Button variant="grey-outline" size="sm" onClick={() => setPublishOpen(false)}>
@@ -800,7 +767,7 @@ export function CreateGuidancePage({
       >
         <dl className="flex flex-col gap-3">
           <div>
-            <dt className="text-label-sm text-muted-foreground">Guidance</dt>
+            <dt className="text-label-sm text-muted-foreground">Response card</dt>
             <dd className="text-paragraph-md text-foreground">{draft.name}</dd>
           </div>
           <AssignTeamAndGroups
@@ -850,163 +817,59 @@ export function CreateGuidancePage({
 }
 
 /**
- * Recommended action (§19). Nothing here invents a capability: the picker only
- * offers what an admin already enabled under Integrations & actions, so a
- * disconnected CRM simply has nothing to attach.
+ * A recommendation, not a rule (§2). Admins keep every option; this only points
+ * out that retrieval already covers the trigger they described, so they can
+ * skip the maintenance if they want to.
  */
-function RecommendedActionEditor({
-  config,
-  integrations,
-  onOpenPicker,
-  onChange,
+function KnowledgeCoverageHint({
+  entryTitle,
+  sourceName,
+  onUseKnowledge,
+  onContinue,
 }: {
-  config?: GuidanceActionConfig;
-  integrations: Integration[];
-  onOpenPicker: () => void;
-  onChange: (next: GuidanceActionConfig | undefined) => void;
+  entryTitle: string;
+  sourceName: string;
+  onUseKnowledge?: () => void;
+  onContinue: () => void;
 }) {
-  const options = availableCapabilities(integrations);
-
-  if (options.length === 0) {
-    return (
-      <p className="text-pretty text-paragraph-sm text-muted-foreground">
-        No actions are enabled yet. Connect an integration and switch on the
-        capabilities you want Agent Assist to offer.
-      </p>
-    );
-  }
-
-  if (!config) {
-    return (
-      <Button
-        variant="grey-outline"
-        size="sm"
-        className="self-start"
-        leftIcon={<PlusIcon size={16} />}
-        onClick={onOpenPicker}
-      >
-        Add action
-      </Button>
-    );
-  }
-
-  const integration = integrationById(integrations, config.integrationId);
-  const capability = capabilityById(
-    integrations,
-    config.integrationId,
-    config.capabilityId
-  );
-
   return (
-    <div className="flex flex-col gap-3 rounded-[4px] border border-line p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-label-md-semi text-foreground">
-            {integration?.name} → {capability?.label}
-          </p>
-          <p className="text-paragraph-sm text-muted-foreground">
-            Agents see this as “{capability?.actionVerb}”.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Button variant="link" size="sm" onClick={onOpenPicker}>
-            Change
-          </Button>
-          <button
-            type="button"
-            aria-label="Remove recommended action"
-            onClick={() => onChange(undefined)}
-            className="flex size-8 items-center justify-center rounded-[4px] text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+    <div className="flex items-start gap-2 rounded-lg border border-line bg-secondary-bg px-3 py-2.5">
+      <IconKnowledge className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <p className="text-pretty text-label-md text-foreground">
+          This may already be handled automatically by Knowledge.
+        </p>
+        <p className="text-pretty text-paragraph-sm text-muted-foreground">
+          “{entryTitle}” in {sourceName} answers this today — agents get it
+          without a response card to maintain.
+        </p>
+        <div className="-ml-1 flex flex-wrap items-center gap-2">
+          {onUseKnowledge ? (
+            <>
+              <Button variant="link" size="sm" onClick={onUseKnowledge}>
+                Use Knowledge instead
+              </Button>
+              <span className="h-3 w-px bg-line" aria-hidden="true" />
+            </>
+          ) : null}
+          <Button
+            variant="link"
+            size="sm"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={onContinue}
           >
-            <IconClose size={16} />
-          </button>
+            Continue with a response card
+          </Button>
         </div>
       </div>
-
-      <div className="flex flex-wrap gap-3">
-        <InputField
-          label="Property"
-          placeholder="e.g. Competitor"
-          value={config.property}
-          onChange={(event) => onChange({ ...config, property: event.target.value })}
-          clearable={false}
-          wrapperClassName="min-w-[180px] flex-1"
-        />
-        <InputField
-          label="Value"
-          placeholder="e.g. Aircall"
-          value={config.value}
-          onChange={(event) => onChange({ ...config, value: event.target.value })}
-          clearable={false}
-          wrapperClassName="min-w-[180px] flex-1"
-        />
-      </div>
-
-      <p className="flex items-start gap-1.5 text-paragraph-sm text-muted-foreground">
-        <IconInfoCircle size={16} className="mt-px size-4 shrink-0" />
-        <span className="text-pretty">
-          Agent confirmation is required. Agent Assist never writes to{" "}
-          {integration?.name} on its own.
-        </span>
-      </p>
     </div>
   );
 }
 
-function ActionPickerModal({
-  open,
-  integrations,
-  onClose,
-  onSelect,
-}: {
-  open: boolean;
-  integrations: Integration[];
-  onClose: () => void;
-  onSelect: (config: GuidanceActionConfig) => void;
-}) {
-  const options = availableCapabilities(integrations);
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      size="sm"
-      title="Add a recommended action"
-      description="Only capabilities you enabled under Integrations & actions appear here."
-    >
-      <ul className="flex flex-col gap-2">
-        {options.map(({ integration, capability }) => (
-          <li key={`${integration.id}-${capability.id}`}>
-            <button
-              type="button"
-              onClick={() =>
-                onSelect({
-                  integrationId: integration.id as IntegrationId,
-                  capabilityId: capability.id,
-                  property: "",
-                  value: "",
-                  requiresConfirmation: true,
-                })
-              }
-              className="flex w-full cursor-pointer flex-col gap-0.5 rounded-lg border border-line bg-white p-3 text-left outline-none transition-colors hover:border-brand hover:bg-brand-subtle/30 focus-visible:ring-2 focus-visible:ring-brand/24"
-            >
-              <span className="text-label-md-semi text-foreground">
-                {integration.name} → {capability.label}
-              </span>
-              <span className="text-paragraph-sm text-muted-foreground">
-                {capability.group} · shown as “{capability.actionVerb}”
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </Modal>
-  );
-}
-
 /**
- * Generate from Knowledge (§13). The admin starts from something they already
- * uploaded instead of an empty form, and AI proposes the strategic parts.
+ * Generate from Knowledge (§13). The admin picks the knowledge bases to draw
+ * from, AI proposes the whole draft — name, trigger, response, talking points,
+ * relevant resources — and the admin reviews every field before publishing.
  */
 function GenerateFromKnowledgeModal({
   open,
@@ -1022,25 +885,43 @@ function GenerateFromKnowledgeModal({
   const usable = liveKnowledgeSources(sources).filter(
     (source) => source.entries.length > 0
   );
-  const [sourceId, setSourceId] = React.useState<string>("");
+  const [sourceIds, setSourceIds] = React.useState<string[]>([]);
   const [proposals, setProposals] = React.useState<GuidanceItem[]>([]);
 
   React.useEffect(() => {
     if (!open) {
-      setSourceId("");
+      setSourceIds([]);
       setProposals([]);
     }
   }, [open]);
 
-  const source = usable.find((item) => item.id === sourceId);
+  const picked = usable.filter((item) => sourceIds.includes(item.id));
+
+  const toggleSource = (id: string) =>
+    setSourceIds((current) =>
+      current.includes(id)
+        ? current.filter((value) => value !== id)
+        : [...current, id]
+    );
+
+  const generate = () => {
+    // A proposal per answer, capped so the review list stays scannable.
+    setProposals(
+      picked
+        .flatMap((source) =>
+          proposeGuidanceFromKnowledge(source.entries, source.name)
+        )
+        .slice(0, 6)
+    );
+  };
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       size="md"
-      title="Draft guidance from Knowledge"
-      description="Pick a source and AI proposes the trigger, wording, and talking points. Nothing publishes until you review it."
+      title="Generate response cards from Knowledge"
+      description="Pick the knowledge bases to draw from. AI proposes a full draft and you review it before anything publishes."
       footer={
         <>
           <Button variant="grey-outline" size="sm" onClick={onClose}>
@@ -1049,14 +930,10 @@ function GenerateFromKnowledgeModal({
           <Button
             size="sm"
             leftIcon={<IconSparkles size={16} />}
-            disabled={!source}
-            onClick={() =>
-              setProposals(
-                source ? proposeGuidanceFromKnowledge(source.entries, source.name) : []
-              )
-            }
+            disabled={picked.length === 0}
+            onClick={generate}
           >
-            Generate
+            {proposals.length > 0 ? "Regenerate" : "Generate"}
           </Button>
         </>
       }
@@ -1064,45 +941,43 @@ function GenerateFromKnowledgeModal({
       <div className="flex flex-col gap-4">
         {usable.length === 0 ? (
           <p className="text-pretty text-paragraph-md text-muted-foreground">
-            No published knowledge sources yet. Add one under Knowledge and AI
-            can draft guidance from it.
+            No knowledge base is available to Agent Assist yet. Add one under
+            Knowledge — or switch Agent Assist on for an existing one — and AI
+            can draft response cards from it.
           </p>
         ) : (
-          <Dropdown
-            label="Knowledge source"
-            placeholder="Select a source"
-            searchable={false}
-            options={usable.map((item) => ({ value: item.id, label: item.name }))}
-            value={sourceId}
-            onValueChange={(value) =>
-              setSourceId(Array.isArray(value) ? value[0]! : value)
-            }
-          />
+          <div className="flex flex-col gap-2">
+            <span className="text-label-md text-foreground">Knowledge sources</span>
+            <ul className="flex flex-col gap-1 rounded-lg border border-line p-1">
+              {usable.map((source) => (
+                <li key={source.id}>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-[4px] px-2 py-1.5 hover:bg-secondary-bg">
+                    <Checkbox
+                      checked={sourceIds.includes(source.id)}
+                      onCheckedChange={() => toggleSource(source.id)}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-paragraph-md text-foreground">
+                      {source.name}
+                    </span>
+                    <span className="shrink-0 text-label-sm text-muted-foreground tabular-nums">
+                      {source.entries.length} answers
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {proposals.length > 0 ? (
           <div className="flex flex-col gap-2">
             <p className="text-label-md text-foreground">
-              {proposals.length} proposals — pick one to load into the form
+              {proposals.length} drafts — load one to review and edit
             </p>
             <ul className="flex flex-col gap-2">
               {proposals.map((proposal) => (
                 <li key={proposal.id}>
-                  <button
-                    type="button"
-                    onClick={() => onApply(proposal)}
-                    className="flex w-full cursor-pointer flex-col gap-1 rounded-lg border border-line bg-white p-3 text-left outline-none transition-colors hover:border-brand hover:bg-brand-subtle/30 focus-visible:ring-2 focus-visible:ring-brand/24"
-                  >
-                    <span className="text-label-md-semi text-foreground">
-                      {proposal.name}
-                    </span>
-                    <span className="text-pretty text-paragraph-sm text-muted-foreground">
-                      Trigger: {proposal.trigger}
-                    </span>
-                    <span className="line-clamp-2 text-pretty text-paragraph-sm text-foreground">
-                      “{proposal.suggestedResponse}”
-                    </span>
-                  </button>
+                  <ProposalCard proposal={proposal} onApply={() => onApply(proposal)} />
                 </li>
               ))}
             </ul>
@@ -1113,102 +988,65 @@ function GenerateFromKnowledgeModal({
   );
 }
 
-/**
- * Test before publish (§34). The admin types a line a customer might say and
- * finds out whether their trigger would actually catch it — before an agent
- * discovers it doesn't on a live call.
- */
-function GuidanceTestModal({
-  open,
-  draft,
-  onClose,
+/** The AI draft laid out field by field, so review is possible before loading. */
+function ProposalCard({
+  proposal,
+  onApply,
 }: {
-  open: boolean;
-  draft: GuidanceItem;
-  onClose: () => void;
+  proposal: GuidanceItem;
+  onApply: () => void;
 }) {
-  const [sample, setSample] = React.useState("");
-  const [result, setResult] = React.useState<ReturnType<
-    typeof testGuidanceAgainstSample
-  > | null>(null);
-
-  React.useEffect(() => {
-    if (!open) {
-      setSample("");
-      setResult(null);
-    }
-  }, [open]);
-
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      size="sm"
-      title="Test this guidance"
-      description="Enter a sample conversation line. Nothing is sent to any agent."
-      footer={
-        <>
-          <Button variant="grey-outline" size="sm" onClick={onClose}>
-            Close
-          </Button>
-          <Button
-            size="sm"
-            disabled={!sample.trim()}
-            onClick={() => setResult(testGuidanceAgainstSample(draft, sample))}
-          >
-            Run test
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <FieldLabel htmlFor="guidance-test-sample">Sample conversation</FieldLabel>
-          <textarea
-            id="guidance-test-sample"
-            rows={3}
-            value={sample}
-            onChange={(event) => setSample(event.target.value)}
-            placeholder="We currently use Aircall but are evaluating alternatives."
-            className={textareaClass}
-          />
+    <div className="flex flex-col gap-3 rounded-lg border border-line bg-white p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-label-sm text-muted-foreground">Response card name</p>
+          <p className="text-pretty text-label-md-semi text-foreground">
+            {proposal.name}
+          </p>
         </div>
-
-        {result ? (
-          <div
-            className={cn(
-              "flex flex-col gap-1.5 rounded-lg border px-3 py-2.5",
-              result.matched
-                ? "border-success-border bg-success-secondary"
-                : "border-line bg-secondary-bg"
-            )}
-            aria-live="polite"
-          >
-            <p className="flex items-center gap-1.5 text-label-md font-medium text-foreground">
-              {result.matched ? (
-                <>
-                  <IconCircleCheckFilled
-                    size={16}
-                    className="size-4 shrink-0 text-success"
-                  />
-                  Trigger matched
-                </>
-              ) : (
-                "Trigger did not match"
-              )}
-            </p>
-            {result.matched ? (
-              <p className="text-pretty text-paragraph-sm text-muted-foreground">
-                Guidance that would appear: {draft.name || "this guidance"}
-              </p>
-            ) : (
-              <p className="text-pretty text-paragraph-sm text-muted-foreground">
-                {result.hint}
-              </p>
-            )}
-          </div>
-        ) : null}
+        <Button size="sm" variant="grey-outline" className="shrink-0" onClick={onApply}>
+          Review draft
+        </Button>
       </div>
-    </Modal>
+
+      <ProposalField label="Trigger" value={proposal.trigger} />
+      <ProposalField
+        label="Suggested response"
+        value={`“${proposal.suggestedResponse}”`}
+      />
+
+      {proposal.talkingPoints.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <p className="text-label-sm text-muted-foreground">Talking points</p>
+          <ul className="flex flex-col gap-0.5">
+            {proposal.talkingPoints.map((point, index) => (
+              <li
+                key={`${proposal.id}-point-${index}`}
+                className="text-pretty text-paragraph-sm text-foreground"
+              >
+                • {point}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {proposal.resources.length > 0 ? (
+        <ProposalField
+          label="Relevant resources"
+          value={proposal.resources.map((resource) => resource.name).join(", ")}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ProposalField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <p className="text-label-sm text-muted-foreground">{label}</p>
+      <p className="text-pretty text-paragraph-sm text-foreground">{value}</p>
+    </div>
   );
 }

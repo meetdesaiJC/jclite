@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type SVGProps } from "react";
+import { useEffect, useRef, useState, type SVGProps } from "react";
 import { InputField } from "@/components/InputField";
 import {
   IconAlertTriangleFilled,
@@ -8,19 +8,36 @@ import {
   IconInfoCircle,
 } from "@/components/Icon";
 import { cn } from "@/lib/utils";
-import { IconJcaiAgentAssist } from "./icons/JustCallAiNavIcons";
 import {
   SEED_GUIDANCE,
   type GuidanceItem,
   type GuidanceResource,
 } from "./guidanceData";
-import { SEED_KNOWLEDGE_SOURCES, type KnowledgeSourceRecord } from "./knowledgeData";
-import { SEED_COACHING_RULES, type CoachingRule } from "./coachingData";
 import {
+  SEED_KNOWLEDGE_SOURCES,
+  knowledgeFacts,
+  type KnowledgeSourceRecord,
+} from "./knowledgeData";
+import {
+  SEED_COACHING_RULES,
+  coachingCardMessage,
+  type CoachingRule,
+} from "./coachingData";
+import { CoachingCardFace, coachingTone } from "./coachingVisuals";
+import { IconAaActions } from "./icons/AgentAssistNavIcons";
+import {
+  ActionReviewField,
+  InCallActionSuggestionCard,
+} from "./InCallActionCard";
+import {
+  SEED_ACTIONS,
   SEED_INTEGRATIONS,
-  actionOriginLabel,
   integrationById,
+  integrationDoneLabel,
+  integrationFailedLabel,
+  integrationWriteLabel,
   type ActionState,
+  type AgentAction,
   type Integration,
   type SuggestedAction,
 } from "./actionsData";
@@ -32,30 +49,36 @@ import {
   type KnowledgeSurface,
 } from "./callSimulation";
 import {
+  GUIDANCE_AI_THEME,
   GuidanceFeedbackBar,
   GuidanceResourceLink,
   GuidanceResourceModal,
-  GuidanceSectionLabel,
   GuidanceSparklesIcon,
   type GuidanceFeedback,
 } from "./GuidanceCard";
-import { InCallGuidanceSlot } from "./LiveGuidance";
-import { useGuidanceStream } from "./useGuidanceStream";
+import {
+  CriticalGuidanceAlert,
+  GuidanceStackOverflow,
+  InCallGuidanceSlot,
+} from "./LiveGuidance";
+import {
+  CARD_ENTER_MS,
+  useGuidanceStream,
+  type GuidanceStreamCard,
+} from "./useGuidanceStream";
 
 /**
  * In-call Agent Assist — one panel for everything the agent gets in real time.
- * Knowledge, Guidance, Coaching, and Suggested actions share a single stream
- * with a fixed pecking order, so nothing competes for attention:
+ * There are no tabs. Cards share a single stream: new items surface newest
+ * first and stay for the rest of the call; the column scrolls when it fills up.
  *
- *   critical guidance → coaching → knowledge → active guidance → actions
- *
- * There are no tabs. The agent never has to decide which kind of help they
- * need before they can read it.
+ * Guidance is the exception to newest-first, and deliberately so: it is the one
+ * thing the agent reads while talking, so its cards move as a group and only
+ * ever on the agent's own action. While a guidance card is open the group is
+ * pinned to the top and new suggestions queue underneath it, so nothing shifts
+ * out from under the sentence being read (§3, §6, §10).
  */
 
-/** Coaching is temporary — this is how long a cue holds before it leaves. */
-const COACHING_HOLD_MS = 9000;
-const COACHING_OUT_MS = 220;
 /** Executed actions confirm, then collapse out of the way. */
 const ACTION_DONE_HOLD_MS = 4200;
 const ACTION_EXECUTE_MS = 750;
@@ -71,13 +94,14 @@ function prefersReducedMotion(): boolean {
 // Coaching
 // ---------------------------------------------------------------------------
 
+/** Outlined bulb — `icon-library/JustCall AI/bulb.svg`. */
 function IconCoaching(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
       <path
-        d="M8 1.75a4 4 0 0 1 4 4c0 1.3-.55 2.1-1.2 2.9-.5.62-.8 1.2-.8 1.85v.25h-4v-.25c0-.65-.3-1.23-.8-1.85C4.55 7.85 4 7.05 4 5.75a4 4 0 0 1 4-4ZM6 13h4M6.75 14.75h2.5"
+        d="M2.5 10H3.33333M10 2.5V3.33333M16.6667 10H17.5M4.66667 4.66667L5.25 5.25M15.3333 4.66667L14.75 5.25M8.08333 14.1667H11.9167M7.5 13.3333C6.80039 12.8086 6.28361 12.0771 6.02286 11.2424C5.76211 10.4076 5.77061 9.51202 6.04715 8.68238C6.3237 7.85275 6.85427 7.13116 7.56371 6.61982C8.27315 6.10849 9.12549 5.83333 10 5.83333C10.8745 5.83333 11.7269 6.10849 12.4363 6.61982C13.1457 7.13116 13.6763 7.85275 13.9528 8.68238C14.2294 9.51202 14.2379 10.4076 13.9771 11.2424C13.7164 12.0771 13.1996 12.8086 12.5 13.3333C12.1746 13.6554 11.9297 14.0495 11.7849 14.4839C11.6401 14.9182 11.5996 15.3805 11.6667 15.8333C11.6667 16.2754 11.4911 16.6993 11.1785 17.0118C10.866 17.3244 10.442 17.5 10 17.5C9.55797 17.5 9.13405 17.3244 8.82149 17.0118C8.50893 16.6993 8.33333 16.2754 8.33333 15.8333C8.40038 15.3805 8.35988 14.9182 8.21511 14.4839C8.07034 14.0495 7.82536 13.6554 7.5 13.3333Z"
         stroke="currentColor"
-        strokeWidth="1.3"
+        strokeWidth="1.2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -85,28 +109,44 @@ function IconCoaching(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-interface ActiveCoaching {
-  cue: CoachingCue;
-  leaving: boolean;
-}
-
 /**
- * One cue on screen at a time, and never a nag: `once` fires a rule a single
- * time per call, `cooldown` holds it back for the configured minutes, and
- * `on-return` lets it come back when the behaviour does.
+ * Every cue that fires stays on screen until the agent taps Got it.
+ * Frequency still gates whether a rule may fire again (`once`, `cooldown`,
+ * `on-return`) — it never takes an already-shown cue away.
  */
-function useCoachingBanner(cues: CoachingCue[], reduced: boolean) {
-  const [active, setActive] = useState<ActiveCoaching | null>(null);
+function useCoachingStack(cues: CoachingCue[], resetKey: string, reduced: boolean) {
+  const [stack, setStack] = useState<CoachingCue[]>([]);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [arrivingIds, setArrivingIds] = useState<Set<string>>(new Set());
   const seenCueIds = useRef(new Set<string>());
   const ruleHistory = useRef(new Map<string, number>());
+  const stackRef = useRef<CoachingCue[]>([]);
+  const prevReset = useRef(resetKey);
+  stackRef.current = stack;
 
   const latestSig = cues.map((cue) => cue.id).join("|");
 
   useEffect(() => {
-    const fresh = cues.filter((cue) => !seenCueIds.current.has(cue.id));
-    if (fresh.length === 0) return;
+    let base = stackRef.current;
+    if (prevReset.current !== resetKey) {
+      prevReset.current = resetKey;
+      seenCueIds.current = new Set();
+      ruleHistory.current = new Map();
+      base = [];
+      setDismissedIds(new Set());
+    }
 
-    let next: CoachingCue | null = null;
+    const fresh = cues.filter((cue) => !seenCueIds.current.has(cue.id));
+    if (fresh.length === 0) {
+      if (base !== stackRef.current) {
+        stackRef.current = base;
+        setStack(base);
+        setArrivingIds(new Set());
+      }
+      return;
+    }
+
+    const accepted: CoachingCue[] = [];
     for (const cue of fresh) {
       seenCueIds.current.add(cue.id);
       const rule = cue.rule;
@@ -121,88 +161,110 @@ function useCoachingBanner(cues: CoachingCue[], reduced: boolean) {
         }
       }
       ruleHistory.current.set(rule.id, cue.atMs);
-      next = cue;
+      accepted.push(cue);
     }
 
-    if (next) setActive({ cue: next, leaving: false });
+    if (accepted.length === 0) {
+      if (base !== stackRef.current) {
+        stackRef.current = base;
+        setStack(base);
+        setArrivingIds(new Set());
+      }
+      return;
+    }
+
+    const next = [...base, ...accepted];
+    stackRef.current = next;
+    setStack(next);
+    setArrivingIds(new Set(accepted.map((cue) => cue.id)));
     // Cue arrival is the only trigger; the cue list itself is derived state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [latestSig]);
+  }, [latestSig, resetKey]);
 
-  // Acknowledged or timed out, the banner gives the space back.
+  const resolvedSig = cues
+    .filter((cue) => cue.resolved)
+    .map((cue) => cue.id)
+    .join("|");
+
   useEffect(() => {
-    if (!active || active.leaving) return;
+    if (!resolvedSig) return;
+    const resolved = new Set(resolvedSig.split("|").filter(Boolean));
+    setStack((current) =>
+      current.map((cue) => (resolved.has(cue.id) ? { ...cue, resolved: true } : cue))
+    );
+  }, [resolvedSig]);
+
+  useEffect(() => {
+    if (arrivingIds.size === 0) return;
     const timer = window.setTimeout(
-      () => setActive((current) => (current ? { ...current, leaving: true } : null)),
-      COACHING_HOLD_MS
+      () => setArrivingIds(new Set()),
+      reduced ? 0 : CARD_ENTER_MS + 10
     );
     return () => window.clearTimeout(timer);
-  }, [active]);
-
-  useEffect(() => {
-    if (!active?.leaving) return;
-    const timer = window.setTimeout(() => setActive(null), reduced ? 0 : COACHING_OUT_MS);
-    return () => window.clearTimeout(timer);
-  }, [active, reduced]);
+  }, [arrivingIds, reduced]);
 
   return {
-    active,
-    acknowledge: () =>
-      setActive((current) => (current ? { ...current, leaving: true } : null)),
+    stack: stack.filter((cue) => !dismissedIds.has(cue.id)),
+    arrivingIds,
+    acknowledge: (id: string) => {
+      setDismissedIds((current) => {
+        const next = new Set(current);
+        next.add(id);
+        return next;
+      });
+    },
   };
 }
 
-function CoachingBanner({
+function CoachingCard({
   cue,
-  leaving,
+  arriving,
   reduced,
   onAcknowledge,
 }: {
   cue: CoachingCue;
-  leaving: boolean;
+  arriving: boolean;
   reduced: boolean;
   onAcknowledge: () => void;
 }) {
+  const resolved = Boolean(cue.resolved);
+  const observation = cue.detail || coachingCardMessage(cue.rule);
+  const tone = coachingTone(cue.rule.templateId);
+
   return (
-    <div
+    <article
+      role="status"
       className={cn(
-        "assist-coaching-slot shrink-0",
-        leaving && "is-leaving",
-        !reduced && !leaving && "assist-coaching-in"
+        "shrink-0 overflow-hidden rounded-lg",
+        resolved ? "border border-line bg-secondary-bg" : tone.card,
+        !reduced && arriving && "assist-card-enter"
       )}
     >
-      <div className="min-h-0 overflow-hidden pb-1.5">
-        <div
-          role="status"
-          className="flex items-start gap-2 rounded-lg border border-warning-border bg-warning-secondary px-3 py-2.5"
-        >
-          <IconCoaching className="mt-px size-4 shrink-0 text-warning-text" />
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <p className="text-label-sm font-medium tracking-[0.04em] text-warning-text uppercase">
-              Coaching
-            </p>
-            <p className="text-pretty text-label-md font-medium text-foreground">
-              {cue.rule.message}
-            </p>
-            <p className="text-pretty text-paragraph-sm text-muted-foreground">
-              {cue.detail}
-            </p>
-            {cue.rule.suggestion ? (
-              <p className="mt-1 text-pretty text-paragraph-sm text-foreground">
-                {cue.rule.suggestion}
-              </p>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            onClick={onAcknowledge}
-            className="-mr-1 -mt-0.5 inline-flex h-7 shrink-0 cursor-pointer items-center rounded-[4px] px-2 text-label-sm font-medium text-warning-text outline-none transition-colors hover:bg-white/70 focus-visible:ring-2 focus-visible:ring-brand/24"
-          >
-            Got it
-          </button>
-        </div>
-      </div>
-    </div>
+      <CoachingCardFace
+        rule={cue.rule}
+        observation={observation}
+        resolved={resolved}
+        action={
+          resolved ? (
+            <span className="-mt-0.5 -mr-1 inline-flex h-7 shrink-0 items-center px-2 text-label-sm font-medium text-muted-foreground">
+              Resolved
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={onAcknowledge}
+              className={cn(
+                "-mt-0.5 -mr-1 inline-flex h-7 shrink-0 cursor-pointer items-center rounded-[4px] px-2 text-label-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+                tone.ink,
+                tone.hover
+              )}
+            >
+              Got it
+            </button>
+          )
+        }
+      />
+    </article>
   );
 }
 
@@ -225,9 +287,9 @@ function IconKnowledge(props: SVGProps<SVGSVGElement>) {
 }
 
 /**
- * Auto-surfaced answer. Deliberately quieter than a Guidance card: neutral
- * chrome, collapsed once the conversation moves past it, and honest when
- * retrieval wasn't confident (§36) rather than stating a shaky answer.
+ * Auto-surfaced answer. Brand-blue so it reads as retrieved knowledge, not
+ * generated guidance. Facts first, source as a plain title link, then
+ * the same feedback Guidance collects (§33).
  */
 function KnowledgeCard({
   surface,
@@ -244,6 +306,7 @@ function KnowledgeCard({
 }) {
   const [feedback, setFeedback] = useState<GuidanceFeedback>(null);
   const uncertain = surface.confidence === "low";
+  const { summary, points } = knowledgeFacts(surface.entry);
 
   return (
     <article
@@ -251,7 +314,7 @@ function KnowledgeCard({
         // shrink-0 matters: `overflow-hidden` zeroes the flex automatic
         // minimum size, so without it the card collapses to its borders
         // once the panel column runs out of room.
-        "shrink-0 overflow-hidden rounded-lg border border-line bg-white",
+        "shrink-0 overflow-hidden rounded-lg border border-info-border bg-white",
         !reduced && arriving && "assist-card-enter"
       )}
     >
@@ -259,16 +322,14 @@ function KnowledgeCard({
         type="button"
         aria-expanded={expanded}
         onClick={onToggle}
-        className="flex w-full cursor-pointer items-center gap-1.5 px-3 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24"
+        className={cn(
+          "flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24",
+          expanded && "bg-info-secondary"
+        )}
       >
-        <IconKnowledge className="size-4 shrink-0 text-muted-foreground" />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="text-label-sm font-medium tracking-[0.04em] text-disabled-fg uppercase">
-            Knowledge
-          </span>
-          <span className="min-w-0 truncate text-label-md font-medium text-foreground">
-            {surface.entry.title}
-          </span>
+        <IconKnowledge className="size-4 shrink-0 text-brand" />
+        <span className="min-w-0 flex-1 truncate text-label-md font-medium text-foreground">
+          {surface.entry.title}
         </span>
         <span
           className="-mr-1 flex size-6 shrink-0 items-center justify-center text-muted-foreground"
@@ -285,38 +346,51 @@ function KnowledgeCard({
         )}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="flex flex-col gap-2 border-t border-line px-3 pt-2.5 pb-3">
+          <div className="flex flex-col gap-3 px-4 pt-3 pb-3">
             {uncertain ? (
-              <p className="flex items-start gap-1.5 text-paragraph-sm text-muted-foreground">
-                <IconInfoCircle size={16} className="mt-px size-4 shrink-0" />
+              <p className="flex items-start gap-1.5 rounded-[6px] bg-warning-secondary px-2 py-1.5 text-paragraph-sm text-foreground">
+                <IconInfoCircle size={16} className="mt-px size-4 shrink-0 text-warning" />
                 <span className="text-pretty">
                   I found potentially relevant information — check it before you
                   say it.
                 </span>
               </p>
             ) : null}
-            <p className="text-pretty text-paragraph-md text-foreground">
-              {surface.entry.answer}
-            </p>
+
+            {summary ? (
+              <p className="text-pretty text-label-md text-foreground">
+                {summary}
+              </p>
+            ) : null}
+
+            {points.length > 0 ? (
+              <ul className="list-disc space-y-1.5 pl-5">
+                {points.map((point) => (
+                  <li
+                    key={point.heading}
+                    className="text-pretty text-paragraph-md text-foreground marker:text-muted-foreground"
+                  >
+                    {point.heading}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-pretty text-paragraph-md text-foreground">
+                {surface.entry.answer}
+              </p>
+            )}
+
             {surface.showSource ? (
-              <div className="flex items-center gap-1.5">
-                <span className="shrink-0 text-paragraph-sm text-muted-foreground">
-                  Source:
-                </span>
-                <GuidanceResourceLink
-                  resource={{
-                    id: `${surface.id}-source`,
-                    type: "link",
-                    name: surface.sourceName,
-                    url: surface.entry.sourceUrl,
-                  }}
-                  className="text-paragraph-sm"
-                />
-              </div>
+              <GuidanceResourceLink
+                resource={{
+                  id: surface.entry.id,
+                  type: "link",
+                  name: surface.sourceName,
+                  url: surface.entry.sourceUrl,
+                }}
+              />
             ) : null}
           </div>
-          {/* Same lightweight signal Guidance collects (§33), so retrieval
-              and rules improve off the same feedback. */}
           <GuidanceFeedbackBar
             feedback={feedback}
             onHelpful={() =>
@@ -327,6 +401,7 @@ function KnowledgeCard({
                 current === "not-helpful" ? null : "not-helpful"
               )
             }
+            className={GUIDANCE_AI_THEME.feedback}
           />
         </div>
       </div>
@@ -368,16 +443,23 @@ function resolvedFields(action: SuggestedAction, runtime: ActionRuntime) {
   }));
 }
 
+function proposedValue(action: SuggestedAction, runtime: ActionRuntime) {
+  const field =
+    resolvedFields(action, runtime).find((item) => item.label === "New value") ??
+    resolvedFields(action, runtime).find((item) => item.missing) ??
+    resolvedFields(action, runtime)[resolvedFields(action, runtime).length - 1];
+  return field;
+}
+
 /**
- * The action as the agent first meets it: what it would do, where it came
- * from, and two ways out. Review happens in place rather than in a dialog —
- * confirming a CRM write should never cover the conversation the agent is
- * still having.
+ * Independent Action card. Lightning, not sparkle — this is work to perform,
+ * not generated guidance. The agent always reviews a write before it runs.
  */
 function SuggestedActionRow({
   action,
   runtime,
   reduced,
+  integrations,
   onReview,
   onCancelReview,
   onFieldChange,
@@ -388,6 +470,7 @@ function SuggestedActionRow({
   action: SuggestedAction;
   runtime: ActionRuntime;
   reduced: boolean;
+  integrations: Integration[];
   onReview: () => void;
   onCancelReview: () => void;
   onFieldChange: (label: string, value: string) => void;
@@ -396,6 +479,9 @@ function SuggestedActionRow({
   onRetry: () => void;
 }) {
   if (runtime.state === "dismissed") return null;
+
+  const name = integrationName(action, integrations);
+  const writeLabel = integrationWriteLabel(action, integrations);
 
   if (runtime.state === "done") {
     return (
@@ -409,12 +495,47 @@ function SuggestedActionRow({
         <IconCircleCheckFilled size={16} className="mt-px size-4 shrink-0 text-success" />
         <div className="min-w-0 flex-1">
           <p className="text-label-md font-medium text-foreground">
-            {doneLabel(action)}
+            {integrationDoneLabel(action, integrations)}
           </p>
-          <p className="truncate text-paragraph-sm text-muted-foreground">
-            {action.summary}
-          </p>
+          {action.viewUrl ? (
+            <a
+              href={action.viewUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-label-sm font-medium text-brand hover:text-brand-hover"
+            >
+              View in {name}
+            </a>
+          ) : null}
         </div>
+      </div>
+    );
+  }
+
+  if (runtime.state === "permission_denied") {
+    return (
+      <div className="flex shrink-0 flex-col gap-2 rounded-lg border border-warning-border bg-warning-secondary px-3 py-2.5">
+        <div className="flex items-start gap-2">
+          <IconAlertTriangleFilled
+            size={16}
+            className="mt-px size-4 shrink-0 text-warning"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-pretty text-label-md font-medium text-foreground">
+              Action unavailable
+            </p>
+            <p className="text-pretty text-paragraph-sm text-muted-foreground">
+              You don’t have permission to update this {name} record.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="inline-flex h-7 cursor-pointer items-center self-end rounded-[4px] px-2 text-label-sm text-muted-foreground outline-none transition-colors hover:bg-white hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+        >
+          Dismiss
+        </button>
       </div>
     );
   }
@@ -429,10 +550,10 @@ function SuggestedActionRow({
           />
           <div className="min-w-0 flex-1">
             <p className="text-pretty text-label-md font-medium text-foreground">
-              Unable to connect to {integrationName(action)}.
+              {integrationFailedLabel(action, integrations)}
             </p>
             <p className="text-pretty text-paragraph-sm text-muted-foreground">
-              Nothing was changed. You can retry now or finish this after the call.
+              Something went wrong while updating this record. Nothing was changed.
             </p>
           </div>
         </div>
@@ -450,7 +571,7 @@ function SuggestedActionRow({
             className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-[4px] px-2 text-label-sm font-medium text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24"
           >
             <IconRetry className="size-4 shrink-0" />
-            Retry
+            Try again
           </button>
         </div>
       </div>
@@ -461,113 +582,146 @@ function SuggestedActionRow({
   const reviewing = runtime.state === "reviewing";
   const fields = resolvedFields(action, runtime);
   const blocked = fields.some((field) => field.missing);
+  const proposed = proposedValue(action, runtime);
+  const property =
+    fields.find((field) => field.label === "Property")?.value ?? action.summary;
+  const editableFields = fields.filter(
+    (field) => field.missing || runtime.filled[field.label] !== undefined
+  );
+  const readonlyFields = fields.filter(
+    (field) => !editableFields.some((item) => item.label === field.label)
+  );
+
+  if (!reviewing) {
+    return (
+      <InCallActionSuggestionCard
+        title={action.title}
+        property={property}
+        value={
+          proposed?.missing
+            ? "Select a value"
+            : proposed?.value || action.summary
+        }
+        recordLabel={`${name} ${action.recordLabel}`}
+        recordValue={action.recordValue}
+        busy={busy}
+        onReview={onReview}
+        className={cn(!reduced && "assist-card-enter")}
+      />
+    );
+  }
 
   return (
     <div
       className={cn(
-        "flex shrink-0 flex-col gap-2 rounded-lg border bg-white px-3 py-2.5",
-        reviewing ? "border-brand" : "border-line",
+        "flex shrink-0 flex-col gap-2 rounded-lg border border-brand bg-white px-3 py-2",
         !reduced && "assist-card-enter"
       )}
     >
-      <div className="flex items-start gap-2">
-        <GuidanceSparklesIcon size={16} className="mt-px size-4 shrink-0" />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <GuidanceSectionLabel>Recommended action</GuidanceSectionLabel>
-          <p className="text-pretty text-label-md font-medium text-foreground">
-            {action.title}
-          </p>
-          <p className="text-pretty text-paragraph-sm text-foreground">
-            {action.summary}
-          </p>
-          <p className="text-paragraph-sm text-muted-foreground">
-            {actionOriginLabel(action)}
-          </p>
-        </div>
+      <div className="flex items-center gap-2">
+        <IconAaActions className="size-4 shrink-0 text-foreground" />
+        <p className="min-w-0 flex-1 text-pretty text-label-md font-medium text-foreground">
+          {writeLabel}
+        </p>
       </div>
 
-      {/* Review (§28) — every value about to be written, in place. */}
-      {reviewing ? (
-        <div className="flex flex-col gap-2.5 border-t border-line pt-2.5">
+      <div className="flex flex-col gap-2.5 border-t border-line pt-2">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
           <ActionReviewField label={action.recordLabel} value={action.recordValue} />
-          {fields.map((field) =>
-            runtime.filled[field.label] !== undefined ? (
-              <InputField
-                key={field.label}
-                label={field.label}
-                placeholder={`Add ${field.label.toLowerCase()}`}
-                value={runtime.filled[field.label] ?? ""}
-                onChange={(event) => onFieldChange(field.label, event.target.value)}
-                helpText={
-                  field.missing
-                    ? "Not found in the conversation — add it to continue."
-                    : undefined
-                }
-                helpIcon={field.missing}
-                clearable={false}
-              />
-            ) : (
-              <ActionReviewField
-                key={field.label}
-                label={field.label}
-                value={field.value}
-              />
-            )
-          )}
-          <p className="text-paragraph-sm text-muted-foreground">
-            Nothing is written to {integrationName(action)} until you confirm.
-          </p>
+          {readonlyFields.map((field) => (
+            <ActionReviewField
+              key={field.label}
+              label={field.label}
+              value={field.value}
+            />
+          ))}
+          <ActionReviewField label="Current value" value="—" />
+        </dl>
+        {editableFields.map((field) => (
+          <InputField
+            key={field.label}
+            label={field.label === "New value" ? property : field.label}
+            placeholder={`Select ${property.toLowerCase()}`}
+            value={runtime.filled[field.label] ?? field.value}
+            onChange={(event) => onFieldChange(field.label, event.target.value)}
+            helpText={
+              field.missing
+                ? "Not found in the conversation — add it to continue."
+                : undefined
+            }
+            helpIcon={field.missing}
+            clearable={false}
+          />
+        ))}
+        <p className="text-paragraph-sm text-muted-foreground">
+          Nothing is written to {name} until you confirm.
+        </p>
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={onCancelReview}
+            className="inline-flex h-7 cursor-pointer items-center rounded-[4px] px-2 text-label-sm text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={blocked}
+            onClick={onConfirm}
+            className="inline-flex h-7 cursor-pointer items-center rounded-[4px] px-2 text-label-sm font-medium text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24 disabled:cursor-default disabled:opacity-60"
+          >
+            {writeLabel}
+          </button>
         </div>
-      ) : null}
-
-      <div className="flex items-center gap-1.5 self-end">
-        <button
-          type="button"
-          onClick={reviewing ? onCancelReview : onDismiss}
-          className="inline-flex h-7 cursor-pointer items-center rounded-[4px] px-2 text-label-sm text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
-        >
-          {reviewing ? "Cancel" : "Dismiss"}
-        </button>
-        <button
-          type="button"
-          disabled={busy || (reviewing && blocked)}
-          onClick={reviewing ? onConfirm : onReview}
-          className="inline-flex h-7 cursor-pointer items-center rounded-[4px] px-2 text-label-sm font-medium text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24 disabled:cursor-default disabled:opacity-60"
-        >
-          {busy ? "Working…" : reviewing ? action.title : reviewLabel(action)}
-        </button>
       </div>
     </div>
   );
 }
 
-function ActionReviewField({ label, value }: { label: string; value: string }) {
+function integrationName(action: SuggestedAction, integrations: Integration[]): string {
   return (
-    <div>
-      <p className="text-label-sm text-muted-foreground">{label}</p>
-      <p className="text-pretty text-paragraph-md text-foreground">{value}</p>
-    </div>
+    integrationById(integrations, action.integrationId)?.name ?? action.integrationId
   );
-}
-
-function integrationName(action: SuggestedAction): string {
-  return (
-    integrationById(SEED_INTEGRATIONS, action.integrationId)?.name ??
-    action.integrationId
-  );
-}
-
-function reviewLabel(action: SuggestedAction): string {
-  return action.requiresConfirmation ? "Review & confirm" : "Run action";
-}
-
-function doneLabel(action: SuggestedAction): string {
-  return `${action.title.replace(/^Create /, "Created ").replace(/^Update /, "Updated ").replace(/^Add /, "Added ")}`;
 }
 
 // ---------------------------------------------------------------------------
 // Panel
 // ---------------------------------------------------------------------------
+
+const GUIDANCE_STACK_ID = "guidance-stack";
+
+interface StreamRow {
+  id: string;
+  atMs: number;
+  /** Guidance holds the top of the column while one of its cards is open. */
+  pinned: boolean;
+}
+
+/**
+ * Newest first — except while the agent is reading, hovering or scrolling. Then
+ * the order they can see is frozen and anything new lands underneath it, so the
+ * column never rearranges itself around them (§6). Ordering catches up the next
+ * time something arrives and the agent is idle.
+ */
+function useStableStreamOrder<T extends StreamRow>(rows: T[], interacting: boolean) {
+  const orderRef = useRef<string[]>([]);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+
+  const kept = orderRef.current.filter((id) => byId.has(id));
+  const added = rows.map((row) => row.id).filter((id) => !kept.includes(id));
+
+  const order = interacting
+    ? [...kept, ...added]
+    : [...rows]
+        .sort((a, b) => {
+          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+          return b.atMs - a.atMs;
+        })
+        .map((row) => row.id);
+
+  orderRef.current = order;
+  return order.map((id) => byId.get(id)!).filter(Boolean);
+}
 
 export interface LiveAgentAssistPanelProps {
   elapsedMs: number;
@@ -576,6 +730,7 @@ export interface LiveAgentAssistPanelProps {
   knowledgeSources?: KnowledgeSourceRecord[];
   coachingRules?: CoachingRule[];
   integrations?: Integration[];
+  actions?: AgentAction[];
   /** Hangup — the live stream lets go before the phone changes state. */
   exiting?: boolean;
   className?: string;
@@ -588,6 +743,7 @@ export function LiveAgentAssistPanel({
   knowledgeSources = SEED_KNOWLEDGE_SOURCES,
   coachingRules = SEED_COACHING_RULES,
   integrations = SEED_INTEGRATIONS,
+  actions: actionLibrary = SEED_ACTIONS,
   exiting = false,
   className,
 }: LiveAgentAssistPanelProps) {
@@ -596,10 +752,10 @@ export function LiveAgentAssistPanel({
     knowledge: knowledgeSources,
     coaching: coachingRules,
     integrations,
+    actions: actionLibrary,
   });
 
   const [viewingResource, setViewingResource] = useState<GuidanceResource | null>(null);
-  const [secondaryOpen, setSecondaryOpen] = useState(false);
   const [collapsedKnowledge, setCollapsedKnowledge] = useState<Set<string>>(new Set());
   const [knownIds, setKnownIds] = useState<Set<string>>(new Set());
   const [actionRuntimes, setActionRuntimes] = useState<Record<string, ActionRuntime>>({});
@@ -609,13 +765,15 @@ export function LiveAgentAssistPanel({
     steps: scenario.steps,
     playhead: Math.min(snapshot.scriptIndex, scenario.steps.length),
     reduced,
+    handledIds: snapshot.handledIds,
   });
-  const coaching = useCoachingBanner(snapshot.coaching, reduced);
+  const coaching = useCoachingStack(snapshot.coaching, scenario.id, reduced);
 
   useEffect(() => {
     setViewingResource(null);
-    setSecondaryOpen(false);
     setActionRuntimes({});
+    setKnownIds(new Set());
+    setCollapsedKnowledge(new Set());
   }, [scenario.id]);
 
   // Knowledge collapses as soon as the conversation asks something else (§32).
@@ -660,6 +818,7 @@ export function LiveAgentAssistPanel({
     const runtime = runtimeFor(action.id);
     patchRuntime(action.id, { state: "executing" });
     window.setTimeout(() => {
+      const permission = Boolean(action.simulatePermissionDenied);
       const fails = Boolean(action.simulateFailure) && !runtime.attempted;
       setActionRuntimes((current) => {
         const previous = current[action.id] ?? {
@@ -671,7 +830,11 @@ export function LiveAgentAssistPanel({
           ...current,
           [action.id]: {
             ...previous,
-            state: fails ? "failed" : "done",
+            state: permission
+              ? "permission_denied"
+              : fails
+                ? "failed"
+                : "done",
             attempted: true,
           },
         };
@@ -679,8 +842,41 @@ export function LiveAgentAssistPanel({
     }, ACTION_EXECUTE_MS);
   };
 
-  // A confirmation is a receipt, not a permanent row — it collapses on its own.
+  const demoStateSig = snapshot.actions
+    .map((entry) => `${entry.id}:${entry.state ?? ""}`)
+    .join("|");
+  const demoDriven = snapshot.actions.some((entry) => entry.state);
+
   useEffect(() => {
+    if (!demoDriven) return;
+    setActionRuntimes((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const entry of snapshot.actions) {
+        if (!entry.state) continue;
+        const previous = next[entry.id] ?? {
+          state: "suggested" as ActionState,
+          filled: {},
+          attempted: false,
+        };
+        if (previous.state === entry.state) continue;
+        next[entry.id] = {
+          ...previous,
+          state: entry.state,
+          attempted: entry.state === "done" || previous.attempted,
+        };
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+    // Demo clock drives this; the action list is derived from elapsed time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoStateSig]);
+
+  // A confirmation is a receipt, not a permanent row — it collapses on its own
+  // unless the demo is already choreographing completion and collapse.
+  useEffect(() => {
+    if (demoDriven) return;
     const doneIds = Object.entries(actionRuntimes)
       .filter(([, runtime]) => runtime.state === "done")
       .map(([id]) => id);
@@ -694,55 +890,16 @@ export function LiveAgentAssistPanel({
     return () => timers.forEach((timer) => window.clearTimeout(timer));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    demoDriven,
     Object.entries(actionRuntimes)
       .filter(([, runtime]) => runtime.state === "done")
       .map(([id]) => id)
       .join("|"),
   ]);
 
-  const actionsByGuidance = useMemo(() => {
-    const map = new Map<string, SuggestedAction[]>();
-    for (const entry of snapshot.actions) {
-      if (!entry.action.guidanceId) continue;
-      const list = map.get(entry.action.guidanceId) ?? [];
-      list.push(entry.action);
-      map.set(entry.action.guidanceId, list);
-    }
-    return map;
-  }, [snapshot.actions]);
-
-  // Compliance outranks everything, including the coaching banner.
-  const critical = stream.cards.filter(
-    (entry) => entry.suggestion.priority === "critical"
-  );
-  const ordinary = stream.cards.filter(
-    (entry) => entry.suggestion.priority !== "critical"
-  );
-  const primary = ordinary[ordinary.length - 1] ?? null;
-  const secondary = ordinary.slice(0, Math.max(0, ordinary.length - 1)).reverse();
-
-  /**
-   * An action belongs at the bottom of its guidance (§27) — but only while
-   * that card is open. Collapse the card and the action would vanish with it,
-   * so it moves out into the panel on its own and stays there until the agent
-   * completes or dismisses it (§32).
-   */
-  const openGuidanceIds = new Set<string>(
-    critical.map((entry) => entry.suggestion.item.id)
-  );
-  if (stream.expandedId) {
-    const open = stream.cards.find(
-      (entry) => entry.suggestion.id === stream.expandedId
-    );
-    if (open) openGuidanceIds.add(open.suggestion.item.id);
-  }
-
-  const standaloneActions = snapshot.actions
-    .filter(
-      (entry) =>
-        !entry.action.guidanceId || !openGuidanceIds.has(entry.action.guidanceId)
-    )
-    .map((entry) => entry.action);
+  const visibleStreamActions = snapshot.actions
+    .map((entry) => entry.action)
+    .filter((action) => runtimeFor(action.id).state !== "dismissed");
 
   const renderAction = (action: SuggestedAction) => (
     <SuggestedActionRow
@@ -750,6 +907,7 @@ export function LiveAgentAssistPanel({
       action={action}
       runtime={runtimeFor(action.id)}
       reduced={reduced}
+      integrations={integrations}
       onReview={() => openReview(action)}
       onCancelReview={() => patchRuntime(action.id, { state: "suggested" })}
       onFieldChange={(label, value) =>
@@ -763,44 +921,117 @@ export function LiveAgentAssistPanel({
     />
   );
 
-  const renderGuidance = (
-    entry: { suggestion: GuidanceSuggestion },
-    expanded: boolean
-  ) => {
-    const attached = actionsByGuidance.get(entry.suggestion.item.id) ?? [];
-    return (
-      <InCallGuidanceSlot
-        key={entry.suggestion.id}
-        item={entry.suggestion}
-        reduced={reduced}
-        expanded={expanded}
-        arriving={stream.arrivingIds.has(entry.suggestion.id)}
-        attention={stream.attentionIds.has(entry.suggestion.id)}
-        onToggle={() => stream.toggleCard(entry.suggestion.id)}
-        onViewResource={setViewingResource}
-        onEngage={stream.engage}
-        onDisengage={stream.disengage}
-        cardRef={(node) => stream.registerCard(entry.suggestion.id, node)}
-        actionSlot={
-          attached.length > 0 && expanded ? (
-            <div className="flex flex-col gap-2 border-t border-line bg-white px-3 py-2.5">
-              {attached.map(renderAction)}
-            </div>
-          ) : null
-        }
-      />
-    );
-  };
+  const renderGuidance = (entry: GuidanceStreamCard) => (
+    <InCallGuidanceSlot
+      key={entry.suggestion.id}
+      item={entry.suggestion}
+      reduced={reduced}
+      expanded={stream.expandedId === entry.suggestion.id}
+      status={entry.status}
+      relevantAgain={stream.relevantAgainIds.has(entry.suggestion.id)}
+      arriving={stream.arrivingIds.has(entry.suggestion.id)}
+      attention={stream.attentionIds.has(entry.suggestion.id)}
+      onToggle={() => stream.toggleCard(entry.suggestion.id)}
+      onViewResource={setViewingResource}
+      onEngage={stream.engage}
+      onDisengage={stream.disengage}
+      cardRef={(node) => stream.registerCard(entry.suggestion.id, node)}
+    />
+  );
+
+  /**
+   * Guidance moves as one group — the active card plus its queue — so the
+   * agent's reading position survives whatever else arrives (§3, §10).
+   */
+  const renderGuidanceStack = (key: string) => (
+    <div key={key} className="flex shrink-0 flex-col gap-3">
+      {stream.criticalAlert ? (
+        <CriticalGuidanceAlert
+          name={stream.criticalAlert.suggestion.item.name}
+          reduced={reduced}
+          onFocus={stream.focusCriticalAlert}
+        />
+      ) : null}
+      {stream.visibleCards.map(renderGuidance)}
+      {stream.hiddenCount > 0 ? (
+        <GuidanceStackOverflow
+          count={stream.hiddenCount}
+          reduced={reduced}
+          onShowAll={stream.showAllCards}
+        />
+      ) : null}
+    </div>
+  );
+
+  // Coaching, knowledge and actions share one newest-first line, so whatever
+  // just landed is the first thing the agent sees. Guidance joins that line as
+  // a single group, sitting at its newest card — and pins to the top for as
+  // long as one of its cards is open.
+  const streamStack = [
+    ...(stream.cards.length > 0
+      ? [
+          {
+            kind: "guidance" as const,
+            atMs: Math.max(...stream.cards.map((entry) => entry.suggestion.atMs)),
+            id: GUIDANCE_STACK_ID,
+            pinned: stream.expandedId !== null,
+          },
+        ]
+      : []),
+    ...coaching.stack.map((cue) => ({
+      kind: "coaching" as const,
+      atMs: cue.atMs,
+      id: cue.id,
+      pinned: false,
+      cue,
+    })),
+    ...snapshot.knowledge.map((surface) => ({
+      kind: "knowledge" as const,
+      atMs: surface.atMs,
+      id: surface.id,
+      pinned: false,
+      surface,
+    })),
+    ...snapshot.actions
+      .filter((entry) => runtimeFor(entry.id).state !== "dismissed")
+      .map((entry) => ({
+        kind: "action" as const,
+        atMs: entry.atMs,
+        id: entry.id,
+        pinned: false,
+        action: entry.action,
+      })),
+  ];
+
+  const ordered = useStableStreamOrder(streamStack, stream.interacting);
 
   const nothingYet =
     stream.cards.length === 0 &&
     snapshot.knowledge.length === 0 &&
-    standaloneActions.length === 0 &&
-    !coaching.active;
+    visibleStreamActions.length === 0 &&
+    coaching.stack.length === 0;
+
+  const renderKnowledge = (surface: KnowledgeSurface) => (
+    <KnowledgeCard
+      key={surface.id}
+      surface={surface}
+      expanded={!collapsedKnowledge.has(surface.id)}
+      arriving={!knownIds.has(surface.id)}
+      reduced={reduced}
+      onToggle={() =>
+        setCollapsedKnowledge((current) => {
+          const next = new Set(current);
+          if (next.has(surface.id)) next.delete(surface.id);
+          else next.add(surface.id);
+          return next;
+        })
+      }
+    />
+  );
 
   return (
     <section
-      aria-label="Agent Assist"
+      aria-label="Conversation guidance"
       className={cn(
         "relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white",
         className
@@ -812,16 +1043,25 @@ export function LiveAgentAssistPanel({
           !reduced && "assist-head-in"
         )}
       >
-        <IconJcaiAgentAssist
-          className="size-4 shrink-0 text-brand"
-          aria-hidden="true"
-        />
-        <p className="text-label-md-semi text-foreground">Agent Assist</p>
+        <GuidanceSparklesIcon className="size-4 shrink-0" />
+        <p className="text-label-md-semi text-foreground">Conversation guidance</p>
+        {/* Something landed while they were reading — said once, quietly (§3). */}
+        {stream.newCount > 0 ? (
+          <p
+            aria-live="polite"
+            className={cn(
+              "text-label-md text-muted-foreground tabular-nums",
+              !reduced && "assist-badge-in"
+            )}
+          >
+            · {stream.newCount} new
+          </p>
+        ) : null}
       </header>
 
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-4 py-2.5",
+          "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-2.5",
           !reduced && exiting && "assist-stream-out"
         )}
         {...stream.scrollHandlers}
@@ -833,73 +1073,23 @@ export function LiveAgentAssistPanel({
           </p>
         ) : null}
 
-        {/* 1 — compliance and other urgent interventions, always open. */}
-        {critical.map((entry) => renderGuidance(entry, true))}
-
-        {/* 2 — coaching, temporary and compact. */}
-        {coaching.active ? (
-          <CoachingBanner
-            cue={coaching.active.cue}
-            leaving={coaching.active.leaving}
-            reduced={reduced}
-            onAcknowledge={coaching.acknowledge}
-          />
-        ) : null}
-
-        {/* 3 — knowledge, quietest of the four. */}
-        {snapshot.knowledge.map((surface) => (
-          <KnowledgeCard
-            key={surface.id}
-            surface={surface}
-            expanded={!collapsedKnowledge.has(surface.id)}
-            arriving={!knownIds.has(surface.id)}
-            reduced={reduced}
-            onToggle={() =>
-              setCollapsedKnowledge((current) => {
-                const next = new Set(current);
-                if (next.has(surface.id)) next.delete(surface.id);
-                else next.add(surface.id);
-                return next;
-              })
-            }
-          />
-        ))}
-
-        {/* 4 — the active guidance card, with its action attached. */}
-        {primary
-          ? renderGuidance(primary, stream.expandedId === primary.suggestion.id)
-          : null}
-
-        {/* 5 — actions with no open card of their own to sit inside. */}
-        {standaloneActions.map(renderAction)}
-
-        {/* 6 — everything earlier, folded away until asked for. */}
-        {secondary.length > 0 ? (
-          <div className="flex shrink-0 flex-col gap-1.5">
-            <button
-              type="button"
-              aria-expanded={secondaryOpen}
-              onClick={() => setSecondaryOpen((open) => !open)}
-              className="flex cursor-pointer items-center gap-1 self-start rounded-[4px] px-0.5 py-1 text-label-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
-            >
-              {secondaryOpen
-                ? "Hide earlier suggestions"
-                : `${secondary.length} more suggestion${secondary.length === 1 ? "" : "s"}`}
-              <span className="flex size-4 items-center justify-center" aria-hidden="true">
-                {secondaryOpen ? (
-                  <IconChevronUp size={16} />
-                ) : (
-                  <IconChevronDown size={16} />
-                )}
-              </span>
-            </button>
-            {secondaryOpen
-              ? secondary.map((entry) =>
-                  renderGuidance(entry, stream.expandedId === entry.suggestion.id)
-                )
-              : null}
-          </div>
-        ) : null}
+        {ordered.map((item) =>
+          item.kind === "coaching" ? (
+            <CoachingCard
+              key={item.id}
+              cue={item.cue}
+              arriving={coaching.arrivingIds.has(item.id)}
+              reduced={reduced}
+              onAcknowledge={() => coaching.acknowledge(item.id)}
+            />
+          ) : item.kind === "guidance" ? (
+            renderGuidanceStack(item.id)
+          ) : item.kind === "action" ? (
+            renderAction(item.action)
+          ) : (
+            renderKnowledge(item.surface)
+          )
+        )}
       </div>
 
       <GuidanceResourceModal

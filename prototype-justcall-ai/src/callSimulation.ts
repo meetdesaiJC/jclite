@@ -1,15 +1,13 @@
 /**
- * Choreographed during-call demo: a customer with a real problem,
- * the agent following the script, and Guidance cards surfacing from
- * what was just said — matched against the live library. Cards stay
- * until the agent dismisses them.
+ * Choreographed during-call demo for stakeholders. One discovery call walks
+ * the in-call surface through its full vocabulary, in this rhythm:
  *
- * Discovery follows the script, beat by beat: Elena is on Aircall, misses
- * after-hours calls, names the cost, then Salesforce logging for her ops
- * lead, then price vs Aircall, then books a working session.
+ *   Script → Knowledge → Guidance → Coaching → Script → Guidance → Coaching
+ *   → Action → Action → Combined suggestions → wrap → completed cards
  */
 
 import {
+  guidanceMatchesUtterance,
   liveGuidance,
   priorityForGuidance,
   rankGuidanceMatches,
@@ -28,17 +26,25 @@ import {
 } from "./knowledgeData";
 import {
   SEED_COACHING_RULES,
+  coachingCardMessage,
   liveCoachingRules,
   type CoachingRule,
 } from "./coachingData";
 import {
+  SEED_ACTIONS,
   SEED_INTEGRATIONS,
-  actionFromGuidanceConfig,
-  capabilityById,
-  integrationById,
+  actionMatchesUtterance,
+  liveActions,
+  patchSuggestedValue,
+  suggestedActionFromLibrary,
+  type ActionState,
+  type AgentAction,
   type Integration,
   type SuggestedAction,
 } from "./actionsData";
+
+/** After the script wraps, keep default cards this long before resolved / sent. */
+export const POST_WRAP_COMPLETED_DELAY_MS = 5000;
 
 export interface ScriptStep {
   title: string;
@@ -55,6 +61,11 @@ export interface GuidanceSuggestion {
   item: GuidanceItem;
   priority: GuidancePriority;
   stance: GuidanceStance;
+  /**
+   * When the conversation last came back to this topic. The panel re-activates
+   * the card that already covers it instead of stacking a duplicate (§9).
+   */
+  repeatAtMs?: number;
 }
 
 /**
@@ -66,6 +77,8 @@ export interface KnowledgeSurface {
   atMs: number;
   entry: KnowledgeEntry;
   sourceName: string;
+  /** Filename or hostname, shown under the source name when available. */
+  sourceOrigin?: string;
   /** The admin can publish a source without exposing where it came from. */
   showSource: boolean;
   confidence: KnowledgeConfidence;
@@ -73,19 +86,23 @@ export interface KnowledgeSurface {
   query: string;
 }
 
-/** A behaviour nudge. Temporary by design — never a card. */
+  /** A behaviour nudge. Temporary — title, what happened, Got it. */
 export interface CoachingCue {
   id: string;
   atMs: number;
   rule: CoachingRule;
-  /** The measured reading behind the nudge, e.g. "78% over the last 2 min". */
+  /** Natural observation under the title, e.g. "You've spoken for 75% of the last 2 minutes." */
   detail: string;
+  /** The behaviour improved — the cue stays as history, not as an interrupt. */
+  resolved?: boolean;
 }
 
 export interface ActionSurface {
   id: string;
   atMs: number;
   action: SuggestedAction;
+  /** Demo-driven review / completion. Agents can still take over from here. */
+  state?: ActionState;
 }
 
 export type TranscriptSpeaker = "customer" | "agent";
@@ -114,12 +131,22 @@ export interface SimulationEvent {
   knowledgeQuery?: string;
   /** Keep retrieval out of this beat, even if the line reads as a question. */
   skipKnowledge?: boolean;
+  /**
+   * Don't surface conversation-detected actions on this beat. Used so the
+   * stakeholder demo can introduce Actions on their own, not the moment a
+   * competitor is named.
+   */
+  skipActions?: boolean;
   /** Fire a coaching banner from a live rule. */
   coachingRuleId?: string;
-  /** Reading shown under the coaching message. */
+  /** Natural observation under the title. Falls back to the rule's generated copy. */
   coachingDetail?: string;
+  /** Mark these live cues as resolved — the behaviour has improved. */
+  resolveCoachingIds?: string[];
   /** Surface one of the scenario's conversation-detected actions. */
   actionId?: string;
+  /** Drive review / completion / collapse for the action on this beat. */
+  actionState?: ActionState;
 }
 
 export interface CallMoment {
@@ -170,7 +197,7 @@ export interface SimulationSnapshot {
   wrapped: boolean;
   /** Auto-retrieved answers, newest last. */
   knowledge: KnowledgeSurface[];
-  /** Every cue fired so far — the panel decides which is still on screen. */
+  /** Every cue fired so far — the panel keeps them stacked for the call. */
   coaching: CoachingCue[];
   actions: ActionSurface[];
 }
@@ -180,6 +207,7 @@ export interface SimulationLibraries {
   knowledge?: KnowledgeSourceRecord[];
   coaching?: CoachingRule[];
   integrations?: Integration[];
+  actions?: AgentAction[];
 }
 
 function step(
@@ -213,13 +241,13 @@ export const CALL_SCENARIOS: CallScenario[] = [
         "Ask how they handle this today",
         "Walk me through how this works on your team today.",
         true,
-        ["g-aircall"]
+        ["g-status-quo", "g-aircall"]
       ),
       step(
         "Uncover the pain behind the process",
         "Where does that break down — missed calls, slow follow-up, or the team using different tools for the same job?",
         true,
-        ["g-after-hours"]
+        ["g-discovery"]
       ),
       step(
         "Quantify the cost of the status quo",
@@ -242,23 +270,74 @@ export const CALL_SCENARIOS: CallScenario[] = [
         "Let's lock a time this week. If we can show the missed-call workflow in their language, we'll know whether a trial is worth it."
       ),
     ],
-    crmRecordLabel: "Elena Vasquez",
+    crmRecordLabel: "Acme Corp",
     moments: [
-      { id: "default", label: "Script only", atMs: 800 },
-      { id: "competitor", label: "Current tool — Aircall", atMs: 13500 },
-      { id: "pain", label: "Missed after-hours calls", atMs: 25000 },
-      { id: "crm", label: "Salesforce logging", atMs: 44500 },
-      { id: "knowledge", label: "Recording retention question", atMs: 50500 },
-      { id: "coaching", label: "Talk ratio nudge", atMs: 59000 },
-      { id: "objection", label: "Pricing vs Aircall", atMs: 61000 },
-      { id: "end", label: "End of call", atMs: 74000 },
+      { id: "connect", label: "Call connects", atMs: 800 },
+      { id: "script", label: "Script progression", atMs: 5500 },
+      { id: "product-knowledge", label: "Product knowledge", atMs: 15000 },
+      { id: "policy-knowledge", label: "Policy knowledge", atMs: 22000 },
+      { id: "objection", label: "Objection guidance", atMs: 32500 },
+      { id: "talk-ratio", label: "Talk-ratio coaching", atMs: 39500 },
+      { id: "discovery", label: "Discovery guidance", atMs: 46500 },
+      { id: "interrupt", label: "Interruption coaching", atMs: 51000 },
+      { id: "sentiment", label: "Sentiment coaching", atMs: 53500 },
+      { id: "pricing", label: "Pricing guidance", atMs: 61000 },
+      { id: "send", label: "Send action", atMs: 66500 },
+      { id: "crm", label: "CRM update", atMs: 73500 },
+      { id: "task", label: "Follow-up task", atMs: 80500 },
+      { id: "schedule", label: "Schedule meeting", atMs: 87500 },
+      { id: "combined", label: "Knowledge + guidance", atMs: 95500 },
+      { id: "priority", label: "Guidance + coaching", atMs: 99000 },
+      { id: "queue", label: "New while reading", atMs: 102000 },
+      { id: "end", label: "End of call", atMs: 122000 },
+      {
+        id: "resolved",
+        label: "Resolved suggestions",
+        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS,
+      },
     ],
     conversationActions: [
       {
-        id: "act-followup-task",
+        id: "act-send-comparison",
+        actionId: "act-send-comparison",
         integrationId: "hubspot",
-        capabilityId: "hs-task",
-        title: "Create HubSpot follow-up task",
+        capabilityId: "hs-send-email",
+        title: "Send Aircall comparison",
+        summary: "One-pager · email",
+        recordLabel: "Contact",
+        recordValue: "Elena Vasquez",
+        fields: [
+          { label: "To", value: "Elena Vasquez" },
+          { label: "Channel", value: "Email" },
+          { label: "Asset", value: "Aircall comparison one-pager" },
+        ],
+        origin: "conversation",
+        requiresConfirmation: true,
+        viewUrl: "https://app.hubspot.com",
+      },
+      {
+        id: "act-update-competitor",
+        actionId: "act-update-competitor",
+        integrationId: "hubspot",
+        capabilityId: "hs-update-property",
+        title: "Update competitor",
+        summary: "Competitor · Aircall",
+        recordLabel: "Deal",
+        recordValue: "Acme Corp",
+        fields: [
+          { label: "Property", value: "Competitor" },
+          { label: "New value", value: "Aircall" },
+        ],
+        origin: "conversation",
+        requiresConfirmation: true,
+        viewUrl: "https://app.hubspot.com",
+      },
+      {
+        id: "act-followup-task",
+        actionId: "act-followup-task",
+        integrationId: "salesforce",
+        capabilityId: "sf-task",
+        title: "Create follow-up task",
         summary: "Working session · due Thursday",
         recordLabel: "Contact",
         recordValue: "Elena Vasquez",
@@ -269,159 +348,276 @@ export const CALL_SCENARIOS: CallScenario[] = [
         ],
         origin: "conversation",
         requiresConfirmation: true,
+        viewUrl: "https://login.salesforce.com",
+      },
+      {
+        id: "act-schedule-meeting",
+        actionId: "act-schedule-meeting",
+        integrationId: "salesforce",
+        capabilityId: "sf-event",
+        title: "Schedule working session",
+        summary: "Thursday afternoon · 30 min",
+        recordLabel: "Contact",
+        recordValue: "Elena Vasquez",
+        fields: [
+          { label: "When", value: "Thursday afternoon" },
+          { label: "Attendees", value: "Elena Vasquez + ops lead" },
+          { label: "Duration", value: "30 minutes" },
+        ],
+        origin: "conversation",
+        requiresConfirmation: true,
+        viewUrl: "https://login.salesforce.com",
       },
     ],
     events: [
+      // 1. Call connects — bar, script, live transcript
       { atMs: 0, scriptIndex: 0 },
       {
-        atMs: 2500,
+        atMs: 1800,
         speaker: "agent",
         quote:
           "I'd love to spend this time understanding how you're handling calls today, then see if it's worth a closer look.",
       },
-      { atMs: 4500, scriptIndex: 1 },
       {
-        atMs: 5500,
+        atMs: 4200,
+        speaker: "customer",
+        quote: "Sure — I've got about 30 minutes.",
+        skipKnowledge: true,
+        skipActions: true,
+      },
+      // 2. First script item completes, next step becomes active
+      { atMs: 5500, scriptIndex: 1 },
+      {
+        atMs: 6800,
         speaker: "agent",
         quote: "We've got about 30 minutes. Is anyone else joining, or is it just us?",
       },
       {
-        atMs: 7500,
+        atMs: 9200,
         speaker: "customer",
         quote: "Just me — our ops lead couldn't make this one.",
+        skipKnowledge: true,
+        skipActions: true,
       },
-      { atMs: 9000, scriptIndex: 2 },
+      { atMs: 10200, scriptIndex: 2 },
       {
-        atMs: 10500,
+        atMs: 11800,
         speaker: "agent",
         quote: "Walk me through how this works on your team today.",
       },
+      // 3. Product knowledge
       {
-        atMs: 13500,
+        atMs: 15000,
         speaker: "customer",
-        quote: "We're on Aircall. SMS lives in a separate tool.",
-        guidanceIds: ["g-aircall"],
+        quote: "If we switch, can we keep our existing numbers?",
+        knowledgeQuery: "can we keep our numbers",
+        skipActions: true,
       },
       {
-        atMs: 16500,
+        atMs: 18500,
         speaker: "agent",
         quote:
-          "JustCall puts calling, messaging, and CRM in one place — that's usually why teams look. I want the workflow first though.",
+          "Yes — local numbers typically take 5–10 business days, with no downtime during the switch.",
       },
-      { atMs: 18500, handledGuidanceId: "g-aircall" },
-      { atMs: 20000, scriptIndex: 3 },
+      // 4. Policy/process knowledge — previous knowledge stays accessible
       {
-        atMs: 21500,
-        speaker: "agent",
-        quote:
-          "Where does that break down — missed calls, slow follow-up, or the team using different tools for the same job?",
-      },
-      {
-        atMs: 25000,
+        atMs: 22000,
         speaker: "customer",
-        quote:
-          "After-hours calls go to voicemail. Follow-up is whoever happens to pick it up.",
-        guidanceIds: ["g-after-hours"],
+        quote: "And how long do you keep call recordings? Compliance will ask.",
+        knowledgeQuery: "how long do you keep recordings",
+        skipActions: true,
       },
       {
-        atMs: 28000,
-        speaker: "agent",
-        quote:
-          "After-hours coverage is usually the first workflow we show — missed-call SMS so the lead isn't sitting until morning.",
-      },
-      { atMs: 30000, handledGuidanceId: "g-after-hours" },
-      { atMs: 31500, scriptIndex: 4 },
-      {
-        atMs: 33000,
-        speaker: "agent",
-        quote: "What does that cost you in time, missed revenue, or customer experience?",
-      },
-      {
-        atMs: 36000,
-        speaker: "customer",
-        quote:
-          "Maybe twenty missed leads a week. That's revenue sitting until morning, and the team feels it.",
-      },
-      { atMs: 38500, scriptIndex: 5 },
-      {
-        atMs: 40000,
-        speaker: "agent",
-        quote:
-          "Who else feels this day to day — ops, support leads, or whoever owns the number?",
-      },
-      {
-        atMs: 44500,
-        speaker: "customer",
-        quote:
-          "Our ops lead. She lives in Salesforce — and none of this logs unless someone remembers.",
-        guidanceIds: ["g-salesforce"],
-      },
-      {
-        atMs: 47500,
-        speaker: "agent",
-        quote:
-          "Yes — native Salesforce integration. Calls and SMS log to the contact automatically.",
-      },
-      { atMs: 49500, handledGuidanceId: "g-salesforce" },
-      // Nobody configured guidance for recording retention — and nobody should
-      // have to. This is retrieved straight from the published knowledge base.
-      {
-        atMs: 50500,
-        speaker: "customer",
-        quote: "Before I forget — how long do you keep call recordings?",
-      },
-      {
-        atMs: 53000,
+        atMs: 25500,
         speaker: "agent",
         quote:
           "Twelve months on standard plans, and we can extend that to twenty-four if your policy needs it.",
       },
-      { atMs: 54500, scriptIndex: 6 },
       {
-        atMs: 56000,
+        atMs: 29000,
+        speaker: "agent",
+        quote: "Got it. What's the tool stack on the team today?",
+      },
+      // 5. Objection-handling guidance
+      {
+        atMs: 32500,
+        speaker: "customer",
+        quote: "We're pretty happy with Aircall actually. Not sure why we'd switch.",
+        guidanceIds: ["g-status-quo"],
+        skipActions: true,
+      },
+      {
+        atMs: 36500,
         speaker: "agent",
         quote:
-          "If this still looks relevant, the useful next step is a 30-minute working session with your ops lead.",
+          "Totally fair if calling is working. The teams who look at us usually have a gap — after-hours coverage, SMS sitting in another tool, or nothing logging to the CRM. I'd rather find out whether that's you than pitch you on a switch you don't need. JustCall puts calling, messaging, and CRM in one place, which is usually the reason, but I want the workflow first so we're not comparing feature lists.",
       },
-      // The agent has carried the last stretch on their own.
+      // 6. Talk-ratio coaching
       {
-        atMs: 59000,
+        atMs: 39500,
         coachingRuleId: "cr-overtalking",
-        coachingDetail: "You've held 78% of the last 2 minutes.",
+        coachingDetail: "You've spoken for 75% of the last 2 minutes.",
       },
+      // 7. Script progresses from the conversation
+      { atMs: 41500, scriptIndex: 3 },
+      {
+        atMs: 43000,
+        speaker: "agent",
+        quote:
+          "Where does that break down — missed calls, slow follow-up, or the team using different tools for the same job?",
+      },
+      // 8. Discovery guidance
+      {
+        atMs: 46500,
+        speaker: "customer",
+        quote:
+          "After-hours calls go to voicemail. Follow-up is whoever happens to pick it up.",
+        guidanceIds: ["g-discovery"],
+        skipActions: true,
+      },
+      {
+        atMs: 49500,
+        speaker: "agent",
+        quote: "Right, so the—",
+      },
+      // 9. Interruption / overtalk coaching
+      {
+        atMs: 51000,
+        coachingRuleId: "cr-interruptions",
+        coachingDetail: "You've interrupted the customer 3 times recently.",
+      },
+      // 10. Sentiment / empathy coaching
+      {
+        atMs: 53500,
+        speaker: "customer",
+        quote:
+          "That's twenty missed leads a week. The team is exhausted chasing them the next morning.",
+        skipKnowledge: true,
+        skipActions: true,
+        coachingRuleId: "cr-frustration",
+        coachingDetail: "The customer is showing signs of frustration.",
+      },
+      { atMs: 56000, scriptIndex: 4 },
+      {
+        atMs: 57500,
+        speaker: "agent",
+        quote:
+          "That's a real cost. If this still looks relevant, the useful next step is a 30-minute working session with your ops lead.",
+      },
+      // 11. Pricing / competitor / positioning guidance
       {
         atMs: 61000,
         speaker: "customer",
         quote:
           "A working session could work, but Aircall is cheaper. Not sure I can sell a more expensive tool internally.",
         guidanceIds: ["g-pricing"],
+        skipActions: true,
       },
       {
-        atMs: 64000,
+        atMs: 64500,
         speaker: "agent",
         quote:
-          "Pricing includes calling, messaging, and CRM in one place — so you're not stacking extra tools. We can size the plan to the seats you'd actually use.",
+          "I'll send you a one-page comparison you can forward internally — calling, messaging, and CRM on one plan versus stacking add-ons.",
       },
-      { atMs: 66000, handledGuidanceId: "g-pricing" },
-      { atMs: 67500, scriptIndex: 7 },
+      // 12. Send/share action — review, then rest on the default card until wrap.
+      { atMs: 66500, actionId: "act-send-comparison" },
+      { atMs: 68500, actionId: "act-send-comparison", actionState: "reviewing" },
+      { atMs: 71000, actionId: "act-send-comparison", actionState: "suggested" },
+      // 13. CRM update — same: review, then default until wrap.
+      { atMs: 73500, actionId: "act-update-competitor" },
+      { atMs: 75500, actionId: "act-update-competitor", actionState: "reviewing" },
+      { atMs: 78000, actionId: "act-update-competitor", actionState: "suggested" },
       {
-        atMs: 69000,
+        atMs: 79500,
+        speaker: "customer",
+        quote: "Thursday afternoon could work if we bring ops.",
+        skipKnowledge: true,
+        skipActions: true,
+      },
+      // 14. Create task — review, then default until wrap.
+      { atMs: 80500, actionId: "act-followup-task" },
+      { atMs: 82500, actionId: "act-followup-task", actionState: "reviewing" },
+      { atMs: 85000, actionId: "act-followup-task", actionState: "suggested" },
+      // 15. Schedule meeting — reviewed, then left open so wrap-up still has work.
+      { atMs: 87500, actionId: "act-schedule-meeting" },
+      { atMs: 89500, actionId: "act-schedule-meeting", actionState: "reviewing" },
+      { atMs: 92000, actionId: "act-schedule-meeting", actionState: "suggested" },
+      { atMs: 94000, scriptIndex: 5 },
+      // 16. Knowledge + guidance together
+      {
+        atMs: 95500,
+        speaker: "customer",
+        quote: "Our ops lead lives in Salesforce. Will calls actually log there?",
+        guidanceIds: ["g-salesforce"],
+        knowledgeQuery: "does justcall integrate with salesforce",
+        skipActions: true,
+      },
+      // 17. Guidance + coaching together — coaching is the interrupt, guidance stays
+      {
+        atMs: 99000,
+        coachingRuleId: "cr-overtalking",
+        coachingDetail: "You've spoken for 75% of the last 2 minutes.",
+      },
+      // 18. New suggestion while the agent is still on an open card
+      {
+        atMs: 102000,
+        speaker: "customer",
+        quote: "And how are you different from Aircall on the SMS side?",
+        guidanceIds: ["g-aircall"],
+        skipActions: true,
+      },
+      // 19. Multiple suggestions sit together — New / current / Earlier
+      { atMs: 105000, handledGuidanceId: "g-status-quo" },
+      { atMs: 106000, handledGuidanceId: "g-discovery" },
+      // 20. Guidance covered — coaching and actions stay in their default cards.
+      { atMs: 108000, handledGuidanceId: "g-pricing" },
+      // 21. Remaining script steps complete
+      { atMs: 112000, scriptIndex: 6 },
+      {
+        atMs: 114000,
         speaker: "agent",
         quote:
           "Let's lock a time this week. If we can show the missed-call workflow in their language, we'll know whether a trial is worth it.",
       },
       {
-        atMs: 71500,
+        atMs: 117000,
         speaker: "customer",
         quote: "Thursday afternoon is open. I'll bring the ops lead.",
         skipKnowledge: true,
-        actionId: "act-followup-task",
+        skipActions: true,
       },
-      { atMs: 74000, scriptIndex: 8 },
+      { atMs: 118500, scriptIndex: 7 },
+      {
+        atMs: 120000,
+        speaker: "agent",
+        quote:
+          "Perfect. Success looks like after-hours coverage and Salesforce logging in a workflow your ops lead recognizes.",
+      },
+      { atMs: 122000, scriptIndex: 8 },
+      // 22. Five seconds after wrap: resolved coaching and sent/done actions.
+      {
+        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS,
+        resolveCoachingIds: ["cr-overtalking", "cr-interruptions"],
+      },
+      {
+        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS + 200,
+        actionId: "act-send-comparison",
+        actionState: "done",
+      },
+      {
+        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS + 400,
+        actionId: "act-update-competitor",
+        actionState: "done",
+      },
+      {
+        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS + 600,
+        actionId: "act-followup-task",
+        actionState: "done",
+      },
     ],
     wrapUp: {
       summary:
-        "Elena is on Aircall today and evaluating JustCall so calling, SMS, and CRM live in one place. After-hours calls go to voicemail with no owner, and nothing logs to Salesforce unless someone remembers — about twenty missed leads a week. She wants a Thursday afternoon working session with her ops lead, but needs help selling a higher price internally versus Aircall.",
+        "Elena is on Aircall today and evaluating JustCall so calling, SMS, and CRM live in one place. After-hours calls go to voicemail with no owner — about twenty missed leads a week — and nothing logs to Salesforce unless someone remembers. She wants a Thursday afternoon working session with her ops lead, and needs a one-pager to sell a higher price internally versus Aircall.",
       actionItems: [
         {
           id: "session",
@@ -486,6 +682,7 @@ export const CALL_SCENARIOS: CallScenario[] = [
     conversationActions: [
       {
         id: "act-billing-ticket",
+        actionId: "act-billing-ticket",
         integrationId: "hubspot",
         capabilityId: "hs-ticket",
         title: "Create HubSpot ticket",
@@ -545,7 +742,7 @@ export const CALL_SCENARIOS: CallScenario[] = [
       {
         atMs: 20000,
         coachingRuleId: "cr-frustration",
-        coachingDetail: "Sentiment turned negative over the last minute.",
+        coachingDetail: "The customer is showing signs of frustration.",
       },
       {
         atMs: 30000,
@@ -639,6 +836,7 @@ export const CALL_SCENARIOS: CallScenario[] = [
     conversationActions: [
       {
         id: "act-billing-note",
+        actionId: "act-billing-note",
         integrationId: "hubspot",
         capabilityId: "hs-contact-note",
         title: "Add HubSpot note",
@@ -780,20 +978,48 @@ export function simulationAt(
   const knowledgeSources = libraries.knowledge ?? SEED_KNOWLEDGE_SOURCES;
   const coachingRules = liveCoachingRules(libraries.coaching ?? SEED_COACHING_RULES);
   const integrations = libraries.integrations ?? SEED_INTEGRATIONS;
-  const recordLabel = "Contact";
+  const actionLibrary = liveActions(libraries.actions ?? SEED_ACTIONS);
   const recordValue = scenario.crmRecordLabel ?? scenario.contactName;
 
-  /** Guidance that carries an action proposes it as soon as the card lands. */
-  const surfaceGuidanceAction = (item: GuidanceItem, atMs: number) => {
-    if (!item.recommendedAction) return;
-    const action = actionFromGuidanceConfig(item.recommendedAction, integrations, {
-      guidanceId: item.id,
-      recordLabel,
-      recordValue,
+  const recordFor = (action: AgentAction) => ({
+    recordLabel: action.object || "Record",
+    recordValue,
+    customerName: scenario.contactName,
+    company: scenario.crmRecordLabel,
+  });
+
+  const upsertAction = (
+    libraryAction: AgentAction,
+    atMs: number,
+    quote: string,
+    origin: SuggestedAction["origin"]
+  ) => {
+    const next = suggestedActionFromLibrary(libraryAction, integrations, {
+      ...recordFor(libraryAction),
+      utterance: quote,
+      origin,
     });
-    if (!action || firedActionIds.has(action.id)) return;
-    firedActionIds.add(action.id);
-    actions.push({ id: action.id, atMs, action });
+    if (!next) return;
+
+    const existingIndex = actions.findIndex((item) => item.action.actionId === libraryAction.id);
+    if (existingIndex >= 0) {
+      const existing = actions[existingIndex]!;
+      actions[existingIndex] = {
+        ...existing,
+        action: patchSuggestedValue(existing.action, next),
+      };
+      return;
+    }
+    firedActionIds.add(libraryAction.id);
+    actions.push({ id: libraryAction.id, atMs, action: next });
+  };
+
+  const surfaceAiActions = (quote: string, atMs: number) => {
+    for (const libraryAction of actionLibrary) {
+      if (libraryAction.trigger !== "ai_recommended") continue;
+      if (!actionMatchesUtterance(libraryAction, quote)) continue;
+      upsertAction(libraryAction, atMs, quote, "ai");
+    }
   };
 
   const surfaceGuidance = (ids: string[], atMs: number, quote: string) => {
@@ -803,7 +1029,6 @@ export function simulationAt(
       if (!match) continue;
       shown.add(id);
       suggestions.push(toSuggestion(match, atMs, quote));
-      surfaceGuidanceAction(match, atMs);
     }
   };
 
@@ -820,6 +1045,7 @@ export function simulationAt(
         atMs,
         entry: hit.entry,
         sourceName: hit.source.name,
+        sourceOrigin: hit.source.origin,
         showSource: hit.source.showSourceToAgents,
         confidence: hit.confidence,
         query,
@@ -844,10 +1070,11 @@ export function simulationAt(
     }
 
     const quote = event.quote ?? latestQuote?.quote ?? "";
+    const withActions = !event.skipActions;
     let matchedGuidance = false;
     if (event.guidanceIds?.length) {
       const before = suggestions.length;
-      surfaceGuidance(event.guidanceIds.slice(0, 1), event.atMs, quote);
+      surfaceGuidance(event.guidanceIds, event.atMs, quote);
       matchedGuidance = suggestions.length > before;
     } else if (event.quote && (event.speaker ?? "customer") === "customer") {
       const unused = live.filter((item) => !shown.has(item.id));
@@ -855,8 +1082,24 @@ export function simulationAt(
       if (match) {
         shown.add(match.id);
         suggestions.push(toSuggestion(match, event.atMs, event.quote));
-        surfaceGuidanceAction(match, event.atMs);
         matchedGuidance = true;
+      }
+    }
+
+    if (event.quote && (event.speaker ?? "customer") === "customer") {
+      if (withActions) surfaceAiActions(event.quote, event.atMs);
+      /**
+       * A topic can come back — "Aircall is cheaper" is the customer returning
+       * to the competitor they already named. That re-activates the card that
+       * already covers it rather than adding a second one (§9).
+       */
+      for (const existing of suggestions) {
+        if (existing.atMs === event.atMs) continue;
+        const again =
+          event.guidanceIds?.includes(existing.id) === true ||
+          guidanceMatchesUtterance(existing.item, event.quote);
+        if (!again) continue;
+        existing.repeatAtMs = event.atMs;
       }
     }
 
@@ -879,32 +1122,55 @@ export function simulationAt(
           id: `${rule.id}-${event.atMs}`,
           atMs: event.atMs,
           rule,
-          detail: event.coachingDetail ?? coachingReading(rule),
+          detail: event.coachingDetail ?? coachingCardMessage(rule),
         });
       }
     }
 
+    if (event.resolveCoachingIds?.length) {
+      for (const cue of coaching) {
+        if (event.resolveCoachingIds.includes(cue.rule.id)) {
+          cue.resolved = true;
+        }
+      }
+    }
+
     if (event.actionId) {
-      const candidate = scenario.conversationActions?.find(
-        (item) => item.id === event.actionId
+      const already = actions.find(
+        (item) => item.id === event.actionId || item.action.actionId === event.actionId
       );
-      if (candidate && !firedActionIds.has(candidate.id)) {
-        const capability = capabilityById(
-          integrations,
-          candidate.integrationId,
-          candidate.capabilityId
+      if (!already) {
+        const candidate = scenario.conversationActions?.find(
+          (item) => item.id === event.actionId
         );
-        const integration = integrationById(integrations, candidate.integrationId);
-        // Actions only appear when the admin left that capability switched on.
-        if (capability?.enabled && integration?.connected) {
+        if (candidate && !firedActionIds.has(candidate.id)) {
           firedActionIds.add(candidate.id);
           actions.push({
             id: candidate.id,
             atMs: event.atMs,
-            action: { ...candidate, recordLabel, recordValue },
+            action: {
+              ...candidate,
+              actionId: candidate.actionId || candidate.id,
+              recordValue,
+            },
           });
+        } else {
+          const libraryAction = actionLibrary.find((item) => item.id === event.actionId);
+          if (libraryAction) {
+            upsertAction(libraryAction, event.atMs, quote, "conversation");
+          }
         }
       }
+    }
+
+    if (event.actionState) {
+      const targetId = event.actionId;
+      const existing = targetId
+        ? actions.find(
+            (item) => item.id === targetId || item.action.actionId === targetId
+          )
+        : actions[actions.length - 1];
+      if (existing) existing.state = event.actionState;
     }
   }
 
@@ -919,10 +1185,6 @@ export function simulationAt(
     coaching,
     actions,
   };
-}
-
-function coachingReading(rule: CoachingRule): string {
-  return `${rule.metricLabel} ${rule.threshold} · ${rule.window.toLowerCase()}`;
 }
 
 export function nearestMoment(scenario: CallScenario, elapsedMs: number): CallMoment {

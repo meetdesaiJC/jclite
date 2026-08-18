@@ -43,7 +43,10 @@ import {
   ScriptStepRow,
   useScriptChecklistMotion,
 } from "./ScriptChecklist";
-import { useGuidanceStream } from "./useGuidanceStream";
+import {
+  useGuidanceStream,
+  type GuidanceStreamCard,
+} from "./useGuidanceStream";
 
 /**
  * In-call Agent Assist — one stream. The full script stays open so any
@@ -353,6 +356,7 @@ function AssistStream({
     steps: scenario.steps,
     playhead,
     reduced,
+    handledIds: snapshot.handledIds,
   });
 
   return (
@@ -367,13 +371,11 @@ function AssistStream({
         scenario={scenario}
         playhead={playhead}
         reduced={reduced}
-        placedCards={stream.cards.map((entry) => ({
-          card: entry.suggestion,
-          insertAfter: entry.insertAfter,
-        }))}
+        placedCards={stream.cards}
         expandedId={stream.expandedId}
         arrivingIds={stream.arrivingIds}
         attentionIds={stream.attentionIds}
+        relevantAgainIds={stream.relevantAgainIds}
         onToggleCard={stream.toggleCard}
         onEngage={stream.engage}
         onDisengage={stream.disengage}
@@ -538,6 +540,7 @@ function RecapSkeleton({ reduced }: { reduced: boolean }) {
  * two tabs, so nothing about the call is a click away. Disposition, notes and
  * rating live in Wrap up beside this; this pane only reports and hands off.
  */
+
 function PostCallAssist({
   scenario,
   reduced,
@@ -639,7 +642,6 @@ function PostCallAssist({
             </ol>
           </section>
         ) : null}
-
       </div>
 
       {/* The recap is the summary of the call; the transcript is the record of
@@ -753,6 +755,7 @@ function FullScriptList({
   expandedId,
   arrivingIds,
   attentionIds,
+  relevantAgainIds,
   onToggleCard,
   onEngage,
   onDisengage,
@@ -762,10 +765,11 @@ function FullScriptList({
   scenario: CallScenario;
   playhead: number;
   reduced: boolean;
-  placedCards: { card: GuidanceSuggestion; insertAfter: number }[];
+  placedCards: GuidanceStreamCard[];
   expandedId: string | null;
   arrivingIds: Set<string>;
   attentionIds: Set<string>;
+  relevantAgainIds: Set<string>;
   onToggleCard: (id: string) => void;
   onEngage: () => void;
   onDisengage: () => void;
@@ -795,11 +799,11 @@ function FullScriptList({
     return () => window.clearTimeout(timer);
   }, [entering, stepCount]);
 
-  const cardsByStep = new Map<number, GuidanceSuggestion[]>();
-  for (const { card, insertAfter } of placedCards) {
-    const list = cardsByStep.get(insertAfter) ?? [];
-    list.push(card);
-    cardsByStep.set(insertAfter, list);
+  const cardsByStep = new Map<number, GuidanceStreamCard[]>();
+  for (const entry of placedCards) {
+    const list = cardsByStep.get(entry.insertAfter) ?? [];
+    list.push(entry);
+    cardsByStep.set(entry.insertAfter, list);
   }
 
   return (
@@ -827,7 +831,7 @@ function FullScriptList({
               glow={glowing.has(index)}
               reduced={reduced}
             />
-            {stepCards.map((card) => (
+            {stepCards.map(({ suggestion: card, status }) => (
               <InCallGuidanceSlot
                 key={card.id}
                 item={card}
@@ -835,11 +839,14 @@ function FullScriptList({
                 expanded={expandedId === card.id}
                 arriving={arrivingIds.has(card.id)}
                 attention={attentionIds.has(card.id)}
+                status={status}
+                relevantAgain={relevantAgainIds.has(card.id)}
                 onToggle={() => onToggleCard(card.id)}
                 onViewResource={onViewResource}
                 onEngage={onEngage}
                 onDisengage={onDisengage}
                 cardRef={(node) => registerCard(card.id, node)}
+                className="py-1.5"
               />
             ))}
           </li>

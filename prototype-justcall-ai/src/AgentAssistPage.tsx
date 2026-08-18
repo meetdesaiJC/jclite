@@ -6,14 +6,7 @@ import { Modal } from "@/components/Modal";
 import { Dropdown, type DropdownListItem } from "@/components/Dropdown";
 import { Tabs, type TabItem } from "@/components/Tabs";
 import { InputField } from "@/components/InputField";
-import { Toggle } from "@/components/Toggle";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
-import {
-  Avatar,
-  avatarVariants,
-  type AvatarColor,
-  type AvatarProps,
-} from "@/components/Avatar";
 import {
   IconSearch,
   IconFilter,
@@ -33,6 +26,7 @@ import {
   TableCell,
   TableCellText,
   TablePagination,
+  TableBulkBar,
 } from "@/components/Table";
 import scriptsEmptyIllustration from "./assets/scripts-empty.png";
 import faqsEmptyIllustration from "./assets/faqs-empty.png";
@@ -53,8 +47,9 @@ import {
   type AssignmentPerson,
   type ScriptPlaybook,
 } from "./scriptPlaybook";
+import { AssignmentAvatarStack } from "./AssignmentAvatarStack";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
-import { GuidanceResourceModal, GuidanceSparklesIcon } from "./GuidanceCard";
+import { GuidanceResourceModal } from "./GuidanceCard";
 import { LiveGuidanceCard } from "./LiveGuidance";
 import { CreateGuidancePage } from "./CreateGuidancePage";
 import {
@@ -75,35 +70,70 @@ import {
   type GuidanceResource,
   type GuidanceTemplateId,
 } from "./guidanceData";
-import { AdminPageHeader } from "./AgentAssistAdmin";
 import {
-  CreatePlaybookModal,
-  type PlaybookKind,
-} from "./CreatePlaybookModal";
+  AdminPageHeader,
+  IconTrash,
+  StatusToggle,
+  TableSelectCell,
+  TableSelectHead,
+} from "./AgentAssistAdmin";
 import {
+  CoachingPreview,
   CoachingTemplatesModal,
   CreateCoachingPage,
+  type CoachingStartChoice,
 } from "./CreateCoachingPage";
 import {
   coachingDetectLabel,
-  coachingFrequencyLabel,
   createCoachingRuleFromTemplate,
   type CoachingRule,
-  type CoachingTemplateId,
 } from "./coachingData";
-import { IconCoaching } from "./LiveAgentAssistPanel";
+import { CoachingCueIcon, coachingTone } from "./coachingVisuals";
 import type { KnowledgeSourceRecord } from "./knowledgeData";
-import type { Integration } from "./actionsData";
 
 /**
- * Playbooks — how agents should handle conversations. Three kinds share one
- * list because they answer three different questions during the same call:
- * a Script says what to follow, Guidance says what to say in a specific
- * situation, and Coaching says how to adjust. Routine informational questions
- * are not here at all — Knowledge answers those without configuration.
+ * Conversation Guidance — how agents should handle conversations. Scripts,
+ * Response Cards, and Live Coaching each have their own list because they
+ * answer different questions during the same call: a Script says what to
+ * follow, a Response Card says what to say, and Live Coaching says how to
+ * adjust. What the agent can *do* in a connected app lives one level up, in
+ * In-call Actions — separate from Conversation Guidance.
  */
 
 type PublishStatus = "live" | "draft";
+
+/**
+ * The three kinds keep their short internal keys; everything an admin reads
+ * comes from here so the vocabulary stays in one place.
+ */
+const KIND_LABEL = {
+  script: "Script",
+  guidance: "Response Card",
+  coaching: "Live Coaching",
+} as const;
+
+const KIND_LABEL_LOWER = {
+  script: "script",
+  guidance: "response card",
+  coaching: "live coaching",
+} as const;
+
+const KIND_LABEL_PLURAL = {
+  script: "scripts",
+  guidance: "response cards",
+  coaching: "live coaching items",
+} as const;
+
+type GuidanceKind = keyof typeof KIND_LABEL;
+
+interface RowSelection {
+  selectedIds: string[];
+  allSelected: boolean;
+  someSelected: boolean;
+  onToggleAll: () => void;
+  onToggleRow: (id: string) => void;
+  selectAllLabel: string;
+}
 
 interface ScriptRow {
   id: string;
@@ -115,12 +145,42 @@ interface ScriptRow {
   playbook: ScriptPlaybook;
 }
 
+type PlaybookTab = "scripts" | "guidance" | "coaching";
+
+/** The tab keys are plural; the vocabulary above is keyed by the singular kind. */
+const TAB_KIND: Record<PlaybookTab, GuidanceKind> = {
+  scripts: "script",
+  guidance: "guidance",
+  coaching: "coaching",
+};
+
 const TABS: TabItem[] = [
-  { key: "all", label: "All" },
   { key: "scripts", label: "Scripts" },
-  { key: "guidance", label: "Guidance" },
-  { key: "coaching", label: "Coaching" },
+  { key: "guidance", label: "Response Cards" },
+  { key: "coaching", label: "Live Coaching" },
 ];
+
+/**
+ * The list under the tabs changes completely from tab to tab, so the page header
+ * names what is actually on screen instead of describing the section as a whole.
+ */
+const TAB_COPY: Record<PlaybookTab, { title: string; description: string }> = {
+  scripts: {
+    title: "Call Scripts",
+    description:
+      "Create structured talk tracks agents can follow throughout a conversation.",
+  },
+  guidance: {
+    title: "Response Cards",
+    description:
+      "Surface the right response when specific questions, topics, or objections come up.",
+  },
+  coaching: {
+    title: "Live Coaching",
+    description:
+      "Guide agents in real time based on conversation signals, behaviors, and sentiment.",
+  },
+};
 
 function toScriptRow(
   playbook: ScriptPlaybook,
@@ -136,211 +196,6 @@ function toScriptRow(
     updated,
     playbook,
   };
-}
-
-function StatusToggle({
-  name,
-  checked,
-  onCheckedChange,
-  disabled,
-  disabledReason,
-}: {
-  name: string;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  disabled?: boolean;
-  disabledReason?: string;
-}) {
-  const toggle = (
-    <Toggle
-      size="sm"
-      checked={checked}
-      disabled={disabled}
-      onCheckedChange={onCheckedChange}
-      aria-label={`${name} ${checked ? "live" : "draft"}`}
-    />
-  );
-  if (!disabled || !disabledReason) return toggle;
-  return (
-    <TooltipTrigger
-      content={<Tooltip theme="dark" arrow="top-center" title={disabledReason} />}
-    >
-      <span className="inline-flex">{toggle}</span>
-    </TooltipTrigger>
-  );
-}
-
-const MEMBER_AVATAR_COLORS: AvatarColor[] = [
-  "indigo",
-  "purple",
-  "pink",
-  "orange",
-  "bluegrey",
-];
-
-function initialsFromName(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-}
-
-function colorForId(id: string): AvatarColor {
-  let hash = 0;
-  for (let i = 0; i < id.length; i += 1) {
-    hash = (hash + id.charCodeAt(i) * (i + 1)) % MEMBER_AVATAR_COLORS.length;
-  }
-  return MEMBER_AVATAR_COLORS[hash];
-}
-
-function UsersGlyph({ size }: { size: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 14 14"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M9.333 12.25v-.875A2.042 2.042 0 0 0 7.292 9.333H3.792A2.042 2.042 0 0 0 1.75 11.375V12.25M5.542 6.417A2.042 2.042 0 1 0 5.542 2.333a2.042 2.042 0 0 0 0 4.084ZM12.25 12.25v-.875a2.042 2.042 0 0 0-1.531-1.977M9.187 2.385a2.042 2.042 0 0 1 0 3.955"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function GroupAvatar({
-  size = "md",
-  outline = true,
-  className,
-  style,
-  ...props
-}: Pick<AvatarProps, "size" | "outline" | "className" | "style"> &
-  Omit<React.HTMLAttributes<HTMLSpanElement>, "color">) {
-  const resolved = size === "xxl" ? "lg" : (size ?? "md");
-  const iconPx =
-    resolved === "xs" ? 10 : resolved === "sm" ? 12 : resolved === "md" ? 14 : 16;
-
-  return (
-    <span
-      className={cn(avatarVariants({ size: resolved }), className)}
-      style={style}
-      {...props}
-    >
-      <span
-        className={cn(
-          "relative flex size-full items-center justify-center overflow-hidden rounded-full",
-          "bg-avatar-indigo-bg text-avatar-indigo-fg",
-          outline && "border border-white"
-        )}
-      >
-        <UsersGlyph size={iconPx} />
-      </span>
-    </span>
-  );
-}
-
-function AssignmentFace({
-  person,
-  ...props
-}: {
-  person: AssignmentPerson;
-} & Omit<React.HTMLAttributes<HTMLSpanElement>, "color">) {
-  if (person.kind === "group") {
-    return (
-      <GroupAvatar
-        size="md"
-        outline
-        tabIndex={0}
-        aria-label={person.name}
-        {...props}
-      />
-    );
-  }
-
-  return (
-    <Avatar
-      size="md"
-      outline
-      initials={initialsFromName(person.name)}
-      color={colorForId(person.id)}
-      tabIndex={0}
-      aria-label={person.name}
-      {...props}
-    />
-  );
-}
-
-function AssignmentAvatarStack({ people }: { people: AssignmentPerson[] }) {
-  const [openId, setOpenId] = React.useState<string | null>(null);
-
-  if (people.length === 0) {
-    return <span className="text-paragraph-md text-muted-foreground">–</span>;
-  }
-
-  const max = 3;
-  const visible = people.slice(0, max);
-  const overflow = people.length - visible.length;
-
-  return (
-    <div className="flex items-center -space-x-2">
-      {visible.map((person, index) => (
-        <span
-          key={person.id}
-          className="relative"
-          style={{
-            zIndex: openId === person.id ? 50 : visible.length - index,
-          }}
-        >
-          <TooltipTrigger
-            placement="top"
-            onOpenChange={(open) => setOpenId(open ? person.id : null)}
-            content={
-              <Tooltip theme="dark" arrow="bottom-center" title={person.name} />
-            }
-          >
-            <AssignmentFace person={person} />
-          </TooltipTrigger>
-        </span>
-      ))}
-      {overflow > 0 ? (
-        <Avatar
-          size="md"
-          color="grey"
-          initials={`+${overflow}`}
-          outline
-          className="relative"
-          style={{ zIndex: 0 }}
-          aria-hidden
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function IconTrash({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 20 20"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <path
-        d="M3.333 5.833h13.334M8.333 9.167v5M11.667 9.167v5M4.167 5.833l.833 10a1.667 1.667 0 0 0 1.667 1.667h6.666a1.667 1.667 0 0 0 1.667-1.667l.833-10M7.5 5.833V3.333A.833.833 0 0 1 8.333 2.5h3.334a.833.833 0 0 1 .833.833v2.5"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
 }
 
 interface ActionMenuItem {
@@ -468,16 +323,13 @@ function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }
 
 function ActionButtonGroup({
   entity,
-  showPreview = true,
   onEdit,
   onPreview,
   onDuplicate,
   onAssign,
   onDelete,
 }: {
-  entity: "script" | "guidance" | "coaching";
-  /** Coaching has no card to preview — its runtime shape is a banner. */
-  showPreview?: boolean;
+  entity: GuidanceKind;
   onEdit?: () => void;
   onPreview?: () => void;
   onDuplicate?: () => void;
@@ -492,30 +344,28 @@ function ActionButtonGroup({
       >
         <button
           type="button"
-          aria-label={`Edit ${entity}`}
+          aria-label={`Edit ${KIND_LABEL_LOWER[entity]}`}
           onClick={onEdit}
           className="-mr-px flex size-9 items-center justify-center rounded-l-[4px] border border-line bg-white text-foreground hover:bg-secondary-bg"
         >
           <IconPencil size={20} />
         </button>
       </TooltipTrigger>
-      {showPreview ? (
-        <TooltipTrigger
-          placement="bottom"
-          content={<Tooltip theme="dark" arrow="top-center" title="Preview" />}
+      <TooltipTrigger
+        placement="bottom"
+        content={<Tooltip theme="dark" arrow="top-center" title="Preview" />}
+      >
+        <button
+          type="button"
+          aria-label={`Preview ${KIND_LABEL_LOWER[entity]}`}
+          onClick={onPreview}
+          className="-mr-px flex size-9 items-center justify-center border border-line bg-white text-foreground hover:bg-secondary-bg"
         >
-          <button
-            type="button"
-            aria-label={`Preview ${entity}`}
-            onClick={onPreview}
-            className="-mr-px flex size-9 items-center justify-center border border-line bg-white text-foreground hover:bg-secondary-bg"
-          >
-            <IconEye size={20} />
-          </button>
-        </TooltipTrigger>
-      ) : null}
+          <IconEye size={20} />
+        </button>
+      </TooltipTrigger>
       <ActionMenu
-        label={`More ${entity} actions`}
+        label={`More ${KIND_LABEL_LOWER[entity]} actions`}
         items={[
           {
             key: "duplicate",
@@ -588,11 +438,8 @@ export interface AgentAssistPlaybooksPageProps {
   onGuidanceItemsChange: (next: GuidanceItem[]) => void;
   coachingRules: CoachingRule[];
   onCoachingRulesChange: (next: CoachingRule[]) => void;
-  /** Available for AI-assisted guidance drafting (§13). */
   knowledgeSources: KnowledgeSourceRecord[];
-  /** Only enabled capabilities can be attached as a recommended action. */
-  integrations: Integration[];
-  onBack: () => void;
+  onOpenKnowledge: () => void;
 }
 
 export function AgentAssistPlaybooksPage({
@@ -601,17 +448,15 @@ export function AgentAssistPlaybooksPage({
   coachingRules,
   onCoachingRulesChange,
   knowledgeSources,
-  integrations,
-  onBack,
+  onOpenKnowledge,
 }: AgentAssistPlaybooksPageProps) {
-  const [tab, setTab] = React.useState("all");
+  const [tab, setTab] = React.useState<PlaybookTab>("scripts");
   const [search, setSearch] = React.useState("");
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [memberFilter, setMemberFilter] = React.useState<string[]>([]);
   const [groupFilter, setGroupFilter] = React.useState<string[]>([]);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(25);
-  const [createOpen, setCreateOpen] = React.useState(false);
   const [templatesOpen, setTemplatesOpen] = React.useState(false);
   const [guidanceTemplatesOpen, setGuidanceTemplatesOpen] = React.useState(false);
   const [coachingTemplatesOpen, setCoachingTemplatesOpen] = React.useState(false);
@@ -623,6 +468,8 @@ export function AgentAssistPlaybooksPage({
     mode: "create" | "edit";
     item: GuidanceItem;
     templateId?: GuidanceTemplateId | null;
+    /** Opens the AI drafting step straight away (§13). */
+    generate?: boolean;
   } | null>(null);
   const [coachingLaunch, setCoachingLaunch] = React.useState<{
     mode: "create" | "edit";
@@ -630,6 +477,7 @@ export function AgentAssistPlaybooksPage({
   } | null>(null);
   const [previewScript, setPreviewScript] = React.useState<ScriptPlaybook | null>(null);
   const [previewGuidance, setPreviewGuidance] = React.useState<GuidanceItem | null>(null);
+  const [previewCoaching, setPreviewCoaching] = React.useState<CoachingRule | null>(null);
   const [viewingResource, setViewingResource] = React.useState<GuidanceResource | null>(null);
   const [assignTarget, setAssignTarget] = React.useState<
     | { type: "script"; row: ScriptRow }
@@ -637,6 +485,8 @@ export function AgentAssistPlaybooksPage({
     | { type: "coaching"; row: CoachingRule }
     | null
   >(null);
+  const [selected, setSelected] = React.useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = React.useState(false);
   const isScripts = tab === "scripts";
   const isGuidance = tab === "guidance";
   const isCoaching = tab === "coaching";
@@ -685,9 +535,7 @@ export function AgentAssistPlaybooksPage({
     ? filteredScripts
     : isGuidance
       ? filteredGuidance
-      : isCoaching
-        ? filteredCoaching
-        : [...filteredScripts, ...filteredGuidance, ...filteredCoaching];
+      : filteredCoaching;
   const isEmpty = filtered.length === 0 && !query && !hasFilters;
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -696,6 +544,32 @@ export function AgentAssistPlaybooksPage({
   const visibleScripts = filteredScripts.slice(start, start + pageSize);
   const visibleGuidance = filteredGuidance.slice(start, start + pageSize);
   const visibleCoaching = filteredCoaching.slice(start, start + pageSize);
+  const visibleRows = isScripts
+    ? visibleScripts
+    : isGuidance
+      ? visibleGuidance
+      : visibleCoaching;
+  // Header checkbox and bulk bar act on the page in front of the admin.
+  const visibleIds = visibleRows.map((row) => row.id);
+  const selectedVisible = selected.filter((id) => visibleIds.includes(id));
+  const allSelected =
+    visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+  const someSelected = selectedVisible.length > 0 && !allSelected;
+  const selection: RowSelection = {
+    selectedIds: selected,
+    allSelected,
+    someSelected,
+    onToggleAll: () => setSelected(allSelected ? [] : visibleIds),
+    onToggleRow: (id) =>
+      setSelected((current) =>
+        current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
+      ),
+    selectAllLabel: isScripts
+      ? "Select all scripts"
+      : isGuidance
+        ? "Select all response cards"
+        : "Select all live coaching",
+  };
 
   const openScriptTemplates = () => setTemplatesOpen(true);
 
@@ -722,16 +596,17 @@ export function AgentAssistPlaybooksPage({
 
   const openGuidanceTemplates = () => setGuidanceTemplatesOpen(true);
 
-  /** §9 — the one decision an admin makes before any form opens. */
-  const handleCreateKind = (kind: PlaybookKind) => {
-    setCreateOpen(false);
-    if (kind === "script") setTemplatesOpen(true);
-    else if (kind === "guidance") setGuidanceTemplatesOpen(true);
-    else setCoachingTemplatesOpen(true);
-  };
-
   const handleGuidanceTemplateSelect = (choice: GuidanceStartChoice) => {
     setGuidanceTemplatesOpen(false);
+    if (choice.type === "generate") {
+      // AI proposes the draft; the admin still reviews it in the editor (§13).
+      setGuidanceLaunch({
+        mode: "create",
+        item: createEmptyGuidance(),
+        generate: true,
+      });
+      return;
+    }
     if (choice.type === "scratch") {
       setGuidanceLaunch({ mode: "create", item: createEmptyGuidance() });
       return;
@@ -743,11 +618,11 @@ export function AgentAssistPlaybooksPage({
     });
   };
 
-  const handleCoachingTemplateSelect = (templateId: CoachingTemplateId) => {
+  const handleCoachingTemplateSelect = (choice: CoachingStartChoice) => {
     setCoachingTemplatesOpen(false);
     setCoachingLaunch({
       mode: "create",
-      rule: createCoachingRuleFromTemplate(templateId),
+      rule: createCoachingRuleFromTemplate(choice.templateId),
     });
   };
 
@@ -842,6 +717,23 @@ export function AgentAssistPlaybooksPage({
     ]);
   };
 
+  const dropSelectedIds = (ids: string[]) => {
+    setSelected((current) => current.filter((id) => !ids.includes(id)));
+  };
+
+  const confirmBulkDelete = () => {
+    const ids = selectedVisible;
+    if (isScripts) {
+      setScripts((current) => current.filter((item) => !ids.includes(item.id)));
+    } else if (isGuidance) {
+      onGuidanceItemsChange(guidanceItems.filter((item) => !ids.includes(item.id)));
+    } else {
+      onCoachingRulesChange(coachingRules.filter((item) => !ids.includes(item.id)));
+    }
+    dropSelectedIds(ids);
+    setBulkDeleting(false);
+  };
+
   if (guidanceLaunch) {
     return (
       <CreateGuidancePage
@@ -849,7 +741,11 @@ export function AgentAssistPlaybooksPage({
         mode={guidanceLaunch.mode}
         templateId={guidanceLaunch.templateId}
         knowledgeSources={knowledgeSources}
-        integrations={integrations}
+        startWithGenerate={guidanceLaunch.generate}
+        onUseKnowledgeInstead={() => {
+          setGuidanceLaunch(null);
+          onOpenKnowledge();
+        }}
         onClose={() => setGuidanceLaunch(null)}
         onSave={saveGuidance}
       />
@@ -877,31 +773,45 @@ export function AgentAssistPlaybooksPage({
     );
   }
 
+  // One primary creation CTA per view (§4): the active tab decides what it
+  // creates, and the empty state owns the call to action when it is showing.
+  const createCta = isScripts
+    ? { label: "New script", onClick: openScriptTemplates }
+    : isGuidance
+      ? { label: "New response card", onClick: openGuidanceTemplates }
+      : { label: "New live coaching", onClick: () => setCoachingTemplatesOpen(true) };
+
   return (
-    <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
+    <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <AdminPageHeader
-        title="Playbooks"
-        description="Define how agents should handle conversations. Use these for the moments you want control over — routine questions are already answered from Knowledge."
-        onBack={onBack}
+        title={TAB_COPY[tab].title}
+        description={TAB_COPY[tab].description}
         actions={
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            Create playbook
-          </Button>
+          isEmpty ? null : (
+            <Button size="sm" onClick={createCta.onClick}>
+              {createCta.label}
+            </Button>
+          )
         }
       />
 
-      <div className="border-b border-line px-6">
-        <Tabs
-          items={TABS}
-          value={tab}
-          onValueChange={(key) => {
-            setTab(key);
-            setSearch("");
-            setMemberFilter([]);
-            setGroupFilter([]);
-            setPage(1);
-          }}
-        />
+      {/* The tab rule stops where the content column stops — it lines up with
+          the page padding instead of bleeding to the edges of the shell. */}
+      <div className="px-6">
+        <div className="border-b border-line">
+          <Tabs
+            items={TABS}
+            value={tab}
+            onValueChange={(key) => {
+              setTab(key as PlaybookTab);
+              setSearch("");
+              setMemberFilter([]);
+              setGroupFilter([]);
+              setSelected([]);
+              setPage(1);
+            }}
+          />
+        </div>
       </div>
 
       {isEmpty ? (
@@ -910,7 +820,7 @@ export function AgentAssistPlaybooksPage({
             illustrationSrc={scriptsEmptyIllustration}
             illustrationAlt=""
             title="No scripts yet"
-            description="Create a playbook for the conversations you want agents to run — then Agent Assist guides them live."
+            description="Create a script for the conversations you want agents to run — then Agent Assist guides them live."
             actionLabel="Create script"
             onAction={openScriptTemplates}
           />
@@ -918,28 +828,19 @@ export function AgentAssistPlaybooksPage({
           <AgentAssistEmptyState
             illustrationSrc={faqsEmptyIllustration}
             illustrationAlt=""
-            title="No coaching yet"
-            description="Start from a template to nudge agents when talk ratio, interruptions, pace, silence, or customer sentiment drift."
-            actionLabel="Create coaching"
+            title="No live coaching yet"
+            description="Start from a template to nudge agents when the conversation balance, delivery, or customer experience drifts."
+            actionLabel="Create live coaching"
             onAction={() => setCoachingTemplatesOpen(true)}
-          />
-        ) : isGuidance ? (
-          <AgentAssistEmptyState
-            illustrationSrc={faqsEmptyIllustration}
-            illustrationAlt=""
-            title="No guidance yet"
-            description="Surface relevant answers, talking points, and resources to agents based on what's being discussed during calls."
-            actionLabel="Create guidance"
-            onAction={openGuidanceTemplates}
           />
         ) : (
           <AgentAssistEmptyState
-            illustrationSrc={scriptsEmptyIllustration}
+            illustrationSrc={faqsEmptyIllustration}
             illustrationAlt=""
-            title="No playbooks yet"
-            description="Scripts structure a call, Guidance handles a situation, and Coaching reacts to how the agent is talking."
-            actionLabel="Create playbook"
-            onAction={() => setCreateOpen(true)}
+            title="No response cards yet"
+            description="Surface relevant answers, talking points, and resources to agents based on what's being discussed during calls."
+            actionLabel="Create response card"
+            onAction={openGuidanceTemplates}
           />
         )
       ) : (
@@ -951,10 +852,8 @@ export function AgentAssistPlaybooksPage({
                   isScripts
                     ? "Search scripts"
                     : isGuidance
-                      ? "Search guidance"
-                      : isCoaching
-                        ? "Search coaching"
-                        : "Search playbooks"
+                      ? "Search response cards"
+                      : "Search live coaching"
                 }
                 leadingIcon={<IconSearch size={16} />}
                 value={search}
@@ -997,25 +896,6 @@ export function AgentAssistPlaybooksPage({
               </Button>
             </div>
 
-            <div className="flex items-center gap-3">
-              {isScripts ? (
-                <Button variant="grey-outline" size="sm" onClick={openScriptTemplates}>
-                  New script
-                </Button>
-              ) : isGuidance ? (
-                <Button variant="grey-outline" size="sm" onClick={openGuidanceTemplates}>
-                  New guidance
-                </Button>
-              ) : isCoaching ? (
-                <Button
-                  variant="grey-outline"
-                  size="sm"
-                  onClick={() => setCoachingTemplatesOpen(true)}
-                >
-                  New coaching
-                </Button>
-              ) : null}
-            </div>
           </div>
 
           <div
@@ -1074,12 +954,13 @@ export function AgentAssistPlaybooksPage({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+          <div className="relative flex min-h-0 flex-1 flex-col px-6 pb-6">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
               <div className="min-h-0 flex-1 overflow-auto">
                 {isScripts ? (
                   <ScriptsTable
                     rows={visibleScripts}
+                    selection={selection}
                     onEdit={(row) => setBuilder({ type: "edit", playbook: row.playbook })}
                     onPreview={(row) => setPreviewScript(row.playbook)}
                     onAssign={(row) => setAssignTarget({ type: "script", row })}
@@ -1088,9 +969,10 @@ export function AgentAssistPlaybooksPage({
                       copy.name = `Copy of ${row.playbook.name}`;
                       setScripts((current) => [toScriptRow(copy, "draft"), ...current]);
                     }}
-                    onDelete={(row) =>
-                      setScripts((current) => current.filter((item) => item.id !== row.id))
-                    }
+                    onDelete={(row) => {
+                      setScripts((current) => current.filter((item) => item.id !== row.id));
+                      dropSelectedIds([row.id]);
+                    }}
                     onStatusChange={(row, live) =>
                       setScripts((current) =>
                         current.map((item) =>
@@ -1104,17 +986,19 @@ export function AgentAssistPlaybooksPage({
                 ) : isGuidance ? (
                   <GuidanceTable
                     rows={visibleGuidance}
+                    selection={selection}
                     onEdit={(row) =>
                       setGuidanceLaunch({ mode: "edit", item: row })
                     }
                     onPreview={setPreviewGuidance}
                     onAssign={(row) => setAssignTarget({ type: "guidance", row })}
                     onDuplicate={duplicateGuidance}
-                    onDelete={(row) =>
+                    onDelete={(row) => {
                       onGuidanceItemsChange(
                         guidanceItems.filter((item) => item.id !== row.id)
-                      )
-                    }
+                      );
+                      dropSelectedIds([row.id]);
+                    }}
                     onStatusChange={(row, live) => {
                       if (live && guidanceAssignees(row).length === 0) return;
                       onGuidanceItemsChange(
@@ -1126,38 +1010,26 @@ export function AgentAssistPlaybooksPage({
                       );
                     }}
                   />
-                ) : isCoaching ? (
+                ) : (
                   <CoachingTable
                     rows={visibleCoaching}
+                    selection={selection}
                     onEdit={(row) => setCoachingLaunch({ mode: "edit", rule: row })}
+                    onPreview={setPreviewCoaching}
                     onAssign={(row) => setAssignTarget({ type: "coaching", row })}
                     onDuplicate={duplicateCoaching}
-                    onDelete={(row) =>
+                    onDelete={(row) => {
                       onCoachingRulesChange(
                         coachingRules.filter((item) => item.id !== row.id)
-                      )
-                    }
+                      );
+                      dropSelectedIds([row.id]);
+                    }}
                     onStatusChange={(row, live) => {
                       if (live && row.teamMembers.length + row.userGroups.length === 0) {
                         return;
                       }
                       patchCoaching(row.id, { status: live ? "live" : "draft" });
                     }}
-                  />
-                ) : (
-                  <AllPlaybooksTable
-                    scripts={visibleScripts}
-                    guidance={visibleGuidance}
-                    coaching={visibleCoaching}
-                    onOpenScript={(row) =>
-                      setBuilder({ type: "edit", playbook: row.playbook })
-                    }
-                    onOpenGuidance={(row) =>
-                      setGuidanceLaunch({ mode: "edit", item: row })
-                    }
-                    onOpenCoaching={(row) =>
-                      setCoachingLaunch({ mode: "edit", rule: row })
-                    }
                   />
                 )}
               </div>
@@ -1175,6 +1047,20 @@ export function AgentAssistPlaybooksPage({
                 />
               </div>
             </div>
+            <TableBulkBar
+              count={selectedVisible.length}
+              label="selected"
+              actions={
+                <Button
+                  variant="grey-outline"
+                  size="sm"
+                  className="bg-white"
+                  onClick={() => setBulkDeleting(true)}
+                >
+                  Delete
+                </Button>
+              }
+            />
           </div>
         </>
       )}
@@ -1193,11 +1079,6 @@ export function AgentAssistPlaybooksPage({
         open={coachingTemplatesOpen}
         onClose={() => setCoachingTemplatesOpen(false)}
         onSelect={handleCoachingTemplateSelect}
-      />
-      <CreatePlaybookModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onSelect={handleCreateKind}
       />
 
       {previewScript ? (
@@ -1228,6 +1109,18 @@ export function AgentAssistPlaybooksPage({
             reduced
             onViewResource={setViewingResource}
           />
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(previewCoaching)}
+        onClose={() => setPreviewCoaching(null)}
+        size="md"
+        title="Preview"
+        description="What the agent would see during a call"
+      >
+        {previewCoaching ? (
+          <CoachingPreview rule={previewCoaching} caption={false} />
         ) : null}
       </Modal>
 
@@ -1266,6 +1159,15 @@ export function AgentAssistPlaybooksPage({
           }}
         />
       ) : null}
+
+      {bulkDeleting && selectedVisible.length > 0 ? (
+        <BulkDeleteModal
+          kind={TAB_KIND[tab]}
+          count={selectedVisible.length}
+          onClose={() => setBulkDeleting(false)}
+          onConfirm={confirmBulkDelete}
+        />
+      ) : null}
     </main>
   );
 }
@@ -1301,7 +1203,7 @@ function AssignModal({
       className="overflow-visible"
       bodyClassName="overflow-visible"
       title="Assign"
-      description={`Choose who sees this ${entity} on their calls.`}
+      description={`Choose who sees this ${KIND_LABEL_LOWER[entity]} on their calls.`}
       footer={
         <>
           <Button variant="grey-outline" size="sm" onClick={onClose}>
@@ -1316,7 +1218,7 @@ function AssignModal({
       <dl className="flex flex-col gap-3">
         <div>
           <dt className="text-label-sm text-muted-foreground">
-            {entity === "script" ? "Script" : entity === "guidance" ? "Guidance" : "Coaching"}
+            {KIND_LABEL[entity]}
           </dt>
           <dd className="text-paragraph-md text-foreground">{name}</dd>
         </div>
@@ -1334,8 +1236,49 @@ function AssignModal({
   );
 }
 
+function BulkDeleteModal({
+  kind,
+  count,
+  onClose,
+  onConfirm,
+}: {
+  kind: GuidanceKind;
+  count: number;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const singular = KIND_LABEL_LOWER[kind];
+  const plural = KIND_LABEL_PLURAL[kind];
+  const title = count === 1 ? `Delete ${singular}` : `Delete ${plural}`;
+  const description =
+    count === 1
+      ? `This ${singular} will be removed from Agent Assist.`
+      : `${count} ${plural} will be removed from Agent Assist.`;
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title={title}
+      description={description}
+      footer={
+        <>
+          <Button variant="grey-outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="error" size="sm" onClick={onConfirm}>
+            Delete
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
 function ScriptsTable({
   rows,
+  selection,
   onEdit,
   onPreview,
   onDuplicate,
@@ -1344,6 +1287,7 @@ function ScriptsTable({
   onStatusChange,
 }: {
   rows: ScriptRow[];
+  selection: RowSelection;
   onEdit: (row: ScriptRow) => void;
   onPreview: (row: ScriptRow) => void;
   onDuplicate: (row: ScriptRow) => void;
@@ -1355,6 +1299,12 @@ function ScriptsTable({
     <Table className="table-fixed">
       <TableHeader className="[&_tr]:border-b-0">
         <TableRow>
+          <TableSelectHead
+            allSelected={selection.allSelected}
+            someSelected={selection.someSelected}
+            onToggleAll={selection.onToggleAll}
+            label={selection.selectAllLabel}
+          />
           <TableHead className="sticky top-0 z-10 w-[280px]">Name</TableHead>
           <TableHead className="sticky top-0 z-10 w-[160px]">Assigned</TableHead>
           <TableHead className="sticky top-0 z-10 w-[100px]">Steps</TableHead>
@@ -1364,35 +1314,47 @@ function ScriptsTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.id} className="border-b-0">
-            <TableCell>
-              <TableCellText primary={row.name} />
-            </TableCell>
-            <TableCell>
-              <AssignmentAvatarStack people={playbookAssignees(row.playbook)} />
-            </TableCell>
-            <TableCell className="text-paragraph-md">{row.steps}</TableCell>
-            <TableCell>
-              <StatusToggle
-                name={row.name}
-                checked={row.status === "live"}
-                onCheckedChange={(live) => onStatusChange(row, live)}
+        {rows.map((row) => {
+          const isSelected = selection.selectedIds.includes(row.id);
+          return (
+            <TableRow
+              key={row.id}
+              state={isSelected ? "selected" : "default"}
+              className="border-b-0"
+            >
+              <TableSelectCell
+                checked={isSelected}
+                onToggle={() => selection.onToggleRow(row.id)}
+                label={`Select ${row.name}`}
               />
-            </TableCell>
-            <TableCell className="text-paragraph-md">{row.updated}</TableCell>
-            <TableCell className="text-center">
-              <ActionButtonGroup
-                entity="script"
-                onEdit={() => onEdit(row)}
-                onPreview={() => onPreview(row)}
-                onDuplicate={() => onDuplicate(row)}
-                onAssign={() => onAssign(row)}
-                onDelete={() => onDelete(row)}
-              />
-            </TableCell>
-          </TableRow>
-        ))}
+              <TableCell>
+                <TableCellText primary={row.name} />
+              </TableCell>
+              <TableCell>
+                <AssignmentAvatarStack people={playbookAssignees(row.playbook)} />
+              </TableCell>
+              <TableCell className="text-paragraph-md">{row.steps}</TableCell>
+              <TableCell>
+                <StatusToggle
+                  name={row.name}
+                  checked={row.status === "live"}
+                  onCheckedChange={(live) => onStatusChange(row, live)}
+                />
+              </TableCell>
+              <TableCell className="text-paragraph-md">{row.updated}</TableCell>
+              <TableCell className="text-center">
+                <ActionButtonGroup
+                  entity="script"
+                  onEdit={() => onEdit(row)}
+                  onPreview={() => onPreview(row)}
+                  onDuplicate={() => onDuplicate(row)}
+                  onAssign={() => onAssign(row)}
+                  onDelete={() => onDelete(row)}
+                />
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );
@@ -1400,6 +1362,7 @@ function ScriptsTable({
 
 function GuidanceTable({
   rows,
+  selection,
   onEdit,
   onPreview,
   onDuplicate,
@@ -1408,6 +1371,7 @@ function GuidanceTable({
   onStatusChange,
 }: {
   rows: GuidanceItem[];
+  selection: RowSelection;
   onEdit: (row: GuidanceItem) => void;
   onPreview: (row: GuidanceItem) => void;
   onDuplicate: (row: GuidanceItem) => void;
@@ -1419,7 +1383,13 @@ function GuidanceTable({
     <Table className="table-fixed">
       <TableHeader className="[&_tr]:border-b-0">
         <TableRow>
-          <TableHead className="sticky top-0 z-10 w-[220px]">Guidance name</TableHead>
+          <TableSelectHead
+            allSelected={selection.allSelected}
+            someSelected={selection.someSelected}
+            onToggleAll={selection.onToggleAll}
+            label={selection.selectAllLabel}
+          />
+          <TableHead className="sticky top-0 z-10 w-[220px]">Response card</TableHead>
           <TableHead className="sticky top-0 z-10">Trigger</TableHead>
           <TableHead className="sticky top-0 z-10 w-[160px]">Assigned to</TableHead>
           <TableHead className="sticky top-0 z-10 w-[120px]">Status</TableHead>
@@ -1428,75 +1398,91 @@ function GuidanceTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.id} className="border-b-0">
-            <TableCell>
-              <button
-                type="button"
-                onClick={() => onEdit(row)}
-                className="max-w-full min-w-0 bg-transparent p-0 text-left font-medium hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-              >
-                <TableCellText primary={row.name} />
-              </button>
-            </TableCell>
-            <TableCell>
-              <TooltipTrigger
-                className="w-full min-w-0 max-w-full"
-                placement="top-left"
-                content={
-                  <Tooltip theme="dark" arrow="bottom-left" title={row.trigger} />
-                }
-              >
-                <span className="block min-w-0 w-full truncate text-paragraph-md text-muted-foreground">
-                  {row.trigger}
-                </span>
-              </TooltipTrigger>
-            </TableCell>
-            <TableCell>
-              <AssignmentAvatarStack people={guidanceAssignees(row)} />
-            </TableCell>
-            <TableCell>
-              <StatusToggle
-                name={row.name}
-                checked={row.status === "live"}
-                disabled={row.status !== "live" && guidanceAssignees(row).length === 0}
-                disabledReason="Assign users or groups before publishing"
-                onCheckedChange={(live) => onStatusChange(row, live)}
+        {rows.map((row) => {
+          const isSelected = selection.selectedIds.includes(row.id);
+          return (
+            <TableRow
+              key={row.id}
+              state={isSelected ? "selected" : "default"}
+              className="border-b-0"
+            >
+              <TableSelectCell
+                checked={isSelected}
+                onToggle={() => selection.onToggleRow(row.id)}
+                label={`Select ${row.name}`}
               />
-            </TableCell>
-            <TableCell className="text-paragraph-md">{row.updated}</TableCell>
-            <TableCell className="text-center">
-              <ActionButtonGroup
-                entity="guidance"
-                onEdit={() => onEdit(row)}
-                onPreview={() => onPreview(row)}
-                onDuplicate={() => onDuplicate(row)}
-                onAssign={() => onAssign(row)}
-                onDelete={() => onDelete(row)}
-              />
-            </TableCell>
-          </TableRow>
-        ))}
+              <TableCell>
+                <button
+                  type="button"
+                  onClick={() => onEdit(row)}
+                  className="max-w-full min-w-0 bg-transparent p-0 text-left font-medium hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+                >
+                  <TableCellText primary={row.name} />
+                </button>
+              </TableCell>
+              <TableCell>
+                <TooltipTrigger
+                  className="w-full min-w-0 max-w-full"
+                  placement="top-left"
+                  content={
+                    <Tooltip theme="dark" arrow="bottom-left" title={row.trigger} />
+                  }
+                >
+                  <span className="block min-w-0 w-full truncate text-paragraph-md text-muted-foreground">
+                    {row.trigger}
+                  </span>
+                </TooltipTrigger>
+              </TableCell>
+              <TableCell>
+                <AssignmentAvatarStack people={guidanceAssignees(row)} />
+              </TableCell>
+              <TableCell>
+                <StatusToggle
+                  name={row.name}
+                  checked={row.status === "live"}
+                  disabled={row.status !== "live" && guidanceAssignees(row).length === 0}
+                  disabledReason="Assign users or groups before publishing"
+                  onCheckedChange={(live) => onStatusChange(row, live)}
+                />
+              </TableCell>
+              <TableCell className="text-paragraph-md">{row.updated}</TableCell>
+              <TableCell className="text-center">
+                <ActionButtonGroup
+                  entity="guidance"
+                  onEdit={() => onEdit(row)}
+                  onPreview={() => onPreview(row)}
+                  onDuplicate={() => onDuplicate(row)}
+                  onAssign={() => onAssign(row)}
+                  onDelete={() => onDelete(row)}
+                />
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );
 }
 
 /**
- * Coaching rules read differently from guidance: what's being measured is the
- * important column, and there is nothing to preview as a card because the
- * runtime shape is a banner.
+ * Live Coaching reads differently from a response card: what's being measured
+ * is the important column. Preview still exists — it shows the mid-call banner
+ * rather than a card.
  */
 function CoachingTable({
   rows,
+  selection,
   onEdit,
+  onPreview,
   onDuplicate,
   onAssign,
   onDelete,
   onStatusChange,
 }: {
   rows: CoachingRule[];
+  selection: RowSelection;
   onEdit: (row: CoachingRule) => void;
+  onPreview: (row: CoachingRule) => void;
   onDuplicate: (row: CoachingRule) => void;
   onAssign: (row: CoachingRule) => void;
   onDelete: (row: CoachingRule) => void;
@@ -1506,7 +1492,13 @@ function CoachingTable({
     <Table className="table-fixed">
       <TableHeader className="[&_tr]:border-b-0">
         <TableRow>
-          <TableHead className="sticky top-0 z-10 w-[240px]">Coaching</TableHead>
+          <TableSelectHead
+            allSelected={selection.allSelected}
+            someSelected={selection.someSelected}
+            onToggleAll={selection.onToggleAll}
+            label={selection.selectAllLabel}
+          />
+          <TableHead className="sticky top-0 z-10 w-[240px]">Live coaching</TableHead>
           <TableHead className="sticky top-0 z-10">Detect</TableHead>
           <TableHead className="sticky top-0 z-10 w-[140px]">Assigned to</TableHead>
           <TableHead className="sticky top-0 z-10 w-[100px]">Status</TableHead>
@@ -1515,65 +1507,85 @@ function CoachingTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.id} className="border-b-0">
-            <TableCell>
-              <button
-                type="button"
-                onClick={() => onEdit(row)}
-                className="max-w-full min-w-0 bg-transparent p-0 text-left font-medium hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-              >
-                <TableCellText
-                  primary={row.name}
-                  supporting={coachingFrequencyLabel(row)}
+        {rows.map((row) => {
+          const isSelected = selection.selectedIds.includes(row.id);
+          return (
+            <TableRow
+              key={row.id}
+              state={isSelected ? "selected" : "default"}
+              className="border-b-0"
+            >
+              <TableSelectCell
+                checked={isSelected}
+                onToggle={() => selection.onToggleRow(row.id)}
+                label={`Select ${row.name}`}
+              />
+              <TableCell>
+                <button
+                  type="button"
+                  onClick={() => onEdit(row)}
+                  className="flex max-w-full min-w-0 items-center gap-2 bg-transparent p-0 text-left font-medium hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+                >
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-[5px]",
+                      coachingTone(row.templateId).well
+                    )}
+                  >
+                    <CoachingCueIcon
+                      templateId={row.templateId}
+                      className="size-3.5"
+                    />
+                  </span>
+                  <TableCellText primary={row.name} />
+                </button>
+              </TableCell>
+              <TableCell>
+                <TooltipTrigger
+                  className="w-full min-w-0 max-w-full"
+                  placement="top-left"
+                  content={<Tooltip theme="dark" arrow="bottom-left" title={row.message} />}
+                >
+                  <span className="block w-full min-w-0 truncate text-paragraph-md text-muted-foreground">
+                    {coachingDetectLabel(row)} · {row.window.toLowerCase()}
+                  </span>
+                </TooltipTrigger>
+              </TableCell>
+              <TableCell>
+                <AssignmentAvatarStack people={coachingAssignees(row)} />
+              </TableCell>
+              <TableCell>
+                <StatusToggle
+                  name={row.name}
+                  checked={row.status === "live"}
+                  disabled={
+                    row.status !== "live" &&
+                    row.teamMembers.length + row.userGroups.length === 0
+                  }
+                  disabledReason="Assign users or groups before publishing"
+                  onCheckedChange={(live) => onStatusChange(row, live)}
                 />
-              </button>
-            </TableCell>
-            <TableCell>
-              <TooltipTrigger
-                className="w-full min-w-0 max-w-full"
-                placement="top-left"
-                content={<Tooltip theme="dark" arrow="bottom-left" title={row.message} />}
-              >
-                <span className="block w-full min-w-0 truncate text-paragraph-md text-muted-foreground">
-                  {coachingDetectLabel(row)} · {row.window.toLowerCase()}
-                </span>
-              </TooltipTrigger>
-            </TableCell>
-            <TableCell>
-              <AssignmentAvatarStack people={coachingAssignees(row)} />
-            </TableCell>
-            <TableCell>
-              <StatusToggle
-                name={row.name}
-                checked={row.status === "live"}
-                disabled={
-                  row.status !== "live" &&
-                  row.teamMembers.length + row.userGroups.length === 0
-                }
-                disabledReason="Assign users or groups before publishing"
-                onCheckedChange={(live) => onStatusChange(row, live)}
-              />
-            </TableCell>
-            <TableCell className="text-paragraph-md">{row.updated}</TableCell>
-            <TableCell className="text-center">
-              <ActionButtonGroup
-                entity="coaching"
-                showPreview={false}
-                onEdit={() => onEdit(row)}
-                onDuplicate={() => onDuplicate(row)}
-                onAssign={() => onAssign(row)}
-                onDelete={() => onDelete(row)}
-              />
-            </TableCell>
-          </TableRow>
-        ))}
+              </TableCell>
+              <TableCell className="text-paragraph-md">{row.updated}</TableCell>
+              <TableCell className="text-center">
+                <ActionButtonGroup
+                  entity="coaching"
+                  onEdit={() => onEdit(row)}
+                  onPreview={() => onPreview(row)}
+                  onDuplicate={() => onDuplicate(row)}
+                  onAssign={() => onAssign(row)}
+                  onDelete={() => onDelete(row)}
+                />
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );
 }
 
-/** Coaching reuses the guidance assignment vocabulary. */
+/** Live Coaching reuses the response card assignment vocabulary. */
 function coachingAssignees(rule: CoachingRule): AssignmentPerson[] {
   return guidanceAssignees({
     ...createEmptyGuidance(),
@@ -1582,150 +1594,3 @@ function coachingAssignees(rule: CoachingRule): AssignmentPerson[] {
   });
 }
 
-type AllRowKind = "Script" | "Guidance" | "Coaching";
-
-/**
- * One list across all three kinds. Admins think in "what have we set up for
- * this team", not "which of the three tabs was that in" — so All is the
- * default view and Type is a column rather than a destination.
- */
-function AllPlaybooksTable({
-  scripts,
-  guidance,
-  coaching,
-  onOpenScript,
-  onOpenGuidance,
-  onOpenCoaching,
-}: {
-  scripts: ScriptRow[];
-  guidance: GuidanceItem[];
-  coaching: CoachingRule[];
-  onOpenScript: (row: ScriptRow) => void;
-  onOpenGuidance: (row: GuidanceItem) => void;
-  onOpenCoaching: (row: CoachingRule) => void;
-}) {
-  const rows: {
-    key: string;
-    kind: AllRowKind;
-    name: string;
-    detail: string;
-    people: AssignmentPerson[];
-    status: PublishStatus;
-    updated: string;
-    onOpen: () => void;
-  }[] = [
-    ...scripts.map((row) => ({
-      key: `script-${row.id}`,
-      kind: "Script" as const,
-      name: row.name,
-      detail: `${row.steps} step${row.steps === 1 ? "" : "s"} · open all call`,
-      people: playbookAssignees(row.playbook),
-      status: row.status,
-      updated: row.updated,
-      onOpen: () => onOpenScript(row),
-    })),
-    ...guidance.map((row) => ({
-      key: `guidance-${row.id}`,
-      kind: "Guidance" as const,
-      name: row.name,
-      detail: row.trigger,
-      people: guidanceAssignees(row),
-      status: row.status,
-      updated: row.updated,
-      onOpen: () => onOpenGuidance(row),
-    })),
-    ...coaching.map((row) => ({
-      key: `coaching-${row.id}`,
-      kind: "Coaching" as const,
-      name: row.name,
-      detail: `${coachingDetectLabel(row)} · ${row.window.toLowerCase()}`,
-      people: coachingAssignees(row),
-      status: row.status,
-      updated: row.updated,
-      onOpen: () => onOpenCoaching(row),
-    })),
-  ];
-
-  return (
-    <Table className="table-fixed">
-      <TableHeader className="[&_tr]:border-b-0">
-        <TableRow>
-          <TableHead className="sticky top-0 z-10 w-[220px]">Name</TableHead>
-          <TableHead className="sticky top-0 z-10 w-[130px]">Type</TableHead>
-          <TableHead className="sticky top-0 z-10">What it does</TableHead>
-          <TableHead className="sticky top-0 z-10 w-[160px]">Assigned to</TableHead>
-          <TableHead className="sticky top-0 z-10 w-[110px]">Status</TableHead>
-          <TableHead className="sticky top-0 z-10 w-[120px]">Last updated</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.key} className="border-b-0">
-            <TableCell>
-              <button
-                type="button"
-                onClick={row.onOpen}
-                className="max-w-full min-w-0 bg-transparent p-0 text-left font-medium hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-              >
-                <TableCellText primary={row.name} />
-              </button>
-            </TableCell>
-            <TableCell>
-              <span className="inline-flex items-center gap-1.5 text-paragraph-md text-muted-foreground">
-                <PlaybookKindMark kind={row.kind} />
-                {row.kind}
-              </span>
-            </TableCell>
-            <TableCell>
-              <TooltipTrigger
-                className="w-full min-w-0 max-w-full"
-                placement="top-left"
-                content={<Tooltip theme="dark" arrow="bottom-left" title={row.detail} />}
-              >
-                <span className="block w-full min-w-0 truncate text-paragraph-md text-muted-foreground">
-                  {row.detail}
-                </span>
-              </TooltipTrigger>
-            </TableCell>
-            <TableCell>
-              <AssignmentAvatarStack people={row.people} />
-            </TableCell>
-            <TableCell>
-              <Badge variant={row.status === "live" ? "success" : "blue-grey"}>
-                {row.status === "live" ? "Live" : "Draft"}
-              </Badge>
-            </TableCell>
-            <TableCell className="text-paragraph-md">{row.updated}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-function PlaybookKindMark({ kind }: { kind: AllRowKind }) {
-  if (kind === "Guidance") {
-    return <GuidanceSparklesIcon size={14} className="size-3.5 shrink-0" />;
-  }
-  if (kind === "Coaching") {
-    return <IconCoaching className="size-3.5 shrink-0 text-warning-text" />;
-  }
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      aria-hidden="true"
-      className="shrink-0 text-muted-foreground"
-    >
-      <path
-        d="M3.5 2.5h6l3 3v8h-9v-11ZM9.5 2.5v3h3M5.5 8h5M5.5 10.5h3"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
