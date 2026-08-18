@@ -26,7 +26,7 @@ import {
 } from "@/components/Icon";
 import { IconJcaiSettings } from "./icons/JustCallAiNavIcons";
 import { AgentAssistCallSheet, LiveTranscriptPanel } from "./AgentAssistCallSheet";
-import { LiveGuidancePanel } from "./LiveGuidance";
+import { LiveAgentAssistPanel } from "./LiveAgentAssistPanel";
 import { CallWaveform } from "./CallWaveform";
 import {
   NOTES_TEXTAREA_MAX_H,
@@ -1083,9 +1083,9 @@ function CallMorphStage({
 
 /**
  * Live call — the call bar owns the top edge, then three columns split the rest:
- * the script, guidance, and the live transcript. Neither guidance nor the
- * transcript is a toggle inside the panel any more; while the line is open all
- * three are on screen at once.
+ * the Script, Agent Assist, and the live transcript. Agent Assist is the single
+ * runtime surface: knowledge, guidance, coaching, and suggested actions all
+ * arrive there, with no tabs for the agent to choose between.
  */
 function LiveCallStage({
   className,
@@ -1203,7 +1203,7 @@ function LiveCallStage({
           />
         </StagePane>
         <StagePane index={1} reduced={reduced} grow={4}>
-          <LiveGuidancePanel
+          <LiveAgentAssistPanel
             key={scenario.id}
             elapsedMs={elapsedMs}
             scenario={scenario}

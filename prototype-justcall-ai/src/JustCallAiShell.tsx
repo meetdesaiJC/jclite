@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { type SidenavItem } from "@/components/Sidenav";
 import { GlobalHeader } from "@/components/GlobalHeader";
 import { ProfileMenu } from "../../prototype-add-ons-flow/src/ProfileMenu";
-import { AgentAssistPage } from "./AgentAssistPage";
+import { AgentAssistAdmin } from "./AgentAssistAdmin";
 import { DialerPanel } from "./DialerPanel";
 import {
   IconJcaiHome,
@@ -95,7 +95,7 @@ export function JustCallAiShell({
       {dialerOpen ? (
         <DialerPanel onClose={() => setDialerOpen(false)} />
       ) : activeKey === "agent-assist" ? (
-        <AgentAssistPage />
+        <AgentAssistAdmin />
       ) : (
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-white" />
       )}

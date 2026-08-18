@@ -111,6 +111,39 @@
   animation: assist-header-attention 420ms cubic-bezier(0.23, 1, 0.32, 1) 180ms both;
 }
 
+/*
+ * Coaching is temporary. It takes its row when it arrives and gives the row
+ * back when it leaves, so acknowledging it doesn't leave a hole above the
+ * guidance the agent is reading.
+ */
+.assist-coaching-slot {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 220ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 160ms ease-out;
+}
+
+.assist-coaching-slot.is-leaving {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.assist-coaching-in {
+  animation: assist-coaching-in 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes assist-coaching-in {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+}
+
 .assist-card-body {
   display: grid;
   transition: grid-template-rows 250ms cubic-bezier(0.23, 1, 0.32, 1);

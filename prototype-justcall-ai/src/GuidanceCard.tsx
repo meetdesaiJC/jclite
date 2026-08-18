@@ -4,6 +4,7 @@ import {
   IconChevronUp,
   IconCircleCheckFilled,
 } from "@/components/Icon";
+import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
 import {
   AIRCALL_BATTLECARD,
@@ -65,61 +66,62 @@ function battlecardValueClass(value: string) {
 export function BattlecardVisual({
   className,
   data = AIRCALL_BATTLECARD,
+  size = "sm",
 }: {
   className?: string;
   data?: BattlecardData;
+  size?: "sm" | "lg";
 }) {
+  const large = size === "lg";
+  const grid = large
+    ? "grid-cols-[minmax(0,1.3fr)_1fr_1fr]"
+    : "grid-cols-[minmax(0,1fr)_88px_88px]";
+  const cell = large ? "px-4 py-3" : "px-2 py-1.5";
+  const heading = large
+    ? "text-label-md-semi text-foreground"
+    : "text-[10px] leading-normal font-semibold text-foreground";
+  const headingInverse = large
+    ? "text-label-md-semi text-white"
+    : "text-[10px] leading-normal font-semibold text-white";
+  const feature = large
+    ? "text-pretty text-label-md text-foreground"
+    : "truncate text-[10px] leading-normal text-foreground";
+  const value = large
+    ? "text-label-md font-medium"
+    : "text-[10px] leading-normal font-medium";
+
   return (
     <div
       className={cn(
-        "w-full overflow-hidden rounded-md border border-line bg-white",
+        "w-full overflow-hidden border border-line bg-white",
+        large ? "rounded-lg" : "rounded-md",
         className
       )}
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_88px_88px] items-stretch">
-        <div className="min-w-0 px-2 py-1.5">
-          <p className="text-[10px] leading-normal font-semibold text-foreground">
-            Features
-          </p>
+      <div className={cn("grid items-stretch", grid)}>
+        <div className={cn("min-w-0", cell)}>
+          <p className={heading}>Features</p>
         </div>
-        <div className="flex items-center justify-center bg-brand px-2 py-1.5">
-          <p className="text-[10px] leading-normal font-semibold text-white">
-            {data.usLabel}
-          </p>
+        <div className={cn("flex items-center justify-center bg-brand", cell)}>
+          <p className={headingInverse}>{data.usLabel}</p>
         </div>
-        <div className="flex items-center justify-center px-2 py-1.5">
-          <p className="text-[10px] leading-normal font-semibold text-foreground">
-            {data.competitorLabel}
-          </p>
+        <div className={cn("flex items-center justify-center", cell)}>
+          <p className={heading}>{data.competitorLabel}</p>
         </div>
       </div>
       {data.rows.map((row) => (
         <div
           key={row.feature}
-          className="grid grid-cols-[minmax(0,1fr)_88px_88px] items-stretch border-t border-line"
+          className={cn("grid items-stretch border-t border-line", grid)}
         >
-          <div className="min-w-0 px-2 py-1.5">
-            <p className="truncate text-[10px] leading-normal text-foreground">
-              {row.feature}
-            </p>
+          <div className={cn("min-w-0", cell)}>
+            <p className={feature}>{row.feature}</p>
           </div>
-          <div className="flex items-start justify-center px-2 py-1.5">
-            <p
-              className={cn(
-                "text-[10px] leading-normal font-medium",
-                battlecardValueClass(row.us)
-              )}
-            >
-              {row.us}
-            </p>
+          <div className={cn("flex items-center justify-center", cell)}>
+            <p className={cn(value, battlecardValueClass(row.us))}>{row.us}</p>
           </div>
-          <div className="flex items-start justify-center px-2 py-1.5">
-            <p
-              className={cn(
-                "text-[10px] leading-normal font-medium",
-                battlecardValueClass(row.competitor)
-              )}
-            >
+          <div className={cn("flex items-center justify-center", cell)}>
+            <p className={cn(value, battlecardValueClass(row.competitor))}>
               {row.competitor}
             </p>
           </div>
@@ -587,6 +589,40 @@ export function GuidanceResourceLink({
   );
 }
 
+function ResourcePreviewVisual({
+  resource,
+  compact,
+  framed,
+}: {
+  resource: GuidanceResource;
+  compact?: boolean;
+  framed?: boolean;
+}) {
+  const height = compact ? "max-h-28" : "max-h-44";
+  const frame = framed ? undefined : "rounded-none border-0";
+
+  if (resource.battlecard) {
+    return (
+      <BattlecardVisual
+        data={resource.battlecard}
+        className={cn("w-full", frame, compact && height)}
+      />
+    );
+  }
+
+  if (resource.thumbnail) {
+    return (
+      <img
+        src={resource.thumbnail}
+        alt={resource.name}
+        className={cn("w-full object-contain", height)}
+      />
+    );
+  }
+
+  return <BattlecardVisual className={cn("w-full", frame, height)} />;
+}
+
 export function GuidanceResourcePreview({
   resource,
   compact,
@@ -596,58 +632,91 @@ export function GuidanceResourcePreview({
   compact?: boolean;
   onView?: (resource: GuidanceResource) => void;
 }) {
-  if (resource.battlecard) {
-    return (
-      <div className="flex w-full flex-col gap-2">
+  const isBattlecard = Boolean(resource.battlecard);
+
+  return (
+    <div className="flex w-full flex-col gap-2">
+      {isBattlecard ? (
         <GuidanceSectionLabel>Battle card</GuidanceSectionLabel>
-        <BattlecardVisual data={resource.battlecard} />
-      </div>
-    );
+      ) : (
+        <p className="truncate text-label-md-semi text-foreground">
+          {resource.name}
+        </p>
+      )}
+      {onView ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onView(resource);
+          }}
+          aria-label={`View larger ${resource.name}`}
+          className={cn(
+            "group relative block w-full cursor-zoom-in overflow-hidden rounded-md border border-line bg-white text-left outline-none",
+            "hover:border-control-border focus-visible:ring-2 focus-visible:ring-brand/24",
+            "active:scale-[0.99] motion-safe:transition-[border-color,transform] motion-safe:duration-150 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]"
+          )}
+        >
+          <ResourcePreviewVisual resource={resource} compact={compact} />
+          <span
+            className="pointer-events-none absolute inset-0 rounded-md shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]"
+            aria-hidden="true"
+          />
+          <span
+            className={cn(
+              "pointer-events-none absolute right-1.5 bottom-1.5 inline-flex size-7 items-center justify-center rounded-[4px] bg-white/92 text-foreground shadow-[0_0_0_1px_rgba(0,0,0,0.06)]",
+              "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+              "motion-safe:transition-opacity motion-safe:duration-150"
+            )}
+            aria-hidden="true"
+          >
+            <ExpandHint />
+          </span>
+        </button>
+      ) : (
+        <ResourcePreviewVisual resource={resource} compact={compact} framed />
+      )}
+    </div>
+  );
+}
+
+export function GuidanceResourceZoom({ resource }: { resource: GuidanceResource }) {
+  if (resource.battlecard) {
+    return <BattlecardVisual data={resource.battlecard} size="lg" className="w-full" />;
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <p className="truncate text-label-md-semi text-foreground">{resource.name}</p>
-      <button
-        type="button"
-        onClick={() => onView?.(resource)}
-        aria-label={`Expand ${resource.name}`}
-        className={cn(
-          "group relative block w-full overflow-hidden rounded-md border border-line bg-white text-left outline-none",
-          "hover:border-control-border focus-visible:ring-2 focus-visible:ring-brand/24",
-          "active:scale-[0.99] motion-safe:transition-[border-color,transform] motion-safe:duration-150 motion-safe:ease-[cubic-bezier(0.23,1,0.32,1)]"
-        )}
-      >
-        {resource.thumbnail ? (
-          <img
-            src={resource.thumbnail}
-            alt={resource.name}
-            className={cn(
-              "w-full object-contain",
-              compact ? "max-h-28" : "max-h-44"
-            )}
-          />
-        ) : (
-          <BattlecardVisual
-            className={cn("w-full", compact ? "max-h-28" : "max-h-44")}
-          />
-        )}
-        <span
-          className="pointer-events-none absolute inset-0 rounded-md shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]"
-          aria-hidden="true"
+    <div className="overflow-hidden rounded-lg border border-line bg-white">
+      {resource.thumbnail ? (
+        <img
+          src={resource.thumbnail}
+          alt={resource.name}
+          className="mx-auto max-h-[70vh] w-full object-contain"
         />
-        <span
-          className={cn(
-            "pointer-events-none absolute right-1.5 bottom-1.5 inline-flex size-7 items-center justify-center rounded-[4px] bg-white/92 text-foreground shadow-[0_0_0_1px_rgba(0,0,0,0.06)]",
-            "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
-            "motion-safe:transition-opacity motion-safe:duration-150"
-          )}
-          aria-hidden="true"
-        >
-          <ExpandHint />
-        </span>
-      </button>
+      ) : (
+        <BattlecardVisual size="lg" className="w-full" />
+      )}
     </div>
+  );
+}
+
+export function GuidanceResourceModal({
+  resource,
+  onClose,
+}: {
+  resource: GuidanceResource | null;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      open={Boolean(resource)}
+      onClose={onClose}
+      size={resource?.battlecard ? "md" : "lg"}
+      title={resource?.name}
+      bodyClassName="bg-secondary-bg"
+    >
+      {resource ? <GuidanceResourceZoom resource={resource} /> : null}
+    </Modal>
   );
 }
 

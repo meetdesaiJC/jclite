@@ -1,4 +1,5 @@
 import type { DropdownListItem } from "@/components/Dropdown";
+import type { GuidanceActionConfig } from "./actionsData";
 
 export type PublishStatus = "live" | "draft";
 
@@ -37,21 +38,42 @@ export const AIRCALL_BATTLECARD: BattlecardData = {
   ],
 };
 
+/** Who has to say it before this guidance fires. Defaults to the customer. */
+export type GuidanceTriggeredBy = "customer" | "agent" | "either";
+
 export interface GuidanceItem {
   id: string;
   name: string;
   /** Natural-language trigger — migrated from FAQ question. */
   trigger: string;
   examplePhrases: string[];
+  /** Advanced control — left unset, only the customer's side is watched. */
+  triggeredBy?: GuidanceTriggeredBy;
   /** Migrated from FAQ answer. */
   suggestedResponse: string;
   talkingPoints: string[];
   resources: GuidanceResource[];
+  /**
+   * Optional action Agent Assist proposes alongside this guidance. Only
+   * capabilities the admin enabled under Integrations can be picked, and the
+   * agent still reviews before anything is written.
+   */
+  recommendedAction?: GuidanceActionConfig;
   teamMembers: string[];
   userGroups: string[];
   status: PublishStatus;
   updated: string;
 }
+
+export function guidanceTriggeredBy(item: GuidanceItem): GuidanceTriggeredBy {
+  return item.triggeredBy ?? "customer";
+}
+
+export const GUIDANCE_TRIGGERED_BY_OPTIONS: DropdownListItem[] = [
+  { value: "customer", label: "Customer" },
+  { value: "agent", label: "Agent" },
+  { value: "either", label: "Either" },
+];
 
 export const TEAM_MEMBERS: DropdownListItem[] = [
   { value: "olivia", label: "Olivia Rhye" },
@@ -101,6 +123,15 @@ export const SEED_GUIDANCE: GuidanceItem[] = [
         battlecard: AIRCALL_BATTLECARD,
       },
     ],
+    // Knowing which competitor came up is worth recording, and the agent
+    // shouldn't have to open HubSpot mid-call to do it.
+    recommendedAction: {
+      integrationId: "hubspot",
+      capabilityId: "hs-contact-property",
+      property: "Competitor",
+      value: "Aircall",
+      requiresConfirmation: true,
+    },
     teamMembers: [],
     userGroups: ["sales"],
     status: "live",
@@ -463,6 +494,34 @@ export function liveGuidance(items: GuidanceItem[]): GuidanceItem[] {
   return items.filter((item) => item.status === "live");
 }
 
+export interface GuidanceTestResult {
+  matched: boolean;
+  score: number;
+  /** Why it didn't match, when it didn't. */
+  hint?: string;
+}
+
+/**
+ * Test before publish — run a sample line through the same matcher the live
+ * call uses, so the admin sees whether their trigger actually catches it.
+ */
+export function testGuidanceAgainstSample(
+  item: GuidanceItem,
+  sample: string
+): GuidanceTestResult {
+  const text = sample.trim();
+  if (!text) {
+    return { matched: false, score: 0, hint: "Enter a line a customer might say." };
+  }
+  const score = guidanceMatchScore(item, text);
+  if (score >= 2) return { matched: true, score };
+  return {
+    matched: false,
+    score,
+    hint: "Add an example phrase closer to how customers actually say this.",
+  };
+}
+
 /** What kind of cue this is — used for labels and priority, not card color. */
 export type GuidanceKind =
   | "competitor"
@@ -779,6 +838,7 @@ export function createEmptyGuidance(): GuidanceItem {
     name: "",
     trigger: "",
     examplePhrases: [],
+    triggeredBy: "customer",
     suggestedResponse: "",
     talkingPoints: [],
     resources: [],
@@ -796,6 +856,54 @@ export function createGuidanceFromTemplate(
     ...createEmptyGuidance(),
     ...GUIDANCE_TEMPLATE_STARTERS[templateId],
   };
+}
+
+/**
+ * Generate from Knowledge (§13) — the admin picks a source they already
+ * uploaded and AI proposes the strategic pieces: a trigger, wording, and
+ * points. Nothing publishes until the admin reviews it.
+ */
+export function proposeGuidanceFromKnowledge(
+  entries: { title: string; answer: string; cues: string[] }[],
+  sourceName: string
+): GuidanceItem[] {
+  return entries.slice(0, 4).map((entry) => {
+    const subject = entry.title.replace(/^JustCall (vs|and) /i, "").trim();
+    return {
+      ...createEmptyGuidance(),
+      name: entry.title,
+      // Subject is kept verbatim — lowercasing would mangle product names.
+      trigger: `When the customer asks about ${subject}, or raises it as a concern during the call.`,
+      examplePhrases: entry.cues.slice(0, 4).map(sentenceCase),
+      suggestedResponse: entry.answer,
+      talkingPoints: talkingPointsFromAnswer(entry.answer),
+      resources: [
+        {
+          id: `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: "link" as const,
+          name: `${sourceName} — ${entry.title}`,
+        },
+      ],
+      status: "draft" as const,
+    };
+  });
+}
+
+function sentenceCase(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+  const cased = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  return /[.?!]$/.test(cased) ? cased : `${cased}?`;
+}
+
+/** Split an approved answer into scannable points without inventing facts. */
+function talkingPointsFromAnswer(answer: string): string[] {
+  return answer
+    .split(/(?<=[.!?])\s+/)
+    .flatMap((sentence) => sentence.split(/,\s+(?=and\b|with\b)/))
+    .map((part) => part.replace(/^and\s+/i, "").replace(/[.]$/, "").trim())
+    .filter((part) => part.length > 12)
+    .slice(0, 3);
 }
 
 export function placeholdersForGuidance(

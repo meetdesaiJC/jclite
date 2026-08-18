@@ -1,15 +1,8 @@
-import { useEffect, useState, type Ref } from "react";
-import {
-  IconCircleCheckFilled,
-  IconClose,
-  IconSparkles,
-} from "@/components/Icon";
+import { useState, type ReactNode, type Ref } from "react";
+import { IconCircleCheckFilled } from "@/components/Icon";
 import { cn } from "@/lib/utils";
-import { SEED_GUIDANCE, type GuidanceItem, type GuidanceResource } from "./guidanceData";
-import { simulationAt, type CallScenario } from "./callSimulation";
-import { useGuidanceStream } from "./useGuidanceStream";
+import { type GuidanceResource } from "./guidanceData";
 import {
-  BattlecardVisual,
   GUIDANCE_AI_THEME,
   GuidanceAiHeader,
   GuidanceFeedbackBar,
@@ -30,6 +23,7 @@ export function LiveGuidanceCard({
   attention = false,
   onToggle,
   onViewResource,
+  actionSlot,
   className,
 }: {
   item: GuidanceSuggestion;
@@ -40,6 +34,11 @@ export function LiveGuidanceCard({
   attention?: boolean;
   onToggle?: () => void;
   onViewResource: (resource: GuidanceResource) => void;
+  /**
+   * Recommended actions sit at the bottom of the guidance they belong to (§27),
+   * so the agent reads what to say and what to do in one place.
+   */
+  actionSlot?: ReactNode;
   className?: string;
 }) {
   const [feedback, setFeedback] = useState<GuidanceFeedback>(null);
@@ -93,6 +92,8 @@ export function LiveGuidanceCard({
             ))}
           </div>
 
+          {actionSlot}
+
           <GuidanceFeedbackBar
             feedback={feedback}
             onHelpful={() =>
@@ -119,6 +120,7 @@ export function InCallGuidanceSlot({
   onViewResource,
   onEngage,
   onDisengage,
+  actionSlot,
   cardRef,
 }: {
   item: GuidanceSuggestion;
@@ -130,6 +132,7 @@ export function InCallGuidanceSlot({
   onViewResource: (resource: GuidanceResource) => void;
   onEngage: () => void;
   onDisengage?: () => void;
+  actionSlot?: ReactNode;
   cardRef?: Ref<HTMLDivElement>;
 }) {
   return (
@@ -153,112 +156,11 @@ export function InCallGuidanceSlot({
             attention={attention}
             onToggle={onToggle}
             onViewResource={onViewResource}
+            actionSlot={actionSlot}
           />
         </div>
       </div>
     </div>
-  );
-}
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
-
-/**
- * Wide in-call layout — guidance gets its own column between the script and the
- * transcript. Cards stack newest-last, one expanded at a time, and stay until
- * the agent dismisses them. Same header rhythm as the panes beside it.
- */
-export interface LiveGuidancePanelProps {
-  elapsedMs: number;
-  scenario: CallScenario;
-  guidanceItems?: GuidanceItem[];
-  /** Hangup — the live stream lets go before the phone changes state. */
-  exiting?: boolean;
-  className?: string;
-}
-
-export function LiveGuidancePanel({
-  elapsedMs,
-  scenario,
-  guidanceItems = SEED_GUIDANCE,
-  exiting = false,
-  className,
-}: LiveGuidancePanelProps) {
-  const reduced = prefersReducedMotion();
-  const snapshot = simulationAt(scenario, elapsedMs, guidanceItems);
-  const [viewingResource, setViewingResource] = useState<GuidanceResource | null>(
-    null
-  );
-  const stream = useGuidanceStream({
-    suggestions: snapshot.suggestions,
-    steps: scenario.steps,
-    playhead: Math.min(snapshot.scriptIndex, scenario.steps.length),
-    reduced,
-  });
-
-  useEffect(() => {
-    setViewingResource(null);
-  }, [scenario.id]);
-
-  return (
-    <section
-      aria-label="Guidance"
-      className={cn(
-        "relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white",
-        className
-      )}
-    >
-      <header
-        className={cn(
-          "flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-4",
-          !reduced && "assist-head-in"
-        )}
-      >
-        <IconSparkles size={16} className="size-4 shrink-0 text-ai" aria-hidden="true" />
-        <p className="text-label-md-semi text-foreground">Guidance</p>
-      </header>
-
-      <div
-        className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-1.5",
-          !reduced && exiting && "assist-stream-out"
-        )}
-        {...stream.scrollHandlers}
-      >
-        {stream.cards.length === 0 ? (
-          <p className="px-0.5 py-2 text-pretty text-paragraph-sm text-muted-foreground">
-            Guidance shows up here as the conversation gives it something to answer.
-          </p>
-        ) : (
-          stream.cards.map(({ suggestion }) => (
-            <InCallGuidanceSlot
-              key={suggestion.id}
-              item={suggestion}
-              reduced={reduced}
-              expanded={stream.expandedId === suggestion.id}
-              arriving={stream.arrivingIds.has(suggestion.id)}
-              attention={stream.attentionIds.has(suggestion.id)}
-              onToggle={() => stream.toggleCard(suggestion.id)}
-              onViewResource={setViewingResource}
-              onEngage={stream.engage}
-              onDisengage={stream.disengage}
-              cardRef={(node) => stream.registerCard(suggestion.id, node)}
-            />
-          ))
-        )}
-      </div>
-
-      {viewingResource ? (
-        <ResourceOverlay
-          resource={viewingResource}
-          onClose={() => setViewingResource(null)}
-        />
-      ) : null}
-    </section>
   );
 }
 
@@ -407,43 +309,3 @@ export function HandledNotice({
   );
 }
 
-export function ResourceOverlay({
-  resource,
-  onClose,
-}: {
-  resource: GuidanceResource;
-  onClose: () => void;
-}) {
-  return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-white">
-      <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
-        <p className="min-w-0 text-label-md-semi text-foreground">{resource.name}</p>
-        <button
-          type="button"
-          aria-label="Close"
-          onClick={onClose}
-          className="-mr-1 flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-        >
-          <IconClose size={16} />
-        </button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {resource.battlecard ? (
-          <BattlecardVisual data={resource.battlecard} className="w-full" />
-        ) : (
-          <div className="overflow-hidden rounded-md border border-line bg-secondary-bg">
-            {resource.thumbnail ? (
-              <img
-                src={resource.thumbnail}
-                alt={resource.name}
-                className="mx-auto w-full object-contain"
-              />
-            ) : (
-              <BattlecardVisual className="w-full" />
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
