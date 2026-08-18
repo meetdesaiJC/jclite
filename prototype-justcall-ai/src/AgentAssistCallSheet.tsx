@@ -7,8 +7,18 @@ import {
   type SVGProps,
 } from "react";
 import { cn } from "@/lib/utils";
+import { Avatar } from "@/components/Avatar";
 import { Dropdown } from "@/components/Dropdown";
-import { IconSparkles } from "@/components/Icon";
+import {
+  IconCheck,
+  IconChevronLeft,
+  IconChevronRight,
+  IconCopy,
+  IconFile,
+  IconMessages,
+  IconScheduler,
+  IconSparkles,
+} from "@/components/Icon";
 import { IconJcaiAgentAssist } from "./icons/JustCallAiNavIcons";
 import {
   CALL_SCENARIOS,
@@ -18,12 +28,12 @@ import {
   type GuidanceSuggestion,
   type ScriptStep,
   type SimulationSnapshot,
+  type TranscriptSpeaker,
   type TranscriptTurn,
 } from "./callSimulation";
 import {
   SEED_GUIDANCE,
   type GuidanceItem,
-  type GuidancePriority,
   type GuidanceResource,
 } from "./guidanceData";
 import { InCallGuidanceSlot, ResourceOverlay } from "./LiveGuidance";
@@ -31,6 +41,7 @@ import {
   ScriptStepRow,
   useScriptChecklistMotion,
 } from "./ScriptChecklist";
+import { useGuidanceStream } from "./useGuidanceStream";
 
 /**
  * In-call Agent Assist — one stream. The full script stays open so any
@@ -40,17 +51,6 @@ import {
  * timer, and never because the script moved on.
  */
 
-const PRIORITY_RANK: Record<GuidancePriority, number> = {
-  critical: 0,
-  high: 1,
-  normal: 2,
-};
-
-const CARD_ENTER_MS = 200;
-const CARD_EXIT_MS = 160;
-const CARD_ATTENTION_MS = 700;
-const AGENT_SCROLL_IDLE_MS = 2000;
-
 /** Panel opens — a short prepare beat before the script is on screen. */
 const PREPARE_MS = 420;
 /** Script appears — each line fades upward behind the one before it. */
@@ -58,11 +58,14 @@ const SCRIPT_STEP_MS = 180;
 const SCRIPT_STAGGER_MS = 35;
 const SCRIPT_STAGGER_CAP = 8;
 
-function formatQuoteTime(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+/** Guidance lives in its own column — the script never pins a card of its own. */
+const EMPTY_SUGGESTIONS: GuidanceSuggestion[] = [];
+
+function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts[parts.length - 1]?.[0] ?? ""}`.toUpperCase();
 }
 
 function IconScript(props: SVGProps<SVGSVGElement>) {
@@ -86,19 +89,6 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-function insertAfterIndex(
-  steps: ScriptStep[],
-  playhead: number,
-  card: GuidanceSuggestion
-): number {
-  const related = steps.findIndex((step) =>
-    step.relatedGuidanceIds?.includes(card.item.id)
-  );
-  if (related >= 0) return related;
-  if (steps.length === 0) return 0;
-  return Math.min(Math.max(playhead, 0), steps.length - 1);
-}
-
 export interface AgentAssistCallSheetProps {
   elapsedMs: number;
   scenario: CallScenario;
@@ -110,6 +100,16 @@ export interface AgentAssistCallSheetProps {
   exiting?: boolean;
   /** Hangup — script and transcript yield to the generated recap. */
   ended?: boolean;
+  /** Post-call — the pane is showing the full transcript instead of the recap. */
+  transcriptOpen?: boolean;
+  onTranscriptOpenChange?: (open: boolean) => void;
+  /** The transcript already has its own pane beside this one — drop the toggle. */
+  transcriptDetached?: boolean;
+  /**
+   * Guidance has its own column beside this one — the script runs clean, with
+   * no cards inserted between the steps.
+   */
+  guidanceDetached?: boolean;
   className?: string;
 }
 
@@ -121,9 +121,16 @@ export function AgentAssistCallSheet({
   active = true,
   exiting = false,
   ended = false,
+  transcriptOpen = false,
+  onTranscriptOpenChange,
+  transcriptDetached = false,
+  guidanceDetached = false,
   className,
 }: AgentAssistCallSheetProps) {
   const [view, setView] = useState<"assist" | "transcript">("assist");
+  // The recap is written once. Reading the transcript and coming back shows it
+  // as it stands — it is not generated a second time.
+  const [recapRevealed, setRecapRevealed] = useState(false);
   const [viewingResource, setViewingResource] = useState<GuidanceResource | null>(
     null
   );
@@ -167,7 +174,7 @@ export function AgentAssistCallSheet({
     <aside
       aria-label="Agent Assist"
       className={cn(
-        "relative flex h-full min-h-0 w-[680px] shrink-0 flex-col overflow-hidden bg-white",
+        "relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white",
         className
       )}
     >
@@ -178,18 +185,38 @@ export function AgentAssistCallSheet({
         )}
       >
         <div className="flex min-w-0 items-center gap-1.5">
-          <IconJcaiAgentAssist
-            className="size-4 shrink-0 text-brand"
-            aria-hidden="true"
-          />
-          <p className="text-label-md-semi text-foreground">Agent Assist</p>
+          {guidanceDetached && !ended ? (
+            <IconScript
+              className="size-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+          ) : (
+            <IconJcaiAgentAssist
+              className="size-4 shrink-0 text-brand"
+              aria-hidden="true"
+            />
+          )}
+          <p className="text-label-md-semi text-foreground">
+            {guidanceDetached && !ended ? "Script / Playbook" : "Agent Assist"}
+          </p>
         </div>
-        {ended ? null : (
+        {ended ? (
+          transcriptOpen ? (
+            <button
+              type="button"
+              onClick={() => onTranscriptOpenChange?.(false)}
+              className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] px-1.5 text-label-sm text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24"
+            >
+              <IconChevronLeft size={16} className="size-4 shrink-0" />
+              Back to summary
+            </button>
+          ) : null
+        ) : (
           <div className="flex min-w-0 items-center gap-1">
             <Dropdown
               searchable={false}
               variant="borderless"
-              leftIcon={<IconScript />}
+              leftIcon={guidanceDetached ? undefined : <IconScript />}
               options={options}
               value={scenario.id}
               onValueChange={(value) =>
@@ -198,32 +225,56 @@ export function AgentAssistCallSheet({
               aria-label="Call script"
               triggerClassName="h-7 min-w-0 max-w-[200px] px-1.5 text-paragraph-sm text-muted-foreground"
             />
-            <button
-              type="button"
-              aria-pressed={view === "transcript"}
-              onClick={() =>
-                setView((current) => (current === "transcript" ? "assist" : "transcript"))
-              }
-              className={cn(
-                "inline-flex h-7 cursor-pointer items-center rounded-[4px] px-2 text-label-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
-                view === "transcript"
-                  ? "bg-secondary-bg text-foreground"
-                  : "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-              )}
-            >
-              Transcript
-            </button>
+            {transcriptDetached ? null : (
+              <button
+                type="button"
+                aria-pressed={view === "transcript"}
+                onClick={() =>
+                  setView((current) =>
+                    current === "transcript" ? "assist" : "transcript"
+                  )
+                }
+                className={cn(
+                  "inline-flex h-7 cursor-pointer items-center rounded-[4px] px-2 text-label-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+                  view === "transcript"
+                    ? "bg-secondary-bg text-foreground"
+                    : "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                )}
+              >
+                Transcript
+              </button>
+            )}
           </div>
         )}
       </header>
 
       {ended ? (
-        <PostCallAssist key={scenario.id} scenario={scenario} reduced={reduced} />
+        transcriptOpen ? (
+          <TranscriptPane
+            turns={snapshot.transcript}
+            contactName={scenario.contactName}
+            reduced={reduced}
+          />
+        ) : (
+          <PostCallAssist
+            key={scenario.id}
+            scenario={scenario}
+            reduced={reduced}
+            instant={recapRevealed}
+            onRevealed={() => setRecapRevealed(true)}
+            onViewTranscript={
+              onTranscriptOpenChange
+                ? () => onTranscriptOpenChange(true)
+                : undefined
+            }
+          />
+        )
       ) : preparing ? (
         <PreparingPane />
       ) : view === "transcript" ? (
         <TranscriptPane
           turns={snapshot.transcript}
+          contactName={scenario.contactName}
           reduced={reduced}
           exiting={exiting}
         />
@@ -234,6 +285,7 @@ export function AgentAssistCallSheet({
           snapshot={snapshot}
           reduced={reduced}
           collapsing={exiting}
+          guidanceDetached={guidanceDetached}
           onViewResource={setViewingResource}
         />
       )}
@@ -285,209 +337,47 @@ function AssistStream({
   snapshot,
   reduced,
   collapsing,
+  guidanceDetached,
   onViewResource,
 }: {
   scenario: CallScenario;
   snapshot: SimulationSnapshot;
   reduced: boolean;
   collapsing: boolean;
+  guidanceDetached: boolean;
   onViewResource: (resource: GuidanceResource) => void;
 }) {
-  const [dismissed, setDismissed] = useState<string[]>([]);
-  const [exiting, setExiting] = useState<string[]>([]);
-  const [pinned, setPinned] = useState<
-    { suggestion: GuidanceSuggestion; insertAfter: number }[]
-  >([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [arrivingIds, setArrivingIds] = useState<Set<string>>(new Set());
-  const [attentionIds, setAttentionIds] = useState<Set<string>>(new Set());
-  const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
-
-  const paneRef = useRef<HTMLDivElement>(null);
-  const cardEls = useRef(new Map<string, HTMLElement>());
-  const pinnedIdsRef = useRef(new Set<string>());
-  const dismissedRef = useRef(dismissed);
-  const expandedIdRef = useRef(expandedId);
-  const pinnedRef = useRef(pinned);
-  const suggestionsRef = useRef(snapshot.suggestions);
-  const pointerInCard = useRef(false);
-  const lastUserScrollAt = useRef(0);
-  const programmaticScroll = useRef(false);
-  const exitTimers = useRef<number[]>([]);
-
-  dismissedRef.current = dismissed;
-  expandedIdRef.current = expandedId;
-  pinnedRef.current = pinned;
-  suggestionsRef.current = snapshot.suggestions;
-
   const playhead = Math.min(snapshot.scriptIndex, scenario.steps.length);
-  const suggestionSig = snapshot.suggestions.map((item) => item.id).join("|");
-
-  const isReadingCard = () => {
-    if (pointerInCard.current) return true;
-    const active = document.activeElement;
-    return Boolean(
-      active &&
-        [...cardEls.current.values()].some((node) => node.contains(active))
-    );
-  };
-
-  const shouldHoldScroll = () =>
-    isReadingCard() || Date.now() - lastUserScrollAt.current < AGENT_SCROLL_IDLE_MS;
-
-  useEffect(() => {
-    const extras = suggestionsRef.current.filter(
-      (item) =>
-        !pinnedIdsRef.current.has(item.id) && !dismissedRef.current.includes(item.id)
-    );
-    if (extras.length === 0) return;
-
-    extras.forEach((item) => pinnedIdsRef.current.add(item.id));
-    const additions = extras.map((item) => ({
-      suggestion: item,
-      insertAfter: insertAfterIndex(scenario.steps, playhead, item),
-    }));
-    setPinned((current) => [...current, ...additions]);
-    setArrivingIds((current) => new Set([...current, ...extras.map((item) => item.id)]));
-
-    const reading = isReadingCard();
-    const catalog = [...pinnedRef.current, ...additions];
-    let nextExpanded = expandedIdRef.current;
-
-    for (const extra of extras) {
-      if (!nextExpanded) {
-        nextExpanded = extra.id;
-        continue;
-      }
-      const currentCard = catalog.find((entry) => entry.suggestion.id === nextExpanded)
-        ?.suggestion;
-      if (!currentCard) {
-        nextExpanded = extra.id;
-        continue;
-      }
-      const higher =
-        PRIORITY_RANK[extra.priority] < PRIORITY_RANK[currentCard.priority];
-      if (higher || !reading) {
-        nextExpanded = extra.id;
-      }
-    }
-
-    if (nextExpanded !== expandedIdRef.current) {
-      setExpandedId(nextExpanded);
-      if (!shouldHoldScroll() && nextExpanded) {
-        setScrollTargetId(nextExpanded);
-      }
-      if (nextExpanded && extras.some((item) => item.id === nextExpanded)) {
-        setAttentionIds((current) => new Set([...current, nextExpanded]));
-      }
-    }
-  }, [suggestionSig, playhead, scenario.steps]);
-
-  useEffect(() => {
-    if (arrivingIds.size === 0) return;
-    const timer = window.setTimeout(
-      () => setArrivingIds(new Set()),
-      reduced ? 0 : CARD_ENTER_MS + 10
-    );
-    return () => window.clearTimeout(timer);
-  }, [arrivingIds, reduced]);
-
-  useEffect(() => {
-    if (attentionIds.size === 0) return;
-    const timer = window.setTimeout(
-      () => setAttentionIds(new Set()),
-      reduced ? 0 : CARD_ATTENTION_MS
-    );
-    return () => window.clearTimeout(timer);
-  }, [attentionIds, reduced]);
-
-  useEffect(() => {
-    if (!scrollTargetId) return;
-    const el = cardEls.current.get(scrollTargetId);
-    setScrollTargetId(null);
-    if (!el || shouldHoldScroll()) return;
-    programmaticScroll.current = true;
-    el.scrollIntoView({
-      behavior: reduced ? "auto" : "smooth",
-      block: "nearest",
-    });
-    const timer = window.setTimeout(() => {
-      programmaticScroll.current = false;
-    }, 400);
-    return () => window.clearTimeout(timer);
-  }, [scrollTargetId, reduced]);
-
-  useEffect(
-    () => () => {
-      exitTimers.current.forEach((timer) => window.clearTimeout(timer));
-    },
-    []
-  );
-
-  const visibleCards = pinned
-    .filter((entry) => !dismissed.includes(entry.suggestion.id))
-    .sort((a, b) => a.suggestion.atMs - b.suggestion.atMs);
-
-  const dismissCard = (id: string) => {
-    if (dismissed.includes(id) || exiting.includes(id)) return;
-    if (reduced) {
-      setDismissed((current) => (current.includes(id) ? current : [...current, id]));
-      setExpandedId((current) => (current === id ? null : current));
-      return;
-    }
-    setExiting((current) => (current.includes(id) ? current : [...current, id]));
-    const timer = window.setTimeout(() => {
-      setDismissed((current) => (current.includes(id) ? current : [...current, id]));
-      setExiting((current) => current.filter((item) => item !== id));
-      setExpandedId((current) => (current === id ? null : current));
-    }, CARD_EXIT_MS);
-    exitTimers.current.push(timer);
-  };
+  const stream = useGuidanceStream({
+    suggestions: guidanceDetached ? EMPTY_SUGGESTIONS : snapshot.suggestions,
+    steps: scenario.steps,
+    playhead,
+    reduced,
+  });
 
   return (
     <div
-      ref={paneRef}
       className={cn(
         "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3",
         !reduced && collapsing && "assist-stream-out"
       )}
-      onPointerDown={() => {
-        lastUserScrollAt.current = Date.now();
-      }}
-      onWheel={() => {
-        if (!programmaticScroll.current) lastUserScrollAt.current = Date.now();
-      }}
-      onScroll={() => {
-        if (!programmaticScroll.current) lastUserScrollAt.current = Date.now();
-      }}
+      {...stream.scrollHandlers}
     >
       <FullScriptList
         scenario={scenario}
         playhead={playhead}
         reduced={reduced}
-        placedCards={visibleCards.map((entry) => ({
+        placedCards={stream.cards.map((entry) => ({
           card: entry.suggestion,
           insertAfter: entry.insertAfter,
         }))}
-        expandedId={expandedId}
-        arrivingIds={arrivingIds}
-        attentionIds={attentionIds}
-        exitingIds={exiting}
-        onExpandCard={(id) => {
-          pointerInCard.current = true;
-          setExpandedId(id);
-        }}
-        onDismissCard={dismissCard}
-        onEngage={() => {
-          pointerInCard.current = true;
-        }}
-        onDisengage={() => {
-          pointerInCard.current = false;
-        }}
-        registerCard={(id, node) => {
-          if (node) cardEls.current.set(id, node);
-          else cardEls.current.delete(id);
-        }}
+        expandedId={stream.expandedId}
+        arrivingIds={stream.arrivingIds}
+        attentionIds={stream.attentionIds}
+        onToggleCard={stream.toggleCard}
+        onEngage={stream.engage}
+        onDisengage={stream.disengage}
+        registerCard={stream.registerCard}
         onViewResource={onViewResource}
       />
     </div>
@@ -642,18 +532,39 @@ function RecapSkeleton({ reduced }: { reduced: boolean }) {
   );
 }
 
+/**
+ * Post-call — the recap the agent reads and works from: what was said, then
+ * what to do about it. Summary and action items are one continuous pane, not
+ * two tabs, so nothing about the call is a click away. Disposition, notes and
+ * rating live in Wrap up beside this; this pane only reports and hands off.
+ */
 function PostCallAssist({
   scenario,
   reduced,
+  instant,
+  onRevealed,
+  onViewTranscript,
 }: {
   scenario: CallScenario;
   reduced: boolean;
+  /** Coming back from the transcript — the recap is already written. */
+  instant: boolean;
+  onRevealed: () => void;
+  onViewTranscript?: () => void;
 }) {
   const items = scenario.wrapUp.actionItems;
-  const { phase, status, visibleItems } = usePostCallReveal(items.length, reduced);
+  const { phase, status, visibleItems } = usePostCallReveal(
+    items.length,
+    reduced || instant
+  );
   const showSummary = phase !== "generating";
   const showText = phase === "summary" || phase === "items" || phase === "complete";
   const showItems = phase === "items" || phase === "complete";
+  const complete = phase === "complete";
+
+  useEffect(() => {
+    if (complete) onRevealed();
+  }, [complete, onRevealed]);
 
   return (
     <div
@@ -677,16 +588,26 @@ function PostCallAssist({
               !reduced && phase === "skeleton" && "recap-section-in"
             )}
           >
-            <h2
-              id="call-summary-heading"
-              className="text-label-md-semi text-foreground"
-            >
-              Call summary
-            </h2>
+            <div className="flex min-h-7 items-center justify-between gap-2">
+              <h2
+                id="call-summary-heading"
+                className="flex items-center gap-1.5 text-label-md-semi text-foreground"
+              >
+                <IconSparkles
+                  size={16}
+                  aria-hidden="true"
+                  className="size-4 shrink-0 text-ai"
+                />
+                Call summary
+              </h2>
+              {/* The summary is the agent's raw material for notes — it can go
+                  straight to the clipboard without being retyped. */}
+              {showText ? <CopyButton text={scenario.wrapUp.summary} /> : null}
+            </div>
             {showText ? (
               <p
                 className={cn(
-                  "text-pretty text-[13px] leading-5 text-foreground",
+                  "text-pretty text-paragraph-md text-foreground",
                   !reduced && "recap-summary-reveal"
                 )}
               >
@@ -703,25 +624,43 @@ function PostCallAssist({
             aria-labelledby="action-items-heading"
             className={cn("flex flex-col gap-2", !reduced && "recap-section-in")}
           >
-            <h2
-              id="action-items-heading"
-              className="text-label-md-semi text-foreground"
-            >
-              Action items
-            </h2>
+            <div className="flex items-center gap-1.5">
+              <h2
+                id="action-items-heading"
+                className="text-label-md-semi text-foreground"
+              >
+                Action items
+              </h2>
+            </div>
             <ol className="flex flex-col gap-2">
-              {items.slice(0, visibleItems).map((item, index) => (
-                <ActionItemRow
-                  key={item.id}
-                  item={item}
-                  index={index}
-                  reduced={reduced}
-                />
+              {items.slice(0, visibleItems).map((item) => (
+                <ActionItemRow key={item.id} item={item} reduced={reduced} />
               ))}
             </ol>
           </section>
         ) : null}
+
       </div>
+
+      {/* The recap is the summary of the call; the transcript is the record of
+          it. One click apart, on the pane's own edge. */}
+      {complete && onViewTranscript ? (
+        <div
+          className={cn(
+            "flex shrink-0 items-center justify-center border-t border-line px-4 py-3",
+            !reduced && "recap-section-in"
+          )}
+        >
+          <button
+            type="button"
+            onClick={onViewTranscript}
+            className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-[4px] border border-line px-3 text-label-md text-foreground outline-none transition-colors hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-brand/24"
+          >
+            <IconFile size={16} className="size-4 shrink-0 text-muted-foreground" />
+            View full transcript
+          </button>
+        </div>
+      ) : null}
 
       <p className="sr-only" aria-live="polite">
         {status === "ready" || status === "leaving" || status === "gone"
@@ -732,31 +671,76 @@ function PostCallAssist({
   );
 }
 
+/** Copy to clipboard, with the confirmation on the button itself. */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigator.clipboard?.writeText(text).catch(() => {});
+        setCopied(true);
+      }}
+      className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] px-1.5 text-label-sm text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+    >
+      {copied ? (
+        <IconCheck size={16} className="size-4 shrink-0 text-success" />
+      ) : (
+        <IconCopy size={16} className="size-4 shrink-0" />
+      )}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+const ACTION_CTA = {
+  schedule: { label: "Schedule", icon: IconScheduler },
+  message: { label: "Send message", icon: IconMessages },
+} as const;
+
+/**
+ * One item, one next step. The CTA is the product surface that item belongs
+ * to; rows without one keep the same height so the list reads as one stack.
+ */
 function ActionItemRow({
   item,
-  index,
   reduced,
 }: {
   item: CallActionItem;
-  index: number;
   reduced: boolean;
 }) {
+  const cta = item.action ? ACTION_CTA[item.action] : null;
+  const CtaIcon = cta?.icon;
+
   return (
     <li
       className={cn(
-        "flex items-start gap-2.5 rounded-lg border border-line bg-white px-3 py-2.5",
+        // 50px = the CTA button's own height plus padding and border, so a row
+        // without a CTA sits at exactly the same height as one with it.
+        "flex min-h-[50px] items-center gap-2.5 rounded-lg border border-line bg-white py-2 pr-2 pl-3",
         !reduced && "recap-item-in"
       )}
     >
-      <span
-        className="flex size-5 shrink-0 items-center justify-center rounded-[4px] bg-brand-subtle text-[11px] leading-5 font-medium text-brand tabular-nums"
-        aria-hidden="true"
-      >
-        {index + 1}
-      </span>
-      <p className="min-w-0 flex-1 text-pretty text-paragraph-sm leading-5 font-medium text-foreground">
+      <p className="min-w-0 flex-1 text-pretty text-label-md text-foreground">
         {item.title}
       </p>
+      {cta && CtaIcon ? (
+        <button
+          type="button"
+          className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] px-2 text-label-sm text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24"
+        >
+          <CtaIcon size={16} className="size-4 shrink-0" />
+          {cta.label}
+          <IconChevronRight size={16} className="size-4 shrink-0 opacity-70" />
+        </button>
+      ) : null}
     </li>
   );
 }
@@ -769,9 +753,7 @@ function FullScriptList({
   expandedId,
   arrivingIds,
   attentionIds,
-  exitingIds,
-  onExpandCard,
-  onDismissCard,
+  onToggleCard,
   onEngage,
   onDisengage,
   registerCard,
@@ -784,9 +766,7 @@ function FullScriptList({
   expandedId: string | null;
   arrivingIds: Set<string>;
   attentionIds: Set<string>;
-  exitingIds: string[];
-  onExpandCard: (id: string) => void;
-  onDismissCard: (id: string) => void;
+  onToggleCard: (id: string) => void;
   onEngage: () => void;
   onDisengage: () => void;
   registerCard: (id: string, node: HTMLElement | null) => void;
@@ -855,10 +835,8 @@ function FullScriptList({
                 reduced={reduced}
                 expanded={expandedId === card.id}
                 arriving={arrivingIds.has(card.id)}
-                exiting={exitingIds.includes(card.id)}
                 attention={attentionIds.has(card.id)}
-                onExpand={() => onExpandCard(card.id)}
-                onDismiss={() => onDismissCard(card.id)}
+                onToggle={() => onToggleCard(card.id)}
                 onViewResource={onViewResource}
                 onEngage={onEngage}
                 onDisengage={onDisengage}
@@ -872,16 +850,119 @@ function FullScriptList({
   );
 }
 
+/**
+ * Wide in-call layout — the transcript stops being a toggle and gets its own
+ * pane beside Agent Assist. Same header rhythm as the assist panel so the two
+ * read as one surface split in two.
+ */
+export interface LiveTranscriptPanelProps {
+  elapsedMs: number;
+  scenario: CallScenario;
+  guidanceItems?: GuidanceItem[];
+  /** Hangup — the live stream lets go before the phone changes state. */
+  exiting?: boolean;
+  className?: string;
+}
+
+export function LiveTranscriptPanel({
+  elapsedMs,
+  scenario,
+  guidanceItems = SEED_GUIDANCE,
+  exiting = false,
+  className,
+}: LiveTranscriptPanelProps) {
+  const snapshot = simulationAt(scenario, elapsedMs, guidanceItems);
+  const reduced = prefersReducedMotion();
+
+  return (
+    <section
+      aria-label="Live transcript"
+      className={cn(
+        "flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white",
+        className
+      )}
+    >
+      <header
+        className={cn(
+          "flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-4",
+          !reduced && "assist-head-in"
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-1.5">
+          <IconWaveform className="size-4 shrink-0 text-muted-foreground" />
+          <p className="text-label-md-semi text-foreground">Live transcript</p>
+        </div>
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span
+            className={cn(
+              "size-1.5 rounded-full bg-success",
+              !reduced && "transcript-live-dot"
+            )}
+            aria-hidden="true"
+          />
+          <span className="text-label-sm text-muted-foreground">Live</span>
+        </span>
+      </header>
+
+      <TranscriptPane
+        turns={snapshot.transcript}
+        contactName={scenario.contactName}
+        reduced={reduced}
+        exiting={exiting}
+      />
+    </section>
+  );
+}
+
+function IconWaveform(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M2 6.5v3M5 4v8M8 2.5v11M11 4.5v7M14 6.5v3"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** The signed-in agent — same initials the global header shows. */
+const AGENT_INITIALS = "SJ";
+
+/** Consecutive lines from one speaker read as one utterance — one avatar, one name. */
+interface TranscriptGroup {
+  speaker: TranscriptSpeaker;
+  atMs: number;
+  quotes: string[];
+}
+
+function groupTurns(turns: TranscriptTurn[]): TranscriptGroup[] {
+  const groups: TranscriptGroup[] = [];
+  for (const turn of turns) {
+    const last = groups[groups.length - 1];
+    if (last && last.speaker === turn.speaker) {
+      last.quotes.push(turn.quote);
+      continue;
+    }
+    groups.push({ speaker: turn.speaker, atMs: turn.atMs, quotes: [turn.quote] });
+  }
+  return groups;
+}
+
 function TranscriptPane({
   turns,
+  contactName,
   reduced,
   exiting = false,
 }: {
   turns: TranscriptTurn[];
+  contactName: string;
   reduced: boolean;
   exiting?: boolean;
 }) {
   const endRef = useRef<HTMLLIElement | null>(null);
+  const groups = useMemo(() => groupTurns(turns), [turns]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({
@@ -904,7 +985,7 @@ function TranscriptPane({
   return (
     <ol
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3",
+        "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4",
         !reduced &&
           !exiting &&
           "animate-[assist-now-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]",
@@ -912,28 +993,40 @@ function TranscriptPane({
       )}
       aria-label="Call transcript"
     >
-      {turns.map((turn, index) => (
-        <li
-          key={`${turn.atMs}-${turn.quote}`}
-          ref={index === turns.length - 1 ? endRef : undefined}
-          className="flex flex-col gap-0.5"
-        >
-          <p className="text-label-sm text-muted-foreground tabular-nums">
-            {turn.speaker === "customer" ? "Customer" : "You"} ·{" "}
-            {formatQuoteTime(turn.atMs)}
-          </p>
-          <p
-            className={cn(
-              "text-pretty text-paragraph-sm",
-              turn.speaker === "customer"
-                ? "text-foreground"
-                : "text-muted-foreground"
-            )}
+      {groups.map((group, index) => {
+        const isCustomer = group.speaker === "customer";
+        const name = isCustomer ? contactName : "You";
+        return (
+          <li
+            key={`${group.atMs}-${group.speaker}`}
+            ref={index === groups.length - 1 ? endRef : undefined}
+            className="flex gap-2.5"
           >
-            {turn.quote}
-          </p>
-        </li>
-      ))}
+            <Avatar
+              size="sm"
+              color={isCustomer ? "indigo" : "purple"}
+              initials={isCustomer ? initialsFromName(name) : AGENT_INITIALS}
+              className="mt-px"
+            />
+            <div className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
+              <p className="truncate text-label-xs uppercase tracking-[0.06em] text-muted-foreground">
+                {name}
+              </p>
+              {group.quotes.map((quote, quoteIndex) => (
+                <p
+                  key={`${quote}-${quoteIndex}`}
+                  className={cn(
+                    "text-pretty text-paragraph-md",
+                    isCustomer ? "text-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  {quote}
+                </p>
+              ))}
+            </div>
+          </li>
+        );
+      })}
     </ol>
   );
 }

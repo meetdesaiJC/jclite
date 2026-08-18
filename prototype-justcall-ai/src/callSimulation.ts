@@ -62,9 +62,17 @@ export interface CallMoment {
   atMs: number;
 }
 
+/**
+ * The one thing an agent can do about an item without leaving the recap.
+ * Only what the product actually has — anything else stays a plain item the
+ * agent ticks off themselves.
+ */
+export type CallActionKind = "schedule" | "message";
+
 export interface CallActionItem {
   id: string;
   title: string;
+  action?: CallActionKind;
 }
 
 export interface CallWrapUp {
@@ -294,10 +302,12 @@ export const CALL_SCENARIOS: CallScenario[] = [
         {
           id: "session",
           title: "Book Thursday afternoon with Elena and her ops lead",
+          action: "schedule",
         },
         {
           id: "recap",
           title: "Send a recap of Salesforce logging and after-hours coverage",
+          action: "message",
         },
         {
           id: "pricing",
@@ -403,6 +413,7 @@ export const CALL_SCENARIOS: CallScenario[] = [
         {
           id: "access",
           title: "Confirm the reset email resolved access",
+          action: "message",
         },
         {
           id: "billing",
@@ -411,6 +422,7 @@ export const CALL_SCENARIOS: CallScenario[] = [
         {
           id: "follow-up",
           title: "Follow up in 24 hours if she reports another lockout",
+          action: "schedule",
         },
       ],
     },
@@ -497,6 +509,7 @@ export const CALL_SCENARIOS: CallScenario[] = [
         {
           id: "email",
           title: "Email Marcus when the pending charge clears",
+          action: "message",
         },
       ],
     },

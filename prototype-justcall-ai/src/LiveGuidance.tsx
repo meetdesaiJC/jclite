@@ -1,14 +1,19 @@
-import { useState, type Ref } from "react";
-import { IconChevronRight, IconCircleCheckFilled, IconClose } from "@/components/Icon";
+import { useEffect, useState, type Ref } from "react";
+import {
+  IconCircleCheckFilled,
+  IconClose,
+  IconSparkles,
+} from "@/components/Icon";
 import { cn } from "@/lib/utils";
-import { type GuidanceResource } from "./guidanceData";
+import { SEED_GUIDANCE, type GuidanceItem, type GuidanceResource } from "./guidanceData";
+import { simulationAt, type CallScenario } from "./callSimulation";
+import { useGuidanceStream } from "./useGuidanceStream";
 import {
   BattlecardVisual,
   GUIDANCE_AI_THEME,
   GuidanceAiHeader,
   GuidanceFeedbackBar,
   GuidanceResourceLink,
-  GuidanceSparklesIcon,
   GuidanceResourcePreview,
   GuidanceSuggestedResponse,
   GuidanceTalkingPoints,
@@ -16,32 +21,14 @@ import {
 } from "./GuidanceCard";
 import type { GuidanceSuggestion } from "./callSimulation";
 
-function DismissGuidanceButton({ onDismiss }: { onDismiss: () => void }) {
-  return (
-    <button
-      type="button"
-      aria-label="Dismiss guidance"
-      onClick={(event) => {
-        event.stopPropagation();
-        onDismiss();
-      }}
-      className="-mt-0.5 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-white/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-    >
-      <IconClose size={16} />
-    </button>
-  );
-}
-
 export function LiveGuidanceCard({
   item,
   reduced,
   cardRef,
   expanded = true,
   arriving = false,
-  exiting = false,
   attention = false,
-  onExpand,
-  onDismiss,
+  onToggle,
   onViewResource,
   className,
 }: {
@@ -50,10 +37,8 @@ export function LiveGuidanceCard({
   cardRef?: Ref<HTMLDivElement>;
   expanded?: boolean;
   arriving?: boolean;
-  exiting?: boolean;
   attention?: boolean;
-  onExpand?: () => void;
-  onDismiss: () => void;
+  onToggle?: () => void;
   onViewResource: (resource: GuidanceResource) => void;
   className?: string;
 }) {
@@ -63,7 +48,7 @@ export function LiveGuidanceCard({
   const images = item.item.resources.filter((resource) => resource.type === "image");
   const links = item.item.resources.filter((resource) => resource.type === "link");
   const hasTalking = talkingPoints.length > 0;
-  const pulse = !reduced && attention && !exiting;
+  const pulse = !reduced && attention;
 
   return (
     <article
@@ -71,38 +56,17 @@ export function LiveGuidanceCard({
       role={item.priority === "critical" ? "alert" : undefined}
       className={cn(
         GUIDANCE_AI_THEME.card,
-        !reduced && arriving && !exiting && "assist-card-enter",
-        !reduced && exiting && "assist-card-exit",
+        !reduced && arriving && "assist-card-enter",
         pulse && "assist-card-attention",
         className
       )}
     >
-      {expanded ? (
-        <GuidanceAiHeader
-          title={item.item.name}
-          onDismiss={onDismiss}
-          className={pulse ? "assist-header-attention" : undefined}
-        />
-      ) : (
-        <div className="guidance-ai-header flex items-center gap-0.5 pr-1 pl-3">
-          <button
-            type="button"
-            aria-expanded={false}
-            onClick={onExpand}
-            className="flex min-h-9 min-w-0 flex-1 cursor-pointer items-center gap-1 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24"
-          >
-            <GuidanceSparklesIcon className="size-4 shrink-0" />
-            <span className="guidance-ai-title min-w-0 flex-1 truncate text-label-sm font-medium">
-              {item.item.name}
-            </span>
-            <IconChevronRight
-              size={16}
-              className="size-4 shrink-0 text-muted-foreground"
-            />
-          </button>
-          <DismissGuidanceButton onDismiss={onDismiss} />
-        </div>
-      )}
+      <GuidanceAiHeader
+        title={item.item.name}
+        expanded={expanded}
+        onToggle={onToggle}
+        className={pulse ? "assist-header-attention" : undefined}
+      />
 
       <div
         className={cn(
@@ -111,7 +75,7 @@ export function LiveGuidanceCard({
         )}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="flex flex-col gap-4 bg-white px-4 pt-2 pb-4">
+          <div className="flex flex-col gap-4 bg-white px-4 pt-4 pb-4">
             {response ? <GuidanceSuggestedResponse text={response} /> : null}
 
             {hasTalking ? <GuidanceTalkingPoints points={talkingPoints} /> : null}
@@ -150,10 +114,8 @@ export function InCallGuidanceSlot({
   reduced,
   expanded,
   arriving,
-  exiting,
   attention,
-  onExpand,
-  onDismiss,
+  onToggle,
   onViewResource,
   onEngage,
   onDisengage,
@@ -163,10 +125,8 @@ export function InCallGuidanceSlot({
   reduced: boolean;
   expanded: boolean;
   arriving: boolean;
-  exiting: boolean;
   attention: boolean;
-  onExpand: () => void;
-  onDismiss: () => void;
+  onToggle: () => void;
   onViewResource: (resource: GuidanceResource) => void;
   onEngage: () => void;
   onDisengage?: () => void;
@@ -176,9 +136,8 @@ export function InCallGuidanceSlot({
     <div
       ref={cardRef}
       className={cn(
-        !reduced && arriving && !exiting && "assist-space-in",
-        !reduced && exiting && "assist-space-out",
-        (reduced || (!arriving && !exiting)) && "grid grid-rows-[1fr]"
+        !reduced && arriving && "assist-space-in",
+        (reduced || !arriving) && "grid grid-rows-[1fr]"
       )}
       onPointerEnter={onEngage}
       onPointerLeave={onDisengage}
@@ -191,15 +150,115 @@ export function InCallGuidanceSlot({
             reduced={reduced}
             expanded={expanded}
             arriving={arriving}
-            exiting={exiting}
             attention={attention}
-            onExpand={onExpand}
-            onDismiss={onDismiss}
+            onToggle={onToggle}
             onViewResource={onViewResource}
           />
         </div>
       </div>
     </div>
+  );
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+/**
+ * Wide in-call layout — guidance gets its own column between the script and the
+ * transcript. Cards stack newest-last, one expanded at a time, and stay until
+ * the agent dismisses them. Same header rhythm as the panes beside it.
+ */
+export interface LiveGuidancePanelProps {
+  elapsedMs: number;
+  scenario: CallScenario;
+  guidanceItems?: GuidanceItem[];
+  /** Hangup — the live stream lets go before the phone changes state. */
+  exiting?: boolean;
+  className?: string;
+}
+
+export function LiveGuidancePanel({
+  elapsedMs,
+  scenario,
+  guidanceItems = SEED_GUIDANCE,
+  exiting = false,
+  className,
+}: LiveGuidancePanelProps) {
+  const reduced = prefersReducedMotion();
+  const snapshot = simulationAt(scenario, elapsedMs, guidanceItems);
+  const [viewingResource, setViewingResource] = useState<GuidanceResource | null>(
+    null
+  );
+  const stream = useGuidanceStream({
+    suggestions: snapshot.suggestions,
+    steps: scenario.steps,
+    playhead: Math.min(snapshot.scriptIndex, scenario.steps.length),
+    reduced,
+  });
+
+  useEffect(() => {
+    setViewingResource(null);
+  }, [scenario.id]);
+
+  return (
+    <section
+      aria-label="Guidance"
+      className={cn(
+        "relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white",
+        className
+      )}
+    >
+      <header
+        className={cn(
+          "flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-4",
+          !reduced && "assist-head-in"
+        )}
+      >
+        <IconSparkles size={16} className="size-4 shrink-0 text-ai" aria-hidden="true" />
+        <p className="text-label-md-semi text-foreground">Guidance</p>
+      </header>
+
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-1.5",
+          !reduced && exiting && "assist-stream-out"
+        )}
+        {...stream.scrollHandlers}
+      >
+        {stream.cards.length === 0 ? (
+          <p className="px-0.5 py-2 text-pretty text-paragraph-sm text-muted-foreground">
+            Guidance shows up here as the conversation gives it something to answer.
+          </p>
+        ) : (
+          stream.cards.map(({ suggestion }) => (
+            <InCallGuidanceSlot
+              key={suggestion.id}
+              item={suggestion}
+              reduced={reduced}
+              expanded={stream.expandedId === suggestion.id}
+              arriving={stream.arrivingIds.has(suggestion.id)}
+              attention={stream.attentionIds.has(suggestion.id)}
+              onToggle={() => stream.toggleCard(suggestion.id)}
+              onViewResource={setViewingResource}
+              onEngage={stream.engage}
+              onDisengage={stream.disengage}
+              cardRef={(node) => stream.registerCard(suggestion.id, node)}
+            />
+          ))
+        )}
+      </div>
+
+      {viewingResource ? (
+        <ResourceOverlay
+          resource={viewingResource}
+          onClose={() => setViewingResource(null)}
+        />
+      ) : null}
+    </section>
   );
 }
 
@@ -280,11 +339,9 @@ export function GuidanceQueue({
 export function CriticalPin({
   item,
   reduced,
-  onDismiss,
 }: {
   item: GuidanceSuggestion;
   reduced: boolean;
-  onDismiss: () => void;
 }) {
   const [feedback, setFeedback] = useState<GuidanceFeedback>(null);
   const response = item.item.suggestedResponse.trim();
@@ -298,8 +355,8 @@ export function CriticalPin({
         !reduced && "assist-card-enter"
       )}
     >
-      <GuidanceAiHeader title={item.item.name} onDismiss={onDismiss} />
-      <div className="flex flex-col gap-4 bg-white px-4 pt-2 pb-4">
+      <GuidanceAiHeader title={item.item.name} />
+      <div className="flex flex-col gap-4 bg-white px-4 pt-4 pb-4">
         {response ? <GuidanceSuggestedResponse text={response} /> : null}
         <GuidanceTalkingPoints points={talkingPoints} />
       </div>

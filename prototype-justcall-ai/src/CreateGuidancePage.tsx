@@ -690,7 +690,6 @@ export function CreateGuidancePage({
             stance: stanceForGuidance(draft),
           }}
           reduced
-          onDismiss={() => setTestPreviewOpen(false)}
           onViewResource={setViewingResource}
         />
       </Modal>

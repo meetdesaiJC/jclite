@@ -1,11 +1,20 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
 import { InputField, TextArea } from "@/components/InputField";
-import { Avatar, AvatarIndicator } from "@/components/Avatar";
+import { AvatarIndicator } from "@/components/Avatar";
 import {
+  IconCallDisposition,
   IconCallLogs,
   IconCheck,
   IconChevronDown,
@@ -13,11 +22,12 @@ import {
   IconContacts,
   IconMessages,
   IconOtherApps,
-  IconScheduler,
   IconVoicemailDrop,
 } from "@/components/Icon";
 import { IconJcaiSettings } from "./icons/JustCallAiNavIcons";
-import { AgentAssistCallSheet } from "./AgentAssistCallSheet";
+import { AgentAssistCallSheet, LiveTranscriptPanel } from "./AgentAssistCallSheet";
+import { LiveGuidancePanel } from "./LiveGuidance";
+import { CallWaveform } from "./CallWaveform";
 import { CALL_SCENARIOS, scenarioById, type CallScenario } from "./callSimulation";
 import usFlag from "./assets/dialer/us-flag.svg";
 import phoneFilled from "./assets/dialer/phone-filled.svg";
@@ -29,6 +39,8 @@ import keypadIcon from "./assets/dialer/keypad.svg";
 import transferIcon from "./assets/dialer/transfer.svg";
 import userIcon from "./assets/dialer/user.svg";
 import noteIcon from "./assets/dialer/note.svg";
+import noteWhiteIcon from "./assets/dialer/note-white.svg";
+import voicemailWhiteIcon from "./assets/dialer/voicemail-white.svg";
 
 /**
  * Dialer page — compact 360px webphone, pinned top-center.
@@ -38,18 +50,33 @@ import noteIcon from "./assets/dialer/note.svg";
  */
 
 type DialerTab = "dialer" | "call-logs" | "contacts" | "messages" | "settings";
-type CallPhase = "idle" | "ringing" | "talking" | "wrapup";
+/**
+ * `connecting` is the beat between pickup and the workspace: the phone is still
+ * whole, it just stops saying Ringing and starts the clock. The layout only
+ * begins to move once that has registered.
+ */
+type CallPhase = "idle" | "ringing" | "connecting" | "talking" | "wrapup";
 
 const NOTES_MAX = 1500;
 
-const CALL_OUTCOMES = [
-  { value: "interested", label: "Interested" },
-  { value: "follow-up", label: "Follow-up scheduled" },
-  { value: "meeting", label: "Meeting booked" },
-  { value: "not-interested", label: "Not interested" },
-  { value: "no-answer", label: "No answer" },
-  { value: "voicemail", label: "Left voicemail" },
-  { value: "wrong-number", label: "Wrong number" },
+/** Disposition reads at a glance — the dot carries the outcome, not the words. */
+const OUTCOME_TONE = {
+  positive: "bg-success",
+  pending: "bg-warning",
+  negative: "bg-error",
+  neutral: "bg-disabled-fg",
+} as const;
+
+type OutcomeTone = keyof typeof OUTCOME_TONE;
+
+const CALL_OUTCOMES: { value: string; label: string; tone: OutcomeTone }[] = [
+  { value: "interested", label: "Interested", tone: "positive" },
+  { value: "follow-up", label: "Follow-up required", tone: "pending" },
+  { value: "meeting", label: "Meeting booked", tone: "positive" },
+  { value: "not-interested", label: "Not interested", tone: "negative" },
+  { value: "no-answer", label: "No answer", tone: "neutral" },
+  { value: "voicemail", label: "Left voicemail", tone: "neutral" },
+  { value: "wrong-number", label: "Wrong number", tone: "neutral" },
 ];
 
 const RINGING_MS = 2400;
@@ -61,6 +88,31 @@ const CALL_PRESS_MS = 120;
 const ASSIST_COLLAPSE_MS = 200;
 /** How long the outgoing card stays on top while the next one resolves. */
 const SHELL_CROSSFADE_MS = 180;
+/** Save & close — the button confirms before the wrap-up lets go. */
+const SAVE_CONFIRM_MS = 520;
+
+/* ── Answered → workspace ───────────────────────────────────────────────────
+   One ~640ms move, timed from the moment the line goes live. The phone is
+   never swapped for another screen: it becomes the call bar, and the panels
+   only arrive once that has almost finished. */
+
+/** 0–120ms — Ringing → Connected, clock starts, nothing has moved yet. */
+const CONNECT_BEAT_MS = 120;
+/** 120–480ms — the dark card compresses upward and spreads into the bar. */
+const MORPH_SURFACE_MS = 360;
+/** 140–440ms — avatar, caller, Mute/Hold/Keypad/Transfer and End call travel. */
+const MORPH_ELEMENT_DELAY_MS = 20;
+const MORPH_ELEMENT_MS = 300;
+/** 160ms — anything the bar has no use for, and the form change under a move. */
+const MORPH_FADE_MS = 160;
+/** 120–640ms — the whole move, measured from the first frame of geometry. */
+const MORPH_TOTAL_MS = 520;
+/** No bounce: a single decelerating curve carries every part of the move. */
+const MORPH_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+/** Bar chrome with no counterpart on the phone resolves after the travel. */
+const BAR_DETAIL_DELAY_MS = 340;
+/** 360–580ms, then 420–640ms — panels land last, left to right. */
+const PANE_REVEAL_DELAYS_MS = [240, 270, 300];
 
 const KEYPAD: { digit: string; letters: string }[][] = [
   [
@@ -161,6 +213,144 @@ function prefersReducedMotion(): boolean {
   );
 }
 
+type MorphRect = { left: number; top: number; width: number; height: number };
+type MorphCapture = { card: MorphRect; parts: Map<string, MorphRect> };
+
+function readRect(el: Element): MorphRect {
+  const { left, top, width, height } = el.getBoundingClientRect();
+  return { left, top, width, height };
+}
+
+/**
+ * Viewport rect → stage-relative rect. The morph layers are absolute children
+ * of the stage rather than fixed to the viewport: the shell's entrance
+ * animation leaves a transform behind, and a transformed ancestor becomes the
+ * containing block for fixed children — which would silently offset them by the
+ * overlay's top padding. Start and target are converted against one origin read
+ * in the same frame, so any ancestor offset cancels out.
+ */
+function localRect(rect: MorphRect, origin: MorphRect): MorphRect {
+  return {
+    left: rect.left - origin.left,
+    top: rect.top - origin.top,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+/**
+ * Write a rect to an element. Unlike React's style prop, the CSSOM takes no
+ * bare numbers — a unitless value is dropped silently, which would leave a
+ * layer sitting wherever it happened to land.
+ */
+function applyRect(el: HTMLElement, rect: MorphRect) {
+  el.style.left = `${rect.left}px`;
+  el.style.top = `${rect.top}px`;
+  el.style.width = `${rect.width}px`;
+  el.style.height = `${rect.height}px`;
+}
+
+/**
+ * Snapshot where the phone and each of its shared elements sit, while the
+ * phone is still the thing on screen. Taken during the connect beat, which is
+ * the last frame before the layout turns over.
+ */
+function captureMorph(card: HTMLElement): MorphCapture {
+  const parts = new Map<string, MorphRect>();
+  card.querySelectorAll<HTMLElement>("[data-morph]").forEach((el) => {
+    const key = el.dataset.morph;
+    if (key) parts.set(key, readRect(el));
+  });
+  return { card: readRect(card), parts };
+}
+
+/**
+ * Play the move. The dark surface takes the geometry — phone footprint to bar
+ * footprint — while each element that exists in both places is inverted back
+ * to where it was on the phone and released. A control that changes form on
+ * the way (a 56px ringed circle becoming a 20px bar icon) cross-dissolves
+ * across the same travel, so the change of shape rides the movement instead of
+ * cutting.
+ */
+function runMorph(
+  from: MorphCapture,
+  root: HTMLElement,
+  surface: HTMLElement,
+  ghost: HTMLElement | null
+): () => void {
+  const bar = root.querySelector<HTMLElement>("[data-morph-bar]");
+  if (!bar) return () => {};
+
+  // One origin, read in the same frame as the target, for both layers.
+  const origin = readRect(root);
+  const footprint = localRect(from.card, origin);
+  const to = readRect(bar);
+  const travelling: HTMLElement[] = [];
+
+  bar.querySelectorAll<HTMLElement>("[data-morph]").forEach((el) => {
+    const key = el.dataset.morph;
+    const start = key ? from.parts.get(key) : undefined;
+    if (!start) return;
+    const end = readRect(el);
+    if (end.width === 0 || end.height === 0) return;
+
+    // Text re-flows rather than scales; a control keeps its proportions and
+    // takes the ratio that matches how it is read — its overall height.
+    const mode = el.dataset.morphScale ?? "width";
+    const scale =
+      mode === "none"
+        ? 1
+        : mode === "height"
+          ? start.height / end.height
+          : start.width / end.width;
+    const dx = start.left + start.width / 2 - (end.left + end.width / 2);
+    const dy = start.top + start.height / 2 - (end.top + end.height / 2);
+
+    el.style.transition = "none";
+    el.style.transformOrigin = "center center";
+    el.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+    el.style.opacity = "0";
+    el.style.willChange = "transform, opacity";
+    travelling.push(el);
+  });
+
+  // Both layers start on the phone's footprint. Written here rather than in
+  // render because only now is the origin they resolve against known — and a
+  // layout effect still lands before the first paint, so nothing shows late.
+  applyRect(surface, footprint);
+  if (ghost) applyRect(ghost, footprint);
+
+  // Flush the inverted state so the first painted frame is still the phone.
+  void surface.offsetWidth;
+
+  const frame = requestAnimationFrame(() => {
+    surface.style.transition = (["left", "top", "width", "height"] as const)
+      .map((prop) => `${prop} ${MORPH_SURFACE_MS}ms ${MORPH_EASE}`)
+      .join(", ");
+    applyRect(surface, localRect(to, origin));
+
+    travelling.forEach((el) => {
+      el.style.transition = [
+        `transform ${MORPH_ELEMENT_MS}ms ${MORPH_EASE} ${MORPH_ELEMENT_DELAY_MS}ms`,
+        `opacity ${MORPH_FADE_MS}ms ease-out ${MORPH_ELEMENT_DELAY_MS}ms`,
+      ].join(", ");
+      el.style.transform = "none";
+      el.style.opacity = "1";
+    });
+  });
+
+  return () => {
+    cancelAnimationFrame(frame);
+    travelling.forEach((el) => {
+      el.style.removeProperty("transition");
+      el.style.removeProperty("transform");
+      el.style.removeProperty("transform-origin");
+      el.style.removeProperty("opacity");
+      el.style.removeProperty("will-change");
+    });
+  };
+}
+
 /**
  * Cross-dissolve between two call cards. The outgoing card is snapshotted and
  * held on top at the same footprint while the incoming card resolves under it,
@@ -215,7 +405,7 @@ function ShellSwap({
         <div
           aria-hidden="true"
           inert
-          className="dialer-shell-out pointer-events-none absolute inset-0 z-10 flex items-start justify-center"
+          className="dialer-shell-out pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
         >
           {outgoing}
         </div>
@@ -223,13 +413,6 @@ function ShellSwap({
       {rendered}
     </div>
   );
-}
-
-function initialsFromName(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] ?? ""}${parts[parts.length - 1]?.[0] ?? ""}`.toUpperCase();
 }
 
 export interface DialerPanelProps {
@@ -253,6 +436,7 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
   const holdStartedAt = useRef<number | null>(null);
   const pausedMs = useRef(0);
   const inCall = phase !== "idle";
+  const connecting = phase === "connecting";
   const talking = phase === "talking";
   const wrapping = phase === "wrapup";
   const scenario = scenarioById(scenarioId);
@@ -279,13 +463,13 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
   }, []);
 
   useEffect(() => {
-    if (phase !== "ringing" && phase !== "talking") return;
+    if (phase !== "ringing" && phase !== "connecting" && phase !== "talking") return;
     const tick = () => {
       const started = callStartedAt.current;
       if (!started) return;
       const raw = Date.now() - started;
       setPhase((current) =>
-        current === "ringing" && raw >= RINGING_MS ? "talking" : current
+        current === "ringing" && raw >= RINGING_MS ? "connecting" : current
       );
       const holdNow = holdStartedAt.current ? Date.now() - holdStartedAt.current : 0;
       setElapsedMs(Math.max(0, raw - RINGING_MS - pausedMs.current - holdNow));
@@ -293,6 +477,17 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
     tick();
     const timer = window.setInterval(tick, 200);
     return () => window.clearInterval(timer);
+  }, [phase]);
+
+  // Answered. Let the phone say so and start counting before anything moves.
+  useEffect(() => {
+    if (phase !== "connecting") return;
+    if (prefersReducedMotion()) {
+      setPhase("talking");
+      return;
+    }
+    const beat = window.setTimeout(() => setPhase("talking"), CONNECT_BEAT_MS);
+    return () => window.clearTimeout(beat);
   }, [phase]);
 
   useEffect(() => {
@@ -415,14 +610,14 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
       <ShellSwap
         swapKey={inCall ? "call" : "idle"}
         reduced={prefersReducedMotion()}
-        className="flex h-full min-h-0 w-full flex-1 items-start justify-center"
+        className="flex h-full min-h-0 w-full flex-1 items-center justify-center"
       >
         {(enter) =>
           inCall ? (
             <InCallShell
               className={enter}
-              phase={phase}
               talking={talking}
+              connecting={connecting}
               wrapping={wrapping}
               assistCollapsing={assistCollapsing}
               elapsedMs={elapsedMs}
@@ -610,8 +805,8 @@ function IdleDialer({
 
 function InCallShell({
   className,
-  phase,
   talking,
+  connecting,
   wrapping,
   assistCollapsing,
   elapsedMs,
@@ -629,8 +824,8 @@ function InCallShell({
   onCloseWrapUp,
 }: {
   className?: string;
-  phase: CallPhase;
   talking: boolean;
+  connecting: boolean;
   wrapping: boolean;
   assistCollapsing: boolean;
   elapsedMs: number;
@@ -649,269 +844,961 @@ function InCallShell({
 }) {
   const reduced = prefersReducedMotion();
   const localTime = formatLocalTime(new Date());
-  const showAssist = talking || wrapping;
 
-  const stageHeight =
-    talking || wrapping
-      ? "h-[640px] max-h-[calc(100%-9.5rem)]"
-      : "h-[640px] max-h-full";
+  // Ringing and live are the same surface, so they share a swap key: the phone
+  // morphs into the bar instead of dissolving into a different card. Only
+  // wrap-up is a genuinely new card, and it still cross-dissolves.
+  return (
+    <ShellSwap
+      swapKey={wrapping ? "wrapup" : "call"}
+      reduced={reduced}
+      className={cn(
+        "flex h-full min-h-0 w-full items-center justify-center",
+        className
+      )}
+    >
+      {(enter) =>
+        wrapping ? (
+          <PostCallStage
+            className={enter}
+            reduced={reduced}
+            elapsedMs={elapsedMs}
+            contactName={contactName}
+            contactMeta={contactMeta}
+            scenario={scenario}
+            onScenarioChange={onScenarioChange}
+            onClose={onCloseWrapUp}
+          />
+        ) : (
+          <CallMorphStage
+            className={enter}
+            reduced={reduced}
+            live={talking}
+            connecting={connecting}
+            elapsedMs={elapsedMs}
+            contactName={contactName}
+            contactMeta={contactMeta}
+            localTime={localTime}
+            muted={muted}
+            onHold={onHold}
+            tab={tab}
+            scenario={scenario}
+            assistCollapsing={assistCollapsing}
+            onScenarioChange={onScenarioChange}
+            onTabChange={onTabChange}
+            onMute={onMute}
+            onHoldToggle={onHoldToggle}
+            onHangup={onHangup}
+          />
+        )
+      }
+    </ShellSwap>
+  );
+}
+
+/**
+ * Ringing → live workspace, as one continuous move.
+ *
+ * The phone is not faded out and replaced. Three layers overlap for ~520ms:
+ * a dark surface that starts on the phone's footprint and compresses upward
+ * into the call bar; a ghost of the phone, pinned to that same footprint,
+ * carrying the bottom nav and the dial-pad chrome out; and the live workspace
+ * itself, whose bar elements are inverted back onto their phone positions and
+ * then released. The dark never breaks, so the phone reads as becoming the bar
+ * rather than being swapped for it.
+ *
+ * A resumed call (or reduced motion) has no phone to measure, so it skips
+ * straight to the workspace with a plain reveal.
+ */
+function CallMorphStage({
+  className,
+  reduced,
+  live,
+  connecting,
+  elapsedMs,
+  contactName,
+  contactMeta,
+  localTime,
+  muted,
+  onHold,
+  tab,
+  scenario,
+  assistCollapsing,
+  onScenarioChange,
+  onTabChange,
+  onMute,
+  onHoldToggle,
+  onHangup,
+}: {
+  className?: string;
+  reduced: boolean;
+  live: boolean;
+  connecting: boolean;
+  elapsedMs: number;
+  contactName: string;
+  contactMeta: string;
+  localTime: string;
+  muted: boolean;
+  onHold: boolean;
+  tab: DialerTab;
+  scenario: CallScenario;
+  assistCollapsing: boolean;
+  onScenarioChange: (id: string) => void;
+  onTabChange: (tab: DialerTab) => void;
+  onMute: () => void;
+  onHoldToggle: () => void;
+  onHangup: () => void;
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  const captured = useRef<MorphCapture | null>(null);
+  const [morph, setMorph] = useState<
+    { phase: "idle" | "settled" } | { phase: "run"; from: MorphCapture }
+  >({ phase: "idle" });
+
+  // Measure while the phone is still the thing on screen.
+  useLayoutEffect(() => {
+    if (!connecting || reduced) return;
+    const card = rootRef.current?.querySelector<HTMLElement>("[data-morph-card]");
+    if (card) captured.current = captureMorph(card);
+  }, [connecting, reduced]);
+
+  // Commit `run` in the same pass that mounts the bar, so the bar never gets a
+  // painted frame at its settled size before the move starts.
+  if (live && morph.phase === "idle" && captured.current) {
+    setMorph({ phase: "run", from: captured.current });
+  }
+  if (!live && morph.phase !== "idle") {
+    setMorph({ phase: "idle" });
+  }
+
+  useLayoutEffect(() => {
+    if (morph.phase !== "run") return;
+    captured.current = null;
+    const root = rootRef.current;
+    const surface = surfaceRef.current;
+    if (!root || !surface) {
+      setMorph({ phase: "settled" });
+      return;
+    }
+    const stop = runMorph(morph.from, root, surface, ghostRef.current);
+    const settle = window.setTimeout(
+      () => setMorph({ phase: "settled" }),
+      MORPH_TOTAL_MS
+    );
+    return () => {
+      window.clearTimeout(settle);
+      stop();
+    };
+  }, [morph]);
+
+  const morphing = morph.phase === "run";
 
   return (
-    <div className={cn("flex h-full min-h-0 items-start gap-3", className)}>
-      {/* End call — the phone cross-dissolves into the post-call state once
-          Agent Assist has let go of the live stream. */}
-      <ShellSwap
-        swapKey={wrapping ? "wrapup" : "live"}
-        reduced={reduced}
-        className={cn("w-[360px] shrink-0", stageHeight)}
-      >
-        {(enter) =>
-          wrapping ? (
-        <WrapUpPhone
+    <div
+      ref={rootRef}
+      className={cn(
+        "relative flex h-full min-h-0 w-full items-center justify-center",
+        className
+      )}
+    >
+      {morphing ? (
+        <>
+          {/* The dark surface owns the geometry — and, while it is moving, the
+              call bar's background, so the two never read as separate. Both
+              layers are placed by the layout effect, which knows the origin. */}
+          <div
+            aria-hidden="true"
+            ref={surfaceRef}
+            className="call-morph-surface"
+          />
+          {/* Everything the call bar has no use for, on its way out. */}
+          <div
+            aria-hidden="true"
+            inert
+            ref={ghostRef}
+            className="call-morph-ghost"
+          >
+            <RingingPhone
+              reduced
+              connected
+              ghost
+              elapsedMs={elapsedMs}
+              contactName={contactName}
+              contactMeta={contactMeta}
+              localTime={localTime}
+              tab={tab}
+              onTabChange={() => {}}
+              onHangup={() => {}}
+              className="h-full"
+            />
+          </div>
+        </>
+      ) : null}
+
+      {live ? (
+        <LiveCallStage
+          className="call-morph-stage"
+          reduced={reduced}
+          morphing={morphing}
+          elapsedMs={elapsedMs}
           contactName={contactName}
-          contactMeta={contactMeta}
-          tab={tab}
-          onTabChange={onTabChange}
-          onClose={onCloseWrapUp}
-          className={cn("h-full", enter)}
+          muted={muted}
+          onHold={onHold}
+          scenario={scenario}
+          assistCollapsing={assistCollapsing}
+          onScenarioChange={onScenarioChange}
+          onMute={onMute}
+          onHoldToggle={onHoldToggle}
+          onHangup={onHangup}
         />
       ) : (
-      <div
-        className={cn(
-          "flex h-full w-[360px] shrink-0 flex-col overflow-hidden rounded-[16px] bg-[#071532] shadow-600",
-          enter
-        )}
-      >
-        <div className="flex w-full items-center justify-center px-4">
-          <div className="flex h-5 w-[54px] items-center justify-center gap-1.5 rounded-b-lg bg-badge-beta px-2">
-            <span className="size-2 shrink-0 rounded-full bg-warning" aria-hidden="true" />
-            <span className="text-[10px] leading-3 font-normal whitespace-nowrap text-white">
-              Busy
-            </span>
-          </div>
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col items-center gap-6 overflow-hidden p-4">
-          <div className="relative flex h-8 w-full items-center justify-center">
-            <p className="text-center text-[12px] leading-4 text-white/70">
-              It’s {localTime} there
-            </p>
-            {talking ? (
-              <button
-                type="button"
-                className="absolute top-1/2 left-0 flex -translate-y-1/2 items-center gap-1.5 rounded-full bg-white px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-              >
-                <span className="text-[10px] leading-3 text-error">Record</span>
-                <span className="size-2 rounded-full bg-error" aria-hidden="true" />
-              </button>
-            ) : null}
-            <div className="absolute top-1/2 right-0 flex -translate-y-1/2 items-center gap-2">
-              {talking ? (
-                <>
-                  <IconChevronDown size={16} className="size-4 text-white" />
-                  <SignalBars />
-                </>
-              ) : null}
-              <button
-                type="button"
-                aria-label="Notes"
-                className="flex size-8 items-center justify-center rounded-lg bg-[#713f12] outline-none transition-colors hover:brightness-110 focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]"
-              >
-                <span className="relative size-4 overflow-clip">
-                  <img src={noteIcon} alt="" className="size-full object-contain" />
-                </span>
-              </button>
-            </div>
-          </div>
-
-          <div className="flex w-full flex-col items-center gap-2">
-            <span className="relative flex size-10 items-center justify-center overflow-clip rounded-full bg-[#344054]">
-              <img src={userIcon} alt="" className="size-6 object-contain" />
-            </span>
-            <div className="flex w-full flex-col items-center gap-1 text-center">
-              <p className="text-[16px] leading-6 font-medium text-pretty text-white">
-                {contactName}
-              </p>
-              <p
-                className={cn(
-                  "text-[12px] leading-4 text-white/70",
-                  !reduced && "dialer-text-in"
-                )}
-              >
-                {contactMeta}
-              </p>
-            </div>
-            {/* Call connects — “Ringing” hands over to “Talking” and the
-                timer fades in underneath it. */}
-            <div className="flex h-11 w-24 flex-col items-center justify-end gap-1 text-center text-white">
-              <p
-                aria-hidden={!talking}
-                className={cn(
-                  "text-[12px] leading-4",
-                  !reduced && "dialer-text-fade",
-                  talking ? "opacity-100" : "opacity-0"
-                )}
-              >
-                Talking
-              </p>
-              <p
-                key={phase === "ringing" ? "ringing-clock" : "live-clock"}
-                className={cn(
-                  "text-[16px] leading-6 font-medium tabular-nums",
-                  !reduced && "dialer-text-in"
-                )}
-              >
-                {phase === "ringing" ? "Ringing" : formatDuration(elapsedMs)}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center justify-center gap-4">
-            <div className="flex gap-4">
-              <CallControl
-                label="Mute"
-                src={muteIcon}
-                pressed={muted}
-                disabled={!talking}
-                onClick={onMute}
-              />
-              <CallControl
-                label="Hold"
-                src={holdIcon}
-                pressed={onHold}
-                disabled={!talking}
-                onClick={onHoldToggle}
-              />
-            </div>
-            <div className="flex gap-4">
-              <CallControl label="Keypad" src={keypadIcon} disabled={!talking} />
-              <CallControl label="Transfer" src={transferIcon} disabled={!talking} />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="size-12 shrink-0" aria-hidden="true" />
-            <button
-              type="button"
-              aria-label="End call"
-              onClick={onHangup}
-              className="flex h-14 w-32 items-center justify-center overflow-clip rounded-full bg-white outline-none transition-transform hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
-            >
-              <Glyph src={hangupIcon} className="size-7" />
-            </button>
-            <button
-              type="button"
-              aria-label="Voicemail drop"
-              className="flex size-12 items-center justify-center overflow-clip rounded-full bg-white text-success outline-none transition-transform hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
-            >
-              <IconVoicemailDrop size={24} className="size-6" />
-            </button>
-          </div>
-        </div>
-
-        <DialerNav tab={tab} onTabChange={onTabChange} />
-      </div>
-          )
-        }
-      </ShellSwap>
-
-      {/* Agent Assist expands from its right edge — the call card is pushed
-          left by the flex row as the panel takes its width. */}
-      <div
-        className={cn(
-          "min-h-0 shrink-0 overflow-hidden rounded-[16px] bg-white shadow-600",
-          stageHeight,
-          reduced
-            ? ""
-            : "transition-[width,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
-          showAssist ? "w-[680px] opacity-100" : "w-0 opacity-0"
-        )}
-        aria-hidden={!showAssist}
-        inert={!showAssist ? true : undefined}
-      >
-        <AgentAssistCallSheet
-          key={scenario.id}
+        <RingingPhone
+          className="h-[640px] max-h-full"
+          reduced={reduced}
+          connected={connecting}
           elapsedMs={elapsedMs}
-          scenario={scenario}
-          onScenarioChange={onScenarioChange}
-          active={showAssist}
-          exiting={assistCollapsing}
-          ended={wrapping}
-          className="h-full"
+          contactName={contactName}
+          contactMeta={contactMeta}
+          localTime={localTime}
+          tab={tab}
+          onTabChange={onTabChange}
+          onHangup={onHangup}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Live call — the call bar owns the top edge, then three columns split the rest:
+ * the script, guidance, and the live transcript. Neither guidance nor the
+ * transcript is a toggle inside the panel any more; while the line is open all
+ * three are on screen at once.
+ */
+function LiveCallStage({
+  className,
+  reduced,
+  morphing,
+  elapsedMs,
+  contactName,
+  muted,
+  onHold,
+  scenario,
+  assistCollapsing,
+  onScenarioChange,
+  onMute,
+  onHoldToggle,
+  onHangup,
+}: {
+  className?: string;
+  reduced: boolean;
+  morphing?: boolean;
+  elapsedMs: number;
+  contactName: string;
+  muted: boolean;
+  onHold: boolean;
+  scenario: CallScenario;
+  assistCollapsing: boolean;
+  onScenarioChange: (id: string) => void;
+  onMute: () => void;
+  onHoldToggle: () => void;
+  onHangup: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        // The gutter clears the overlay's close button at narrow widths and
+        // settles the stage at 1440 once there is room for it. The stage takes
+        // the height its content needs rather than the whole window, and sits
+        // in the middle of it — the three panes read as one object, not as
+        // three columns stretched to the viewport.
+        "flex h-[700px] max-h-full min-h-0 w-full max-w-[1504px] flex-col gap-3 px-16",
+        className
+      )}
+    >
+      <CallBar
+        // Morphing in from the phone, the bar's own entrance would fight the
+        // travelling elements — the dark surface behind it is the entrance.
+        className={!reduced && !morphing ? "call-bar-in" : undefined}
+        morphing={morphing}
+        revealing={!reduced}
+        elapsedMs={elapsedMs}
+        contactName={contactName}
+        muted={muted}
+        onHold={onHold}
+        onMute={onMute}
+        onHoldToggle={onHoldToggle}
+        onHangup={onHangup}
+      />
+
+      <div className="flex min-h-0 flex-1 gap-3">
+        <StagePane index={0} reduced={reduced} grow={5}>
+          <AgentAssistCallSheet
+            key={scenario.id}
+            elapsedMs={elapsedMs}
+            scenario={scenario}
+            onScenarioChange={onScenarioChange}
+            active
+            exiting={assistCollapsing}
+            transcriptDetached
+            guidanceDetached
+            className="h-full"
+          />
+        </StagePane>
+        <StagePane index={1} reduced={reduced} grow={4}>
+          <LiveGuidancePanel
+            key={scenario.id}
+            elapsedMs={elapsedMs}
+            scenario={scenario}
+            exiting={assistCollapsing}
+            className="h-full"
+          />
+        </StagePane>
+        <StagePane index={2} reduced={reduced} grow={5}>
+          <LiveTranscriptPanel
+            key={scenario.id}
+            elapsedMs={elapsedMs}
+            scenario={scenario}
+            exiting={assistCollapsing}
+            className="h-full"
+          />
+        </StagePane>
       </div>
     </div>
   );
 }
 
-function WrapUpPhone({
+/** Panels wait out the call bar, then arrive left to right. */
+function StagePane({
+  index,
+  grow,
+  reduced,
+  children,
+}: {
+  index: number;
+  grow: number;
+  reduced: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 min-w-0 overflow-hidden rounded-[16px] bg-white shadow-600",
+        !reduced && "call-stage-pane-in"
+      )}
+      style={
+        {
+          flex: `${grow} 1 0px`,
+          "--pane-delay": `${PANE_REVEAL_DELAYS_MS[index] ?? 0}ms`,
+        } as CSSProperties
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The call bar. `data-morph` marks each element that also exists on the phone,
+ * so the ringing → live move can carry it across; `data-morph-scale` says how
+ * the size difference should be read (text re-flows, controls keep their
+ * proportions off their height). While the move runs the bar is transparent —
+ * the morph surface behind it is the dark, and the two end on the same rect.
+ */
+function CallBar({
+  className,
+  morphing,
+  revealing,
+  elapsedMs,
+  contactName,
+  muted,
+  onHold,
+  onMute,
+  onHoldToggle,
+  onHangup,
+}: {
+  className?: string;
+  morphing?: boolean;
+  revealing?: boolean;
+  elapsedMs: number;
+  contactName: string;
+  muted: boolean;
+  onHold: boolean;
+  onMute: () => void;
+  onHoldToggle: () => void;
+  onHangup: () => void;
+}) {
+  const detail = (delay: number) =>
+    revealing
+      ? {
+          className: "call-bar-detail-in",
+          style: { "--detail-delay": `${delay}ms` } as CSSProperties,
+        }
+      : {};
+
+  return (
+    <div
+      data-morph-bar
+      className={cn(
+        "flex h-[72px] shrink-0 items-center gap-4 rounded-[16px] px-4",
+        morphing ? "bg-transparent" : "bg-[#071532] shadow-600",
+        className
+      )}
+    >
+      <div className="flex shrink-0 items-center gap-2.5">
+        <button
+          type="button"
+          style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+          className={cn(
+            "flex h-6 items-center gap-1.5 rounded-full bg-white px-2 outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+            revealing && "call-bar-detail-in"
+          )}
+        >
+          <span className="size-2 rounded-full bg-error" aria-hidden="true" />
+          <span className="text-[10px] leading-3 whitespace-nowrap text-error">
+            Recording
+          </span>
+        </button>
+
+        <span
+          style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+          className={cn(
+            "hidden items-end lg:flex",
+            revealing && "call-bar-detail-in"
+          )}
+        >
+          <SignalBars />
+        </span>
+      </div>
+
+      <span
+        style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+        className={cn(
+          "h-8 w-px shrink-0 bg-white/15",
+          revealing && "call-bar-detail-in"
+        )}
+        aria-hidden="true"
+      />
+
+      <div
+        data-morph="identity"
+        data-morph-scale="none"
+        className="min-w-0 max-w-[220px] shrink-0"
+      >
+        <p className="truncate text-[14px] leading-5 font-medium text-white">
+          {contactName}
+        </p>
+        <p className="truncate text-[12px] leading-4 text-white/60 tabular-nums">
+          {onHold ? "On hold · " : ""}
+          {formatDuration(elapsedMs)}
+        </p>
+      </div>
+
+      <span
+        style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+        className={cn(
+          "hidden min-w-0 flex-1 px-2 md:block",
+          revealing && "call-bar-detail-in"
+        )}
+      >
+        <CallWaveform active={!morphing} muted={muted} onHold={onHold} reduced={!revealing} />
+      </span>
+
+      <div className="ml-auto flex shrink-0 items-center gap-0.5">
+        <BarControl
+          morphKey="mute"
+          label="Mute"
+          src={muteIcon}
+          pressed={muted}
+          onClick={onMute}
+        />
+        <BarControl
+          morphKey="hold"
+          label="Hold"
+          src={holdIcon}
+          pressed={onHold}
+          onClick={onHoldToggle}
+        />
+        <BarControl morphKey="keypad" label="Keypad" src={keypadIcon} />
+        <BarControl morphKey="transfer" label="Transfer" src={transferIcon} />
+        <BarControl label="Notes" src={noteWhiteIcon} {...detail(BAR_DETAIL_DELAY_MS)} />
+        <BarControl
+          label="Voicemail"
+          src={voicemailWhiteIcon}
+          {...detail(BAR_DETAIL_DELAY_MS)}
+        />
+
+        <span
+          style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+          className={cn(
+            "mr-4 ml-2 h-8 w-px bg-white/15",
+            revealing && "call-bar-detail-in"
+          )}
+          aria-hidden="true"
+        />
+
+        <button
+          type="button"
+          data-morph="end"
+          onClick={onHangup}
+          className="flex h-10 shrink-0 items-center gap-2 rounded-full bg-white pr-4 pl-3 outline-none transition-colors hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
+        >
+          <Glyph src={hangupIcon} className="size-6" />
+          <span className="text-label-sm whitespace-nowrap text-error">
+            End call
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BarControl({
+  label,
+  src,
+  pressed,
+  morphKey,
+  className,
+  style,
+  onClick,
+  children,
+}: {
+  label: string;
+  src?: string;
+  pressed?: boolean;
+  morphKey?: string;
+  className?: string;
+  style?: CSSProperties;
+  onClick?: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={pressed}
+      data-morph={morphKey}
+      data-morph-scale={morphKey ? "height" : undefined}
+      style={style}
+      onClick={onClick}
+      className={cn(
+        "flex w-[58px] flex-col items-center gap-1 rounded-lg px-1 py-1.5 outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]",
+        pressed && "bg-white/15",
+        className
+      )}
+    >
+      <span className="relative flex size-5 items-center justify-center overflow-clip">
+        {children ?? (
+          <img src={src} alt="" className="size-full object-contain" />
+        )}
+      </span>
+      <span className="text-[10px] leading-3 whitespace-nowrap text-white/80">
+        {label}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Ringing — nothing to assist with yet, so the phone keeps the stage. With
+ * `connected` it is the same phone on the beat after pickup: the label turns
+ * over and the clock starts, but nothing has moved yet. Its `data-morph`
+ * elements are the ones the call bar takes over.
+ *
+ * `ghost` renders the same phone as the copy that fades out during the move.
+ * It drops the capture marker so it can never be mistaken for the live phone.
+ */
+function RingingPhone({
+  className,
+  reduced,
+  connected,
+  ghost,
+  elapsedMs,
   contactName,
   contactMeta,
+  localTime,
   tab,
   onTabChange,
-  onClose,
-  className,
+  onHangup,
 }: {
+  className?: string;
+  reduced: boolean;
+  connected?: boolean;
+  ghost?: boolean;
+  elapsedMs?: number;
   contactName: string;
   contactMeta: string;
+  localTime: string;
   tab: DialerTab;
   onTabChange: (tab: DialerTab) => void;
-  onClose: () => void;
-  className?: string;
+  onHangup: () => void;
 }) {
-  const [rating, setRating] = useState(0);
-  const [outcome, setOutcome] = useState("");
-  const [notes, setNotes] = useState("");
-  const [saved, setSaved] = useState(false);
+  return (
+    <div
+      data-morph-card={ghost ? undefined : true}
+      className={cn(
+        "flex w-[360px] shrink-0 flex-col overflow-hidden rounded-[16px] bg-[#071532] shadow-600",
+        className
+      )}
+    >
+      <div className="flex w-full items-center justify-center px-4">
+        <div className="flex h-5 w-[54px] items-center justify-center gap-1.5 rounded-b-lg bg-badge-beta px-2">
+          <span className="size-2 shrink-0 rounded-full bg-warning" aria-hidden="true" />
+          <span className="text-[10px] leading-3 font-normal whitespace-nowrap text-white">
+            Busy
+          </span>
+        </div>
+      </div>
 
-  useEffect(() => {
-    setSaved(false);
-  }, [rating, outcome, notes]);
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-6 overflow-hidden p-4">
+        <div className="relative flex h-8 w-full items-center justify-center">
+          <p className="text-center text-[12px] leading-4 text-white/70">
+            It’s {localTime} there
+          </p>
+          <div className="absolute top-1/2 right-0 flex -translate-y-1/2 items-center gap-2">
+            <button
+              type="button"
+              aria-label="Notes"
+              className="flex size-8 items-center justify-center rounded-lg bg-[#713f12] outline-none transition-colors hover:brightness-110 focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]"
+            >
+              <span className="relative size-4 overflow-clip">
+                <img src={noteIcon} alt="" className="size-full object-contain" />
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex w-full flex-col items-center gap-2">
+          <span
+            data-morph="avatar"
+            className="relative flex size-10 items-center justify-center overflow-clip rounded-full bg-[#344054]"
+          >
+            <img src={userIcon} alt="" className="size-6 object-contain" />
+          </span>
+          {/* Hugs its text so the box centre is the text centre — that is what
+              the move aligns to when it travels into the bar. */}
+          <div
+            data-morph="identity"
+            className="flex max-w-full flex-col items-center gap-1 text-center"
+          >
+            <p className="text-[16px] leading-6 font-medium text-pretty text-white">
+              {contactName}
+            </p>
+            <p
+              className={cn(
+                "text-[12px] leading-4 text-white/70",
+                !reduced && "dialer-text-in"
+              )}
+            >
+              {contactMeta}
+            </p>
+          </div>
+          <div
+            data-morph="status"
+            className="flex h-11 flex-col items-center justify-end gap-1 text-center text-white"
+          >
+            {connected ? (
+              <>
+                <p
+                  className={cn(
+                    "text-[10px] leading-3 tracking-[0.06em] text-white/60 uppercase",
+                    !reduced && "dialer-text-in"
+                  )}
+                >
+                  Connected
+                </p>
+                <p
+                  className={cn(
+                    "text-[16px] leading-6 font-medium tabular-nums",
+                    !reduced && "dialer-text-in"
+                  )}
+                >
+                  {formatDuration(elapsedMs ?? 0)}
+                </p>
+              </>
+            ) : (
+              <p
+                className={cn(
+                  "text-[16px] leading-6 font-medium",
+                  !reduced && "dialer-text-in"
+                )}
+              >
+                Ringing
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* The four controls the call bar keeps. They come alive on connect,
+            which is also the moment they start travelling. */}
+        <div className="flex flex-col items-center justify-center gap-4">
+          <div className="flex gap-4">
+            <CallControl
+              morphKey="mute"
+              label="Mute"
+              src={muteIcon}
+              disabled={!connected}
+            />
+            <CallControl
+              morphKey="hold"
+              label="Hold"
+              src={holdIcon}
+              disabled={!connected}
+            />
+          </div>
+          <div className="flex gap-4">
+            <CallControl
+              morphKey="keypad"
+              label="Keypad"
+              src={keypadIcon}
+              disabled={!connected}
+            />
+            <CallControl
+              morphKey="transfer"
+              label="Transfer"
+              src={transferIcon}
+              disabled={!connected}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <span className="size-12 shrink-0" aria-hidden="true" />
+          <button
+            type="button"
+            aria-label="End call"
+            data-morph="end"
+            onClick={onHangup}
+            className="flex h-14 w-32 items-center justify-center overflow-clip rounded-full bg-white outline-none transition-transform hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
+          >
+            <Glyph src={hangupIcon} className="size-7" />
+          </button>
+          <button
+            type="button"
+            aria-label="Voicemail drop"
+            className="flex size-12 items-center justify-center overflow-clip rounded-full bg-white text-success outline-none transition-transform hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
+          >
+            <IconVoicemailDrop size={24} className="size-6" />
+          </button>
+        </div>
+      </div>
+
+      <DialerNav tab={tab} onTabChange={onTabChange} />
+    </div>
+  );
+}
+
+/**
+ * Post-call — the same stage the live call used, in its ended state. The call
+ * bar keeps the top edge (now reporting the call rather than running it), the
+ * recap keeps the wide pane it had while the line was open, and Wrap up takes
+ * the column guidance and the transcript were using. Nothing the agent was
+ * reading moves to a different part of the screen when the call ends.
+ */
+function PostCallStage({
+  className,
+  reduced,
+  elapsedMs,
+  contactName,
+  contactMeta,
+  scenario,
+  onScenarioChange,
+  onClose,
+}: {
+  className?: string;
+  reduced: boolean;
+  elapsedMs: number;
+  contactName: string;
+  contactMeta: string;
+  scenario: CallScenario;
+  onScenarioChange: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   return (
     <div
       className={cn(
-        "flex w-[360px] shrink-0 flex-col rounded-[16px] bg-white shadow-600",
+        // Same geometry the live stage settles at, so hanging up doesn't
+        // resize the surface the agent is already reading.
+        "flex h-[700px] max-h-full min-h-0 w-full max-w-[1504px] flex-col gap-3 px-16",
         className
       )}
     >
-      <div className="relative flex w-full items-center justify-center">
-        <div className="flex h-5 w-24 items-center justify-center gap-1.5 rounded-b-lg bg-badge-beta px-2">
-          <AvatarIndicator
-            status="available"
-            size="xs"
-            className="static size-2 shrink-0 border-0"
+      <EndedCallBar
+        className={!reduced ? "call-bar-in" : undefined}
+        elapsedMs={elapsedMs}
+        contactName={contactName}
+        contactMeta={contactMeta}
+        onClose={onClose}
+      />
+
+      <div className="flex min-h-0 flex-1 gap-3">
+        <StagePane index={0} reduced={reduced} grow={7}>
+          <AgentAssistCallSheet
+            key={scenario.id}
+            elapsedMs={elapsedMs}
+            scenario={scenario}
+            onScenarioChange={onScenarioChange}
+            ended
+            transcriptOpen={transcriptOpen}
+            onTranscriptOpenChange={setTranscriptOpen}
+            className="h-full"
           />
-          <span className="text-[10px] leading-3 font-normal whitespace-nowrap text-white">
-            Available
-          </span>
+        </StagePane>
+        <StagePane index={1} reduced={reduced} grow={4}>
+          <WrapUpPanel onClose={onClose} />
+        </StagePane>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The call bar after hangup. Same surface, same geometry — the live controls
+ * give way to the one thing left to do with the bar itself: leave. Reading the
+ * call is the recap pane's own business.
+ */
+function EndedCallBar({
+  className,
+  elapsedMs,
+  contactName,
+  contactMeta,
+  onClose,
+}: {
+  className?: string;
+  elapsedMs: number;
+  contactName: string;
+  contactMeta: string;
+  onClose: () => void;
+}) {
+  // The contact's clock stops being useful the moment the line drops — what
+  // the agent is filing against now is when this call ended, stamped once.
+  const [endedAt] = useState(() => formatLocalTime(new Date()));
+
+  return (
+    <div
+      className={cn(
+        "flex h-[72px] shrink-0 items-center gap-4 rounded-[16px] bg-[#071532] px-4 shadow-600",
+        className
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="relative flex size-9 shrink-0 items-center justify-center overflow-clip rounded-full bg-[#344054]">
+          <img src={userIcon} alt="" className="size-5 object-contain" />
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[14px] leading-5 font-medium text-white">
+            {contactName}
+          </p>
+          <p className="truncate text-[11px] leading-4 text-white/60">
+            {contactMeta} · Ended {endedAt}
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-1 right-3 text-label-sm text-brand outline-none hover:text-brand-hover focus-visible:ring-2 focus-visible:ring-brand/24"
-        >
-          Close
-        </button>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-        <div className="flex items-center gap-3">
-          <Avatar size="lg" color="indigo" initials={initialsFromName(contactName)} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-label-md text-foreground">{contactName}</p>
-            <p className="truncate text-paragraph-sm text-muted-foreground">
-              {contactMeta}
-            </p>
-          </div>
-        </div>
+      <div className="flex shrink-0 flex-col justify-center pl-2">
+        <p className="text-[10px] leading-3 tracking-[0.06em] whitespace-nowrap text-white/60 uppercase">
+          Duration
+        </p>
+        <p className="text-[16px] leading-6 font-medium text-white tabular-nums">
+          {formatDuration(elapsedMs)}
+        </p>
+      </div>
 
-        <CallRating value={rating} onChange={setRating} />
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <BarAction label="Close" onClick={onClose}>
+          <IconClose size={16} className="size-4 shrink-0" />
+        </BarAction>
+      </div>
+    </div>
+  );
+}
 
+/** A labelled action on the dark bar — outlined, so none of the three shouts. */
+function BarAction({
+  label,
+  pressed,
+  onClick,
+  children,
+}: {
+  label: string;
+  pressed?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={cn(
+        "flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-white/25 px-3.5 text-label-sm whitespace-nowrap text-white outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]",
+        pressed && "border-white/40 bg-white/15"
+      )}
+    >
+      {children}
+      {label}
+    </button>
+  );
+}
+
+/**
+ * Wrap up — disposition, notes and rating. The recap next door is the raw
+ * material: the agent copies the generated summary from there if they want it
+ * in the notes, or writes their own.
+ */
+function WrapUpPanel({ onClose }: { onClose: () => void }) {
+  const [rating, setRating] = useState(0);
+  const [outcome, setOutcome] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saved, setSaved] = useState(false);
+  const saveTimer = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    },
+    []
+  );
+
+  // Saving is the end of the call: confirm on the button, then let the wrap-up go.
+  const save = () => {
+    if (saveTimer.current) return;
+    setSaved(true);
+    saveTimer.current = window.setTimeout(onClose, SAVE_CONFIRM_MS);
+  };
+
+  const outcomeOptions = CALL_OUTCOMES.map((item) => ({
+    value: item.value,
+    label: item.label,
+    icon: <OutcomeDot tone={item.tone} />,
+  }));
+  const selected = CALL_OUTCOMES.find((item) => item.value === outcome);
+
+  return (
+    <section
+      aria-label="Wrap up"
+      className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white"
+    >
+      <header className="flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-4">
+        <IconCallDisposition size={16} className="size-4 shrink-0 text-muted-foreground" />
+        <p className="text-label-md-semi text-foreground">Wrap up</p>
+      </header>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
         <Dropdown
           searchable={false}
+          label={
+            <>
+              Call outcome <span className="text-error">*</span>
+            </>
+          }
           placeholder="Select call outcome"
-          options={CALL_OUTCOMES}
+          options={outcomeOptions}
+          leftIcon={selected ? <OutcomeDot tone={selected.tone} /> : undefined}
           value={outcome}
           onValueChange={(value) =>
             setOutcome(Array.isArray(value) ? value[0] ?? "" : value)
@@ -919,57 +1806,50 @@ function WrapUpPhone({
           aria-label="Call outcome"
         />
 
-        <div className="flex flex-col gap-1">
-          <TextArea
-            placeholder="Notes"
-            maxLength={NOTES_MAX}
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            className="h-28 resize-none"
-          />
-          <p className="text-right text-label-sm text-muted-foreground tabular-nums">
-            {notes.length}/{NOTES_MAX}
-          </p>
+        <div className="flex flex-col gap-2">
+          <p className="text-label-md text-foreground">Notes</p>
+          <div className="flex flex-col gap-1">
+            <TextArea
+              placeholder="Add your notes about this call..."
+              maxLength={NOTES_MAX}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              className="h-32 resize-none"
+              aria-label="Notes"
+            />
+            <p className="text-right text-label-sm text-muted-foreground tabular-nums">
+              {notes.length}/{NOTES_MAX}
+            </p>
+          </div>
         </div>
 
-        <div className="mt-auto flex flex-col gap-2">
-          <Button
-            type="button"
-            variant="primary"
-            size="md"
-            className="w-full"
-            leftIcon={saved ? <IconCheck size={16} /> : undefined}
-            onClick={() => setSaved(true)}
-          >
-            {saved ? "Saved" : "Save"}
-          </Button>
-          <Button
-            type="button"
-            variant="primary-outline"
-            size="sm"
-            leftIcon={<IconMessages size={16} />}
-            className="w-full"
-          >
-            Send a message
-          </Button>
-          <Button
-            type="button"
-            variant="primary-outline"
-            size="sm"
-            leftIcon={<IconScheduler size={16} />}
-            className="w-full"
-          >
-            Schedule a follow up
-          </Button>
-        </div>
+        <CallRating value={rating} onChange={setRating} />
       </div>
 
-      <DialerNav
-        tab={tab}
-        onTabChange={onTabChange}
-        className="rounded-b-[16px]"
-      />
-    </div>
+      {/* What closes the call sits on its own edge, not at the end of a scroll. */}
+      <div className="flex shrink-0 flex-col gap-2 border-t border-line px-4 py-3">
+        <Button
+          type="button"
+          variant="primary"
+          size="md"
+          className="w-full"
+          disabled={!outcome}
+          leftIcon={saved ? <IconCheck size={20} /> : undefined}
+          onClick={save}
+        >
+          {saved ? "Saved" : "Save & close"}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function OutcomeDot({ tone }: { tone: OutcomeTone }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("size-2 shrink-0 rounded-full", OUTCOME_TONE[tone])}
+    />
   );
 }
 
@@ -981,7 +1861,7 @@ function CallRating({
   onChange: (value: number) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-1">
       <p className="text-label-md text-foreground">Rate this call</p>
       <div role="radiogroup" aria-label="Call rating" className="flex items-center">
         {[1, 2, 3, 4, 5].map((star) => {
@@ -1025,12 +1905,14 @@ function CallControl({
   src,
   pressed,
   disabled,
+  morphKey,
   onClick,
 }: {
   label: string;
   src: string;
   pressed?: boolean;
   disabled?: boolean;
+  morphKey?: string;
   onClick?: () => void;
 }) {
   return (
@@ -1039,9 +1921,10 @@ function CallControl({
       aria-label={label}
       aria-pressed={pressed}
       disabled={disabled}
+      data-morph={morphKey}
       onClick={onClick}
       className={cn(
-        "flex flex-col items-center gap-2 outline-none",
+        "flex flex-col items-center gap-2 outline-none transition-opacity duration-150",
         disabled && "cursor-not-allowed opacity-45"
       )}
     >
