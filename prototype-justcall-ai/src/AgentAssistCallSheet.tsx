@@ -37,7 +37,8 @@ import {
   type GuidanceItem,
   type GuidanceResource,
 } from "./guidanceData";
-import { InCallGuidanceSlot, ResourceOverlay } from "./LiveGuidance";
+import { InCallGuidanceSlot } from "./LiveGuidance";
+import { GuidanceResourceModal } from "./GuidanceCard";
 import {
   ScriptStepRow,
   useScriptChecklistMotion,
@@ -291,12 +292,10 @@ export function AgentAssistCallSheet({
         />
       )}
 
-      {viewingResource && !ended ? (
-        <ResourceOverlay
-          resource={viewingResource}
-          onClose={() => setViewingResource(null)}
-        />
-      ) : null}
+      <GuidanceResourceModal
+        resource={ended ? null : viewingResource}
+        onClose={() => setViewingResource(null)}
+      />
 
       {ended ? null : (
         <p className="sr-only" aria-live="polite">

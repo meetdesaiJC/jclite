@@ -1,7 +1,6 @@
 import { useEffect, useState, type Ref } from "react";
 import {
   IconCircleCheckFilled,
-  IconClose,
   IconSparkles,
 } from "@/components/Icon";
 import { cn } from "@/lib/utils";
@@ -9,11 +8,11 @@ import { SEED_GUIDANCE, type GuidanceItem, type GuidanceResource } from "./guida
 import { simulationAt, type CallScenario } from "./callSimulation";
 import { useGuidanceStream } from "./useGuidanceStream";
 import {
-  BattlecardVisual,
   GUIDANCE_AI_THEME,
   GuidanceAiHeader,
   GuidanceFeedbackBar,
   GuidanceResourceLink,
+  GuidanceResourceModal,
   GuidanceResourcePreview,
   GuidanceSuggestedResponse,
   GuidanceTalkingPoints,
@@ -252,12 +251,10 @@ export function LiveGuidancePanel({
         )}
       </div>
 
-      {viewingResource ? (
-        <ResourceOverlay
-          resource={viewingResource}
-          onClose={() => setViewingResource(null)}
-        />
-      ) : null}
+      <GuidanceResourceModal
+        resource={viewingResource}
+        onClose={() => setViewingResource(null)}
+      />
     </section>
   );
 }
@@ -407,43 +404,3 @@ export function HandledNotice({
   );
 }
 
-export function ResourceOverlay({
-  resource,
-  onClose,
-}: {
-  resource: GuidanceResource;
-  onClose: () => void;
-}) {
-  return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-white">
-      <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-3">
-        <p className="min-w-0 text-label-md-semi text-foreground">{resource.name}</p>
-        <button
-          type="button"
-          aria-label="Close"
-          onClick={onClose}
-          className="-mr-1 flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-        >
-          <IconClose size={16} />
-        </button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {resource.battlecard ? (
-          <BattlecardVisual data={resource.battlecard} className="w-full" />
-        ) : (
-          <div className="overflow-hidden rounded-md border border-line bg-secondary-bg">
-            {resource.thumbnail ? (
-              <img
-                src={resource.thumbnail}
-                alt={resource.name}
-                className="mx-auto w-full object-contain"
-              />
-            ) : (
-              <BattlecardVisual className="w-full" />
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}

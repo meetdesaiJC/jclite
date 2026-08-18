@@ -54,7 +54,7 @@ import {
   type ScriptPlaybook,
 } from "./scriptPlaybook";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
-import { BattlecardVisual } from "./GuidanceCard";
+import { GuidanceResourceModal } from "./GuidanceCard";
 import { LiveGuidanceCard } from "./LiveGuidance";
 import { CreateGuidancePage } from "./CreateGuidancePage";
 import {
@@ -989,30 +989,10 @@ export function AgentAssistPage() {
         ) : null}
       </Modal>
 
-      <Modal
-        open={Boolean(viewingResource)}
+      <GuidanceResourceModal
+        resource={viewingResource}
         onClose={() => setViewingResource(null)}
-        size="lg"
-        title={viewingResource?.name}
-      >
-        {viewingResource?.type === "image" ? (
-          viewingResource.battlecard ? (
-            <BattlecardVisual data={viewingResource.battlecard} className="w-full" />
-          ) : (
-            <div className="overflow-hidden rounded-md border border-line bg-secondary-bg">
-              {viewingResource.thumbnail ? (
-                <img
-                  src={viewingResource.thumbnail}
-                  alt={viewingResource.name}
-                  className="mx-auto max-h-[70vh] w-full object-contain"
-                />
-              ) : (
-                <BattlecardVisual className="w-full" />
-              )}
-            </div>
-          )
-        ) : null}
-      </Modal>
+      />
 
       {assignTarget ? (
         <AssignModal
