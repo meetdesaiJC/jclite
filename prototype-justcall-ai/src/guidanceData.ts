@@ -1,5 +1,4 @@
 import type { DropdownListItem } from "@/components/Dropdown";
-import type { GuidanceActionConfig } from "./actionsData";
 
 export type PublishStatus = "live" | "draft";
 
@@ -47,18 +46,12 @@ export interface GuidanceItem {
   /** Natural-language trigger — migrated from FAQ question. */
   trigger: string;
   examplePhrases: string[];
-  /** Advanced control — left unset, only the customer's side is watched. */
+  /** Who has to say it before this fires. Left unset, only the customer's side is watched. */
   triggeredBy?: GuidanceTriggeredBy;
   /** Migrated from FAQ answer. */
   suggestedResponse: string;
   talkingPoints: string[];
   resources: GuidanceResource[];
-  /**
-   * Optional action Agent Assist proposes alongside this guidance. Only
-   * capabilities the admin enabled under Integrations can be picked, and the
-   * agent still reviews before anything is written.
-   */
-  recommendedAction?: GuidanceActionConfig;
   teamMembers: string[];
   userGroups: string[];
   status: PublishStatus;
@@ -123,15 +116,6 @@ export const SEED_GUIDANCE: GuidanceItem[] = [
         battlecard: AIRCALL_BATTLECARD,
       },
     ],
-    // Knowing which competitor came up is worth recording, and the agent
-    // shouldn't have to open HubSpot mid-call to do it.
-    recommendedAction: {
-      integrationId: "hubspot",
-      capabilityId: "hs-contact-property",
-      property: "Competitor",
-      value: "Aircall",
-      requiresConfirmation: true,
-    },
     teamMembers: [],
     userGroups: ["sales"],
     status: "live",
@@ -167,6 +151,54 @@ export const SEED_GUIDANCE: GuidanceItem[] = [
     userGroups: ["sales"],
     status: "live",
     updated: "Yesterday",
+  },
+  {
+    id: "g-status-quo",
+    name: "Status-quo objection",
+    trigger:
+      "When a prospect says they are happy with their current tool, not looking to switch, or asks why they would change.",
+    examplePhrases: [
+      "We're pretty happy with what we have.",
+      "Not sure why we'd switch.",
+      "We're not really looking to change tools.",
+      "Aircall is working fine for us.",
+    ],
+    suggestedResponse:
+      "Totally fair — if calling is working, switching isn't interesting. The teams who move usually have a gap the current setup doesn't cover: after-hours, SMS, or CRM logging. Worth checking whether that's you before we go further.",
+    talkingPoints: [
+      "Don't pitch — find the gap first",
+      "Name after-hours, SMS, or CRM as the usual reasons",
+      "Give them an easy out if nothing's broken",
+    ],
+    resources: [],
+    teamMembers: [],
+    userGroups: ["sales"],
+    status: "live",
+    updated: "Today",
+  },
+  {
+    id: "g-discovery",
+    name: "Discovery — quantify the pain",
+    trigger:
+      "When a prospect describes missed calls, voicemail overflow, or leads with no owner — before they have named the cost.",
+    examplePhrases: [
+      "After-hours calls go to voicemail.",
+      "Nobody owns the missed leads.",
+      "Follow-up is whoever picks it up.",
+      "We miss a lot of calls at night.",
+    ],
+    suggestedResponse:
+      "Before I show a workflow — what does that cost you in a typical week? Missed leads, slow follow-up, or time the team spends chasing the same call?",
+    talkingPoints: [
+      "Quantify before you pitch",
+      "Ask for a number — leads, hours, or revenue",
+      "Get who else feels it on the record",
+    ],
+    resources: [],
+    teamMembers: ["phoenix"],
+    userGroups: ["sales"],
+    status: "live",
+    updated: "Today",
   },
   {
     id: "g-refund",
@@ -494,34 +526,6 @@ export function liveGuidance(items: GuidanceItem[]): GuidanceItem[] {
   return items.filter((item) => item.status === "live");
 }
 
-export interface GuidanceTestResult {
-  matched: boolean;
-  score: number;
-  /** Why it didn't match, when it didn't. */
-  hint?: string;
-}
-
-/**
- * Test before publish — run a sample line through the same matcher the live
- * call uses, so the admin sees whether their trigger actually catches it.
- */
-export function testGuidanceAgainstSample(
-  item: GuidanceItem,
-  sample: string
-): GuidanceTestResult {
-  const text = sample.trim();
-  if (!text) {
-    return { matched: false, score: 0, hint: "Enter a line a customer might say." };
-  }
-  const score = guidanceMatchScore(item, text);
-  if (score >= 2) return { matched: true, score };
-  return {
-    matched: false,
-    score,
-    hint: "Add an example phrase closer to how customers actually say this.",
-  };
-}
-
 /** What kind of cue this is — used for labels and priority, not card color. */
 export type GuidanceKind =
   | "competitor"
@@ -553,6 +557,7 @@ export function inferGuidanceKind(item: GuidanceItem): GuidanceKind {
   if (/card number|cvv|\bpci\b|disclosure|legal|compliance|don't take|do not take|sensitive payment/.test(hay)) {
     return "compliance";
   }
+  if (/status-quo|discovery|quantify the pain/.test(hay)) return "objection";
   if (/aircall|competitor|versus|\bvs\.?\b|compar/.test(hay)) return "competitor";
   if (/expensive|discount|budget|pric|objection/.test(hay)) return "objection";
   if (/refund|cancel|policy|invoice|charged|duplicate charge/.test(hay)) return "policy";
@@ -965,6 +970,10 @@ export function customerLineForGuidance(item: GuidanceItem): string {
       return "We're already using Aircall. What's actually different about you?";
     case "g-after-hours":
       return "After-hours calls go to voicemail. Follow-up is whoever happens to pick it up.";
+    case "g-status-quo":
+      return "We're pretty happy with Aircall. Not sure why we'd switch.";
+    case "g-discovery":
+      return "After-hours calls go to voicemail. Nobody owns the lead.";
     case "g-refund":
       return "I was charged twice last month. Can I get a refund?";
     case "g-pricing":

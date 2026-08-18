@@ -6,6 +6,7 @@
     "alert-triangle-filled",
     "analytics",
     "appointment-scheduler",
+    "arrow-right",
     "bell",
     "bussiness-profile",
     "calendar",
@@ -21,6 +22,7 @@
     "chevron-right",
     "chevron-up",
     "circle",
+    "circle-check",
     "circle-check-filled",
     "circle-dashed",
     "circle-x-filled",
@@ -33,11 +35,13 @@
     "dashboard",
     "developers",
     "dots-vertical",
+    "download",
     "drop-down",
     "eye",
     "eye-off",
     "fax",
     "file",
+    "filter",
     "go-back",
     "info-circle",
     "info-circle-filled",
@@ -77,5 +81,5 @@
     "working-hours",
     "wrap-up-time-setting"
   ],
-  "updatedAt": "2026-07-24T10:23:59.214Z"
+  "updatedAt": "2026-08-18T13:21:39.183Z"
 }

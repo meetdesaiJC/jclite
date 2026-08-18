@@ -225,9 +225,9 @@ export function KnowledgeBuilderPage({
                   }
                 />
                 <Dropdown
-                  label="Assign playbooks"
-                  placeholder="Search playbooks"
-                  searchPlaceholder="Search playbooks"
+                  label="Assign scripts"
+                  placeholder="Search scripts"
+                  searchPlaceholder="Search scripts"
                   options={PLAYBOOK_DROPDOWN}
                   multiple
                   searchable

@@ -3,27 +3,46 @@ import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
 import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
-import { IconCircleCheckFilled, IconClose, IconEye } from "@/components/Icon";
+import { IconChevronDown, IconClose } from "@/components/Icon";
 import { cn } from "@/lib/utils";
+import { useAgentAssistTakeover } from "./agentAssistTakeover";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
+import { HeaderEditableTitle } from "./HeaderEditableTitle";
 import { TEAM_MEMBERS, USER_GROUPS } from "./guidanceData";
-import { IconCoaching } from "./LiveAgentAssistPanel";
 import {
-  COACHING_FREQUENCY_OPTIONS,
-  COACHING_TEMPLATES,
+  COACHING_REPEAT_OPTIONS,
+  COACHING_TEMPLATE_GROUPS,
+  coachingCardMessage,
+  coachingFrequencyLabel,
+  coachingOnRecommendedDetection,
+  coachingRecommendedLabel,
+  coachingStartSentence,
   coachingTemplate,
+  coachingTemplatesInGroup,
+  coachingTriggerSentence,
   createCoachingRuleFromTemplate,
-  evaluateCoachingSample,
+  restoreCoachingDetection,
   type CoachingFrequency,
   type CoachingRule,
+  type CoachingSentenceSegment,
   type CoachingTemplateId,
 } from "./coachingData";
+import { CoachingCardFace, CoachingCueIcon, coachingTone } from "./coachingVisuals";
 
 /**
- * Coaching setup — the admin picks a behaviour to watch for and adjusts the
- * numbers. Templates carry the detection logic so nobody has to describe
- * "talk ratio over a rolling window" from an empty form.
+ * Live Coaching setup, template-first (§3). New coaching always starts from the
+ * template gallery — grouped by the way admins describe the problem, each
+ * carrying recommended thresholds — so the flow is pick, adjust, assign,
+ * publish.
+ *
+ * Setup is meant to feel like switching a coaching behaviour on, not
+ * configuring a rule engine: detection arrives already tuned by the template
+ * and is read back as a sentence, so the only fields most admins touch are the
+ * title and the audience. The signal itself is fixed by the template; the
+ * thresholds behind it stay one disclosure away.
  */
+
+export type CoachingStartChoice = { type: "template"; templateId: CoachingTemplateId };
 
 export function CoachingTemplatesModal({
   open,
@@ -32,7 +51,7 @@ export function CoachingTemplatesModal({
 }: {
   open: boolean;
   onClose: () => void;
-  onSelect: (templateId: CoachingTemplateId) => void;
+  onSelect: (choice: CoachingStartChoice) => void;
 }) {
   return (
     <Modal
@@ -40,35 +59,48 @@ export function CoachingTemplatesModal({
       onClose={onClose}
       size="md"
       title="What should Agent Assist coach on?"
-      description="Coaching reacts to how the conversation is going, not what it's about. Start from a template and tune the thresholds."
+      description="Live Coaching reacts to how the conversation is going, not what it's about. Pick a template — it arrives with recommended thresholds you can adjust."
     >
-      <ul className="flex flex-col gap-2">
-        {COACHING_TEMPLATES.map((template) => (
-          <li key={template.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(template.id)}
-              className="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-line bg-white p-3 text-left outline-none transition-colors hover:border-brand hover:bg-brand-subtle/30 focus-visible:ring-2 focus-visible:ring-brand/24"
-            >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-[6px] bg-secondary-bg text-muted-foreground">
-                <IconCoaching className="size-4" />
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-label-md-semi text-foreground">
-                  {template.name}
-                </span>
-                <span className="text-pretty text-paragraph-sm text-muted-foreground">
-                  {template.description}
-                </span>
-                <span className="text-paragraph-sm text-muted-foreground">
-                  {template.metricLabel} {template.comparator.toLowerCase()}{" "}
-                  {template.defaultThreshold} · {template.defaultWindow.toLowerCase()}
-                </span>
-              </span>
-            </button>
-          </li>
+      <div className="flex flex-col gap-5">
+        {COACHING_TEMPLATE_GROUPS.map((group) => (
+          <section key={group.id} className="flex flex-col gap-2">
+            <h3 className="text-label-sm font-medium tracking-[0.04em] text-muted-foreground uppercase">
+              {group.label}
+            </h3>
+            <ul className="flex flex-col gap-2">
+              {coachingTemplatesInGroup(group.id).map((template) => (
+                <li key={template.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect({ type: "template", templateId: template.id })}
+                    className="flex w-full cursor-pointer items-start gap-3 rounded-lg border border-line bg-white p-3 text-left outline-none transition-colors hover:border-brand hover:bg-brand-subtle/30 focus-visible:ring-2 focus-visible:ring-brand/24"
+                  >
+                    <span
+                      className={cn(
+                        "flex size-8 shrink-0 items-center justify-center rounded-[6px]",
+                        coachingTone(template.id).well
+                      )}
+                    >
+                      <CoachingCueIcon templateId={template.id} />
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="text-label-md-semi text-foreground">
+                        {template.name}
+                      </span>
+                      <span className="text-pretty text-paragraph-sm text-muted-foreground">
+                        {template.description}
+                      </span>
+                      <span className="text-pretty text-paragraph-sm text-muted-foreground">
+                        Recommended · {coachingRecommendedLabel(template)}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
         ))}
-      </ul>
+      </div>
     </Modal>
   );
 }
@@ -86,10 +118,16 @@ export function CreateCoachingPage({
   onClose,
   onSave,
 }: CreateCoachingPageProps) {
+  useAgentAssistTakeover();
   const [draft, setDraft] = React.useState<CoachingRule>(initial);
   const [publishOpen, setPublishOpen] = React.useState(false);
-  const [testOpen, setTestOpen] = React.useState(false);
   const template = coachingTemplate(draft.templateId);
+  const onDefaults = coachingOnRecommendedDetection(draft);
+  // Templates open closed; a rule already tuned away from its defaults opens
+  // expanded, so an edit never hides the settings that were changed.
+  const [detectionOpen, setDetectionOpen] = React.useState(
+    () => !coachingOnRecommendedDetection(initial)
+  );
 
   const patch = (partial: Partial<CoachingRule>) =>
     setDraft((current) => ({ ...current, ...partial }));
@@ -103,7 +141,7 @@ export function CreateCoachingPage({
   return (
     <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line bg-white px-6">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <button
             type="button"
             aria-label="Close"
@@ -112,21 +150,16 @@ export function CreateCoachingPage({
           >
             <IconClose size={20} />
           </button>
-          <h1 className="truncate text-heading-lg text-foreground">
-            {mode === "edit" ? "Edit coaching" : "Create coaching"}
-          </h1>
+          <HeaderEditableTitle
+            value={draft.name}
+            onChange={(name) => patch({ name })}
+            placeholder={template.name}
+            nameLabel="Live coaching name"
+          />
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant="grey-outline"
-            size="sm"
-            leftIcon={<IconEye size={16} />}
-            onClick={() => setTestOpen(true)}
-          >
-            Test
-          </Button>
           <Button size="sm" disabled={!canSave} onClick={() => setPublishOpen(true)}>
-            {mode === "edit" ? "Save" : "Create"}
+            {mode === "edit" ? "Save" : "Publish"}
           </Button>
         </div>
       </header>
@@ -144,130 +177,123 @@ export function CreateCoachingPage({
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-auto pr-1">
-          <SectionCard>
-            <InputField
-              label="Coaching name"
-              placeholder={template.name}
-              value={draft.name}
-              onChange={(event) => patch({ name: event.target.value })}
-              helpText="An internal name — agents never see this."
-              helpIcon
-              clearable={false}
-            />
-            <p className="text-pretty text-paragraph-sm text-muted-foreground">
-              {template.description}
-            </p>
-          </SectionCard>
+          <SectionCard title="When to coach">
+            <div className="flex flex-col gap-1">
+              <Sentence segments={coachingTriggerSentence(draft)} />
+              <Sentence segments={coachingStartSentence(draft)} />
+            </div>
 
-          <SectionCard
-            title="Detect"
-            description="The reading that has to hold before the agent is nudged."
-          >
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="flex min-w-[200px] flex-1 flex-col gap-1.5">
-                <span className="text-label-md text-foreground">Signal</span>
-                <p className="flex h-9 items-center rounded-[4px] border border-line bg-secondary-bg px-3 text-paragraph-md text-foreground">
-                  {draft.metricLabel}
-                </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                aria-expanded={detectionOpen}
+                onClick={() => setDetectionOpen((current) => !current)}
+                className="inline-flex cursor-pointer items-center gap-1 rounded-[4px] text-label-md text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+              >
+                Customize detection
+                <IconChevronDown
+                  size={16}
+                  className={cn("transition-transform", detectionOpen && "rotate-180")}
+                />
+              </button>
+              {onDefaults ? null : (
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => setDraft((current) => restoreCoachingDetection(current))}
+                >
+                  Restore recommended
+                </Button>
+              )}
+            </div>
+
+            {detectionOpen ? (
+              <div className="grid grid-cols-2 gap-3 border-t border-line pt-4">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-label-md text-foreground">Signal</span>
+                  <p className="flex h-9 items-center rounded-[4px] border border-line bg-secondary-bg px-3 text-paragraph-md text-foreground">
+                    {draft.metricLabel}
+                  </p>
+                </div>
+                <Dropdown
+                  label={draft.comparator}
+                  searchable={false}
+                  options={toOptions(template.thresholdOptions)}
+                  value={draft.threshold}
+                  onValueChange={(value) =>
+                    patch({ threshold: Array.isArray(value) ? value[0]! : value })
+                  }
+                  triggerClassName="h-9"
+                />
+                <Dropdown
+                  label="Measurement window"
+                  searchable={false}
+                  options={toOptions(template.windowOptions)}
+                  value={draft.window}
+                  onValueChange={(value) =>
+                    patch({ window: Array.isArray(value) ? value[0]! : value })
+                  }
+                  triggerClassName="h-9"
+                />
+                <Dropdown
+                  label="Detection start time"
+                  searchable={false}
+                  options={toOptions(template.startAfterOptions)}
+                  value={draft.startAfter}
+                  onValueChange={(value) =>
+                    patch({ startAfter: Array.isArray(value) ? value[0]! : value })
+                  }
+                  triggerClassName="h-9"
+                />
               </div>
-              <Dropdown
-                label={draft.comparator}
-                searchable={false}
-                options={toOptions(template.thresholdOptions)}
-                value={draft.threshold}
-                onValueChange={(value) =>
-                  patch({ threshold: Array.isArray(value) ? value[0]! : value })
-                }
-                className="w-[180px]"
-                triggerClassName="h-9"
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Dropdown
-                label="Measure over"
-                searchable={false}
-                options={toOptions(template.windowOptions)}
-                value={draft.window}
-                onValueChange={(value) =>
-                  patch({ window: Array.isArray(value) ? value[0]! : value })
-                }
-                className="min-w-[200px] flex-1"
-                triggerClassName="h-9"
-              />
-              <Dropdown
-                label="Start detecting after"
-                searchable={false}
-                options={toOptions(template.startAfterOptions)}
-                value={draft.startAfter}
-                onValueChange={(value) =>
-                  patch({ startAfter: Array.isArray(value) ? value[0]! : value })
-                }
-                className="min-w-[200px] flex-1"
-                triggerClassName="h-9"
-              />
-            </div>
+            ) : null}
           </SectionCard>
 
-          <SectionCard
-            title="What should the agent see?"
-            description="One short line, mid-call. Keep it about the behaviour, not the agent."
-          >
+          <SectionCard title="What the agent sees">
             <InputField
-              label="Message"
+              label="Title"
               placeholder={template.message}
               value={draft.message}
               onChange={(event) => patch({ message: event.target.value })}
               clearable={false}
             />
-            <InputField
-              label="Suggestion (optional)"
-              placeholder={template.suggestion}
-              value={draft.suggestion}
-              onChange={(event) => patch({ suggestion: event.target.value })}
-              clearable={false}
-            />
-            <CoachingPreview rule={draft} />
-          </SectionCard>
+            <CoachingPreview rule={draft} caption={false} />
 
-          <SectionCard
-            title="Frequency"
-            description="Coaching should never nag. Pick how often this rule may interrupt."
-          >
-            <Dropdown
-              searchable={false}
-              options={COACHING_FREQUENCY_OPTIONS}
-              value={draft.frequency}
-              onValueChange={(value) =>
-                patch({
-                  frequency: (Array.isArray(value) ? value[0] : value) as CoachingFrequency,
-                })
-              }
-              className="w-full max-w-[320px]"
-              triggerClassName="h-9"
-            />
-            {draft.frequency === "cooldown" ? (
-              <InputField
-                label="Cooldown (minutes)"
-                type="number"
-                min={1}
-                value={String(draft.cooldownMinutes)}
-                onChange={(event) =>
-                  patch({ cooldownMinutes: Math.max(1, Number(event.target.value) || 1) })
+            <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
+              <span className="text-label-md text-foreground">Repeat coaching</span>
+              <Dropdown
+                variant="borderless"
+                searchable={false}
+                options={COACHING_REPEAT_OPTIONS}
+                value={draft.frequency}
+                onValueChange={(value) =>
+                  patch({
+                    frequency: (Array.isArray(value) ? value[0] : value) as CoachingFrequency,
+                  })
                 }
-                clearable={false}
-                wrapperClassName="max-w-[180px]"
+                className="w-auto"
+                triggerClassName="h-8 w-auto gap-1 px-2 text-brand"
               />
-            ) : null}
+              {draft.frequency === "cooldown" ? (
+                <div className="flex items-center gap-2">
+                  <InputField
+                    aria-label="Cooldown in minutes"
+                    type="number"
+                    min={1}
+                    value={String(draft.cooldownMinutes)}
+                    onChange={(event) =>
+                      patch({ cooldownMinutes: Math.max(1, Number(event.target.value) || 1) })
+                    }
+                    clearable={false}
+                    wrapperClassName="w-[92px]"
+                  />
+                  <span className="text-paragraph-md text-muted-foreground">minutes</span>
+                </div>
+              ) : null}
+            </div>
           </SectionCard>
         </div>
       </div>
-
-      <CoachingTestModal
-        open={testOpen}
-        rule={draft}
-        onClose={() => setTestOpen(false)}
-      />
 
       <Modal
         open={publishOpen}
@@ -290,7 +316,6 @@ export function CreateCoachingPage({
                   ...draft,
                   name: draft.name.trim(),
                   message: draft.message.trim(),
-                  suggestion: draft.suggestion.trim(),
                   status: "live",
                   updated: "Just now",
                 })
@@ -303,14 +328,16 @@ export function CreateCoachingPage({
       >
         <dl className="flex flex-col gap-3">
           <div>
-            <dt className="text-label-sm text-muted-foreground">Coaching</dt>
+            <dt className="text-label-sm text-muted-foreground">Live coaching</dt>
             <dd className="text-paragraph-md text-foreground">{draft.name}</dd>
           </div>
           <div>
-            <dt className="text-label-sm text-muted-foreground">Detect</dt>
-            <dd className="text-paragraph-md text-foreground">
-              {draft.metricLabel} {draft.comparator.toLowerCase()} {draft.threshold} ·{" "}
-              {draft.window.toLowerCase()}
+            <dt className="text-label-sm text-muted-foreground">When to coach</dt>
+            <dd className="mt-0.5">
+              <Sentence segments={coachingTriggerSentence(draft)} />
+              <p className="text-paragraph-sm text-muted-foreground">
+                Repeats: {coachingFrequencyLabel(draft).toLowerCase()}
+              </p>
             </dd>
           </div>
           <AssignTeamAndGroups
@@ -334,160 +361,72 @@ export function CreateCoachingPage({
 }
 
 /** The banner exactly as it lands mid-call, so the wording can be judged. */
-function CoachingPreview({ rule }: { rule: CoachingRule }) {
+export function CoachingPreview({
+  rule,
+  caption = true,
+}: {
+  rule: CoachingRule;
+  caption?: boolean;
+}) {
+  const tone = coachingTone(rule.templateId);
+
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-label-sm text-muted-foreground">
-        What the agent sees during the call
-      </span>
-      <div className="flex items-start gap-2 rounded-lg border border-warning-border bg-warning-secondary px-3 py-2.5">
-        <IconCoaching className="mt-px size-4 shrink-0 text-warning-text" />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <p className="text-label-sm font-medium tracking-[0.04em] text-warning-text uppercase">
-            Coaching
-          </p>
-          <p className="text-pretty text-label-md font-medium text-foreground">
-            {rule.message || "Your message shows up here"}
-          </p>
-          <p className="text-pretty text-paragraph-sm text-muted-foreground">
-            {rule.metricLabel} {rule.comparator.toLowerCase()} {rule.threshold} ·{" "}
-            {rule.window.toLowerCase()}
-          </p>
-          {rule.suggestion ? (
-            <p className="mt-1 text-pretty text-paragraph-sm text-foreground">
-              {rule.suggestion}
-            </p>
-          ) : null}
-        </div>
-        <span className="-mt-0.5 -mr-1 inline-flex h-7 shrink-0 items-center px-2 text-label-sm font-medium text-warning-text">
-          Got it
+      {caption ? (
+        <span className="text-label-sm text-muted-foreground">
+          What the agent sees during the call
         </span>
+      ) : null}
+      <div className={cn("overflow-hidden rounded-lg", tone.card)}>
+        <CoachingCardFace
+          rule={{
+            ...rule,
+            message: rule.message || "Your title shows up here",
+          }}
+          observation={coachingCardMessage(rule)}
+          action={
+            <span
+              className={cn(
+                "-mt-0.5 -mr-1 inline-flex h-7 shrink-0 items-center px-2 text-label-sm font-medium",
+                tone.ink
+              )}
+            >
+              Got it
+            </span>
+          }
+        />
       </div>
     </div>
   );
 }
 
-/**
- * Coaching test (§34) — the admin supplies a reading rather than an audio
- * file, and sees whether their thresholds would have fired on it.
- */
-function CoachingTestModal({
-  open,
-  rule,
-  onClose,
-}: {
-  open: boolean;
-  rule: CoachingRule;
-  onClose: () => void;
-}) {
-  const [sample, setSample] = React.useState("");
-  const [result, setResult] = React.useState<ReturnType<
-    typeof evaluateCoachingSample
-  > | null>(null);
-
-  React.useEffect(() => {
-    if (!open) {
-      setSample("");
-      setResult(null);
-    }
-  }, [open]);
-
+/** Detection read back in plain language, with the chosen values weighted. */
+function Sentence({ segments }: { segments: CoachingSentenceSegment[] }) {
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      size="sm"
-      title="Test this coaching rule"
-      description="Enter a reading from a real call. Nothing is sent to any agent."
-      footer={
-        <>
-          <Button variant="grey-outline" size="sm" onClick={onClose}>
-            Close
-          </Button>
-          <Button
-            size="sm"
-            disabled={!sample.trim()}
-            onClick={() => setResult(evaluateCoachingSample(rule, sample))}
-          >
-            Run test
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <InputField
-          label={`Simulated ${rule.metricLabel.toLowerCase()}`}
-          placeholder={rule.threshold}
-          value={sample}
-          onChange={(event) => setSample(event.target.value)}
-          helpText={`Rule fires when ${rule.metricLabel.toLowerCase()} is ${rule.comparator.toLowerCase()} ${rule.threshold}.`}
-          helpIcon
-          clearable={false}
-        />
-
-        {result ? (
-          <div
-            className={cn(
-              "flex flex-col gap-1.5 rounded-lg border px-3 py-2.5",
-              result.triggered
-                ? "border-success-border bg-success-secondary"
-                : "border-line bg-secondary-bg"
-            )}
-            aria-live="polite"
-          >
-            <p className="text-paragraph-md text-foreground">
-              {result.measuredLabel}: {result.measuredValue}
-            </p>
-            <p className="flex items-center gap-1.5 text-label-md font-medium text-foreground">
-              {result.triggered ? (
-                <>
-                  <IconCircleCheckFilled
-                    size={16}
-                    className="size-4 shrink-0 text-success"
-                  />
-                  Rule triggered
-                </>
-              ) : (
-                "Rule did not trigger"
-              )}
-            </p>
-            {result.triggered ? (
-              <p className="text-pretty text-paragraph-sm text-muted-foreground">
-                The agent would see: “{rule.message}”
-              </p>
-            ) : (
-              <p className="text-pretty text-paragraph-sm text-muted-foreground">
-                Lower the threshold if you expected this reading to be coached.
-              </p>
-            )}
-          </div>
-        ) : null}
-      </div>
-    </Modal>
+    <p className="text-pretty text-paragraph-md text-muted-foreground">
+      {segments.map((segment, index) =>
+        segment.strong ? (
+          <strong key={index} className="font-medium text-foreground">
+            {segment.text}
+          </strong>
+        ) : (
+          <React.Fragment key={index}>{segment.text}</React.Fragment>
+        )
+      )}
+    </p>
   );
 }
 
 function SectionCard({
   title,
-  description,
   children,
 }: {
   title?: string;
-  description?: string;
   children: React.ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-4 rounded-lg border border-line bg-white p-4">
-      {title ? (
-        <div className="flex flex-col gap-1">
-          <h2 className="text-label-md-semi text-foreground">{title}</h2>
-          {description ? (
-            <p className="text-pretty text-paragraph-sm text-muted-foreground">
-              {description}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+      {title ? <h2 className="text-label-md-semi text-foreground">{title}</h2> : null}
       {children}
     </section>
   );

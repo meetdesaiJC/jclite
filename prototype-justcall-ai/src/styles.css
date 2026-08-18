@@ -5,6 +5,35 @@
   --color-ai: #673bff;
   --color-ai-surface: #f4f3ff;
   --color-ai-border: #d9d6fe;
+
+  /* Coaching cue accents — one hue per signal so agents can scan by category.
+     Orange / purple / blue / teal / red match the trigger legend; talk-ratio
+     and monologue share blue and split on the icon. Surfaces sit at the same
+     quiet intensity as warning-secondary so a stack doesn't shout. */
+  --color-coach-orange: #f79009;
+  --color-coach-orange-surface: #fffaeb;
+  --color-coach-orange-border: #fef0c7;
+  --color-coach-orange-text: #b54708;
+
+  --color-coach-purple: #7a5af8;
+  --color-coach-purple-surface: #f4f3ff;
+  --color-coach-purple-border: #d9d6fe;
+  --color-coach-purple-text: #5925dc;
+
+  --color-coach-blue: #2e90fa;
+  --color-coach-blue-surface: #eff8ff;
+  --color-coach-blue-border: #b2ddff;
+  --color-coach-blue-text: #175cd3;
+
+  --color-coach-teal: #15b79e;
+  --color-coach-teal-surface: #f0fdf9;
+  --color-coach-teal-border: #99f6e0;
+  --color-coach-teal-text: #107569;
+
+  --color-coach-red: #d92d20;
+  --color-coach-red-surface: #fef3f2;
+  --color-coach-red-border: #fee4e2;
+  --color-coach-red-text: #b42318;
 }
 
 /* Transcript chunk fade-in — new words appear without disturbing prior text */
@@ -54,25 +83,11 @@
     border-color: var(--color-brand);
   }
   22% {
-    border-color: var(--color-ai);
+    border-color: var(--color-info-border);
   }
   100% {
     border-color: var(--color-brand);
   }
-}
-
-.guidance-ai-header {
-  /* Design System 2.0 fill: ai/bg-1 */
-  background-image:
-    linear-gradient(138deg, rgb(0 76 230 / 0.15) 46%, rgb(172 112 255 / 0.15) 145%),
-    linear-gradient(#fff, #fff);
-}
-
-.guidance-ai-title {
-  background-image: linear-gradient(157deg, #3318ff 30%, #b46dff 149%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
 }
 
 @keyframes assist-header-attention {
@@ -80,7 +95,7 @@
     background-color: transparent;
   }
   22% {
-    background-color: rgb(103 59 255 / 0.08);
+    background-color: rgb(0 76 230 / 0.08);
   }
   100% {
     background-color: transparent;
@@ -111,42 +126,11 @@
   animation: assist-header-attention 420ms cubic-bezier(0.23, 1, 0.32, 1) 180ms both;
 }
 
-/*
- * Coaching is temporary. It takes its row when it arrives and gives the row
- * back when it leaves, so acknowledging it doesn't leave a hole above the
- * guidance the agent is reading.
- */
-.assist-coaching-slot {
-  display: grid;
-  grid-template-rows: 1fr;
-  transition:
-    grid-template-rows 220ms cubic-bezier(0.23, 1, 0.32, 1),
-    opacity 160ms ease-out;
-}
-
-.assist-coaching-slot.is-leaving {
-  grid-template-rows: 0fr;
-  opacity: 0;
-}
-
-.assist-coaching-in {
-  animation: assist-coaching-in 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-@keyframes assist-coaching-in {
-  from {
-    grid-template-rows: 0fr;
-    opacity: 0;
-  }
-  to {
-    grid-template-rows: 1fr;
-    opacity: 1;
-  }
-}
-
+/* Expand reads a touch slower than collapse — opening is the moment that
+ * matters, closing should just get out of the way (§11). */
 .assist-card-body {
   display: grid;
-  transition: grid-template-rows 250ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition: grid-template-rows 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .assist-card-body-open {
@@ -155,6 +139,21 @@
 
 .assist-card-body-closed {
   grid-template-rows: 0fr;
+  transition-duration: 180ms;
+}
+
+/* New / Relevant again / Earlier — arrival, stated once. No pulse (§11). */
+@keyframes assist-badge-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.assist-badge-in {
+  animation: assist-badge-in 200ms ease both;
 }
 
 @keyframes assist-queue-in {
@@ -574,6 +573,95 @@ button.call-bar-notes[aria-pressed="true"] {
   animation-delay: var(--pane-delay, 0ms);
 }
 
+/* ── Live-call pane resize ──────────────────────────────────────────────
+   Keep these tokens in lockstep with `callWorkspaceLayout.ts`.
+   Divider stays invisible until hover / focus / drag; one handle never
+   steals width from the third pane. */
+.call-workspace-row {
+  overflow-x: hidden;
+  min-width: 0;
+}
+
+.call-workspace-panes {
+  --call-pane-script-min: 280px;
+  --call-pane-script-default: 0.35;
+  --call-pane-script-max: 0.5;
+  --call-pane-suggestions-min: 300px;
+  --call-pane-suggestions-default: 0.28;
+  --call-pane-suggestions-max: 0.5;
+  --call-pane-transcript-min: 320px;
+  --call-pane-transcript-default: 0.37;
+  --call-pane-transcript-max: 0.55;
+  --call-pane-divider: 12px;
+  --call-pane-hit: 16px;
+  --call-pane-line: 2px;
+  --call-pane-hover-ms: 150ms;
+  --call-pane-settle-ms: 120ms;
+  --call-pane-resist: 4px;
+  --call-resist: 0px;
+}
+
+.call-stage-pane.is-settling {
+  transition: flex-basis var(--call-pane-settle-ms, 120ms) ease-out;
+}
+
+.call-pane-resize {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 var(--call-pane-divider, 12px);
+  width: var(--call-pane-divider, 12px);
+  align-self: stretch;
+  touch-action: none;
+  cursor: col-resize;
+  outline: none;
+}
+
+.call-pane-resize::before {
+  content: "";
+  position: absolute;
+  inset: 0 calc((var(--call-pane-hit, 16px) - var(--call-pane-divider, 12px)) / -2);
+}
+
+.call-pane-resize-line {
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: var(--call-pane-line, 2px);
+  margin-left: calc(var(--call-pane-line, 2px) / -2);
+  border-radius: 1px;
+  background-color: var(--color-brand);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(var(--call-resist, 0px));
+  transition:
+    opacity var(--call-pane-hover-ms, 150ms) ease-out,
+    transform var(--call-pane-settle-ms, 120ms) ease-out;
+}
+
+.call-pane-resize:hover .call-pane-resize-line,
+.call-pane-resize:focus-visible .call-pane-resize-line {
+  opacity: 0.5;
+}
+
+.call-pane-resize:focus-visible .call-pane-resize-line {
+  box-shadow: 0 0 0 2px rgb(0 76 230 / 0.16);
+}
+
+.call-pane-resize.is-dragging .call-pane-resize-line {
+  opacity: 0.72;
+  transition: none;
+}
+
+.call-pane-resize.is-limited .call-pane-resize-line {
+  opacity: 0.4;
+}
+
+html.call-workspace-resizing,
+html.call-workspace-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 /* Script checklist — AI detects a line, then the check locks in. */
 @keyframes script-check-detect {
   0% {
@@ -983,7 +1071,8 @@ button.call-bar-notes[aria-pressed="true"] {
   .assist-space-in,
   .assist-card-enter,
   .assist-card-attention,
-  .assist-header-attention {
+  .assist-header-attention,
+  .assist-badge-in {
     animation: none !important;
   }
 
@@ -1001,7 +1090,8 @@ button.call-bar-notes[aria-pressed="true"] {
   .call-bar-in,
   .call-morph-ghost,
   .call-bar-detail-in,
-  .call-stage-pane-in {
+  .call-stage-pane-in,
+  .call-pane-resize-line {
     animation: none !important;
   }
 
@@ -1012,7 +1102,9 @@ button.call-bar-notes[aria-pressed="true"] {
   .assist-card-body,
   .aa-filter-row,
   .aa-filter-row-inner,
-  button.call-bar-notes {
+  button.call-bar-notes,
+  .call-pane-resize-line,
+  .call-stage-pane.is-settling {
     transition: none !important;
   }
 

@@ -1,5 +1,5 @@
 import { useState, type ReactNode, type Ref } from "react";
-import { IconCircleCheckFilled } from "@/components/Icon";
+import { IconAlertTriangleFilled, IconCircleCheckFilled } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import { type GuidanceResource } from "./guidanceData";
 import {
@@ -13,6 +13,48 @@ import {
   type GuidanceFeedback,
 } from "./GuidanceCard";
 import type { GuidanceSuggestion } from "./callSimulation";
+import type { GuidanceCardStatus } from "./useGuidanceStream";
+
+/**
+ * State chip. Quiet by design: it tells the agent something landed without
+ * asking for their attention — no pulse, no glow (§11).
+ */
+export function GuidanceStateBadge({
+  status,
+  relevantAgain,
+  expanded,
+  reduced,
+}: {
+  status?: GuidanceCardStatus;
+  relevantAgain?: boolean;
+  expanded?: boolean;
+  reduced?: boolean;
+}) {
+  const label = relevantAgain
+    ? "Relevant again"
+    : expanded
+      ? null
+      : status === "new"
+        ? "New"
+        : status === "expired"
+          ? "Earlier"
+          : null;
+  if (!label) return null;
+
+  return (
+    <span
+      className={cn(
+        "shrink-0 text-[11px] leading-4 font-medium whitespace-nowrap",
+        status === "expired" && !relevantAgain
+          ? "text-muted-foreground"
+          : "text-brand",
+        !reduced && "assist-badge-in"
+      )}
+    >
+      {label}
+    </span>
+  );
+}
 
 export function LiveGuidanceCard({
   item,
@@ -21,6 +63,8 @@ export function LiveGuidanceCard({
   expanded = true,
   arriving = false,
   attention = false,
+  status,
+  relevantAgain = false,
   onToggle,
   onViewResource,
   actionSlot,
@@ -32,6 +76,8 @@ export function LiveGuidanceCard({
   expanded?: boolean;
   arriving?: boolean;
   attention?: boolean;
+  status?: GuidanceCardStatus;
+  relevantAgain?: boolean;
   onToggle?: () => void;
   onViewResource: (resource: GuidanceResource) => void;
   /**
@@ -54,7 +100,7 @@ export function LiveGuidanceCard({
       ref={cardRef}
       role={item.priority === "critical" ? "alert" : undefined}
       className={cn(
-        GUIDANCE_AI_THEME.card,
+        expanded ? GUIDANCE_AI_THEME.card : GUIDANCE_AI_THEME.cardCollapsed,
         !reduced && arriving && "assist-card-enter",
         pulse && "assist-card-attention",
         className
@@ -64,6 +110,14 @@ export function LiveGuidanceCard({
         title={item.item.name}
         expanded={expanded}
         onToggle={onToggle}
+        badge={
+          <GuidanceStateBadge
+            status={status}
+            relevantAgain={relevantAgain}
+            expanded={expanded}
+            reduced={reduced}
+          />
+        }
         className={pulse ? "assist-header-attention" : undefined}
       />
 
@@ -116,51 +170,125 @@ export function InCallGuidanceSlot({
   expanded,
   arriving,
   attention,
+  status,
+  relevantAgain,
   onToggle,
   onViewResource,
   onEngage,
   onDisengage,
   actionSlot,
   cardRef,
+  className,
 }: {
   item: GuidanceSuggestion;
   reduced: boolean;
   expanded: boolean;
   arriving: boolean;
   attention: boolean;
+  status?: GuidanceCardStatus;
+  relevantAgain?: boolean;
   onToggle: () => void;
   onViewResource: (resource: GuidanceResource) => void;
   onEngage: () => void;
   onDisengage?: () => void;
   actionSlot?: ReactNode;
   cardRef?: Ref<HTMLDivElement>;
+  className?: string;
 }) {
   return (
     <div
       ref={cardRef}
       className={cn(
+        "shrink-0",
         !reduced && arriving && "assist-space-in",
-        (reduced || !arriving) && "grid grid-rows-[1fr]"
+        (reduced || !arriving) && "grid grid-rows-[1fr]",
+        className
       )}
       onPointerEnter={onEngage}
       onPointerLeave={onDisengage}
       onFocusCapture={onEngage}
     >
       <div className="min-h-0 overflow-hidden">
-        <div className="py-1.5">
-          <LiveGuidanceCard
-            item={item}
-            reduced={reduced}
-            expanded={expanded}
-            arriving={arriving}
-            attention={attention}
-            onToggle={onToggle}
-            onViewResource={onViewResource}
-            actionSlot={actionSlot}
-          />
-        </div>
+        <LiveGuidanceCard
+          item={item}
+          reduced={reduced}
+          expanded={expanded}
+          arriving={arriving}
+          attention={attention}
+          status={status}
+          relevantAgain={relevantAgain}
+          onToggle={onToggle}
+          onViewResource={onViewResource}
+          actionSlot={actionSlot}
+        />
       </div>
     </div>
+  );
+}
+
+/**
+ * The one interruption the agent gets. Critical guidance queues under the card
+ * they're reading like everything else — this says so out loud instead of
+ * swapping the column out from under them (§7).
+ */
+export function CriticalGuidanceAlert({
+  name,
+  reduced,
+  onFocus,
+}: {
+  name: string;
+  reduced: boolean;
+  onFocus: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onFocus}
+      aria-live="assertive"
+      aria-label={`Important guidance available: ${name}`}
+      className={cn(
+        "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-warning-border bg-warning-secondary px-3 py-2 text-left",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24",
+        !reduced && "assist-card-enter"
+      )}
+    >
+      <IconAlertTriangleFilled
+        size={16}
+        className="size-4 shrink-0 text-warning-text"
+      />
+      {/* The card itself is right underneath, so the name doesn't repeat here. */}
+      <span className="min-w-0 flex-1 truncate text-label-md font-medium text-foreground">
+        Important guidance available
+      </span>
+    </button>
+  );
+}
+
+/**
+ * The stack stays about four cards deep. Everything else is still there —
+ * one tap away, not gone (§4).
+ */
+export function GuidanceStackOverflow({
+  count,
+  reduced,
+  onShowAll,
+}: {
+  count: number;
+  reduced: boolean;
+  onShowAll: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onShowAll}
+      className={cn(
+        "shrink-0 cursor-pointer self-start rounded-[4px] px-0.5 py-0.5 text-[11px] leading-4 text-muted-foreground",
+        "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+        !reduced && "animate-[assist-queue-in_160ms_cubic-bezier(0.23,1,0.32,1)_both]"
+      )}
+    >
+      {count} more {count === 1 ? "suggestion" : "suggestions"}
+    </button>
   );
 }
 
