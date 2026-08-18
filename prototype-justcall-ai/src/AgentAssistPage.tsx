@@ -984,7 +984,6 @@ export function AgentAssistPage() {
               stance: stanceForGuidance(previewGuidance),
             }}
             reduced
-            onDismiss={() => setPreviewGuidance(null)}
             onViewResource={setViewingResource}
           />
         ) : null}

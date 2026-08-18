@@ -30,32 +30,12 @@
   }
 }
 
-@keyframes assist-card-exit {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-}
-
 @keyframes assist-space-in {
   from {
     grid-template-rows: 0fr;
   }
   to {
     grid-template-rows: 1fr;
-  }
-}
-
-@keyframes assist-space-out {
-  from {
-    grid-template-rows: 1fr;
-  }
-  to {
-    grid-template-rows: 0fr;
   }
 }
 
@@ -97,17 +77,12 @@
   }
 }
 
-.assist-space-in,
-.assist-space-out {
+.assist-space-in {
   display: grid;
 }
 
 .assist-space-in {
   animation: assist-space-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-.assist-space-out {
-  animation: assist-space-out 160ms cubic-bezier(0.4, 0, 1, 1) both;
 }
 
 .assist-card-enter {
@@ -402,6 +377,112 @@
   animation: assist-stream-out 200ms cubic-bezier(0.4, 0, 1, 1) both;
 }
 
+/* Wide in-call layout — the transcript pane keeps a quiet live pulse. */
+@keyframes transcript-live-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.transcript-live-dot {
+  animation: transcript-live-dot 1.8s ease-in-out infinite;
+}
+
+/* The call bar takes its width as the stage turns horizontal. Only used when
+   there was no phone to morph from (resumed call, reduced motion). */
+@keyframes call-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.call-bar-in {
+  animation: call-bar-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Ringing → live ──────────────────────────────────────────────────────
+   The phone is not faded out and replaced: the dark card compresses upward
+   and spreads into the call bar while the avatar, caller, and controls
+   travel to their bar positions. Two layers carry it — a dark surface that
+   owns the geometry, and a ghost of the phone holding everything the call
+   bar has no use for while it fades. Both are pinned to the phone's
+   footprint on the first frame, so the dark never breaks. */
+.call-morph-surface {
+  position: absolute;
+  z-index: 1;
+  border-radius: 16px;
+  background-color: #071532;
+  pointer-events: none;
+  /* The same elevation the call bar carries, so the hand-off is invisible. */
+  box-shadow: var(--shadow-600);
+}
+
+.call-morph-ghost {
+  position: absolute;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  /* Same curve as the geometry, so the phone's body clears at the rate the
+     surface compresses over it instead of lingering as a grey slab. */
+  animation: call-morph-ghost-out 160ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes call-morph-ghost-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.call-morph-stage {
+  position: relative;
+  z-index: 3;
+}
+
+/* Chips, dividers and the Live dot have no counterpart on the phone, so they
+   resolve after the travelling elements have landed. */
+@keyframes call-bar-detail-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.call-bar-detail-in {
+  animation: call-bar-detail-in 160ms ease-out both;
+  animation-delay: var(--detail-delay, 0ms);
+}
+
+/* Agent Assist, then the transcript — only once the bar has mostly settled. */
+@keyframes call-stage-pane-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.call-stage-pane-in {
+  animation: call-stage-pane-in 220ms ease-out both;
+  animation-delay: var(--pane-delay, 0ms);
+}
+
 /* Script checklist — AI detects a line, then the check locks in. */
 @keyframes script-check-detect {
   0% {
@@ -543,18 +624,11 @@
   box-shadow: var(--shadow-400);
 }
 
-.script-step-title {
-  text-decoration-line: line-through;
-  text-decoration-color: transparent;
-  text-decoration-thickness: 1px;
-  text-decoration-skip-ink: none;
-  transition:
-    color 200ms cubic-bezier(0.23, 1, 0.32, 1),
-    text-decoration-color 200ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.script-step-title.is-complete {
-  text-decoration-color: currentColor;
+/* Spoken lines recede instead of being struck through — the whole row
+   drops a contrast step while the title keeps its lead over the wording. */
+.script-step-title,
+.script-step-wording {
+  transition: color 220ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @keyframes ai-improve-in {
@@ -832,9 +906,7 @@
   }
 
   .assist-space-in,
-  .assist-space-out,
   .assist-card-enter,
-  .assist-card-exit,
   .assist-card-attention,
   .assist-header-attention {
     animation: none !important;
@@ -849,7 +921,12 @@
   .assist-prep-bar::after,
   .script-step-in,
   .script-listen-mic,
-  .assist-stream-out {
+  .assist-stream-out,
+  .transcript-live-dot,
+  .call-bar-in,
+  .call-morph-ghost,
+  .call-bar-detail-in,
+  .call-stage-pane-in {
     animation: none !important;
   }
 
@@ -870,7 +947,8 @@
   .script-check-dash,
   .script-check-fill,
   .script-check-mark,
-  .script-step-title {
+  .script-step-title,
+  .script-step-wording {
     animation: none !important;
     transition: none !important;
   }

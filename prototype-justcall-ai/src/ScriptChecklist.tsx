@@ -288,17 +288,27 @@ export function ScriptStepRow({
           <ScriptCheckMark phase={phase} glow={glow} />
         </span>
         <div className="min-w-0 flex-1">
+          {/* Spoken lines step back a shade — the title still leads the
+              wording, so the hierarchy holds in both states. The check is
+              what says "said"; no strikethrough. */}
           <p
             className={cn(
-              "script-step-title min-w-0 text-pretty text-paragraph-sm",
-              complete ? "is-complete text-muted-foreground" : "text-foreground",
+              "script-step-title min-w-0 text-pretty text-[13px] leading-5 font-medium",
+              complete ? "text-muted-foreground" : "text-foreground",
               reduced && "transition-none"
             )}
           >
             {title}
+            {complete ? <span className="sr-only"> — spoken</span> : null}
           </p>
           {wording ? (
-            <p className="mt-0.5 text-pretty text-[13px] leading-5 text-muted-foreground">
+            <p
+              className={cn(
+                "script-step-wording mt-0.5 text-pretty text-[13px] leading-5",
+                complete ? "text-disabled-fg" : "text-muted-foreground",
+                reduced && "transition-none"
+              )}
+            >
               “{wording}”
             </p>
           ) : null}

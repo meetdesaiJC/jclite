@@ -1,7 +1,8 @@
 import * as React from "react";
 import {
+  IconChevronDown,
+  IconChevronUp,
   IconCircleCheckFilled,
-  IconClose,
 } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import {
@@ -210,43 +211,63 @@ export function GuidanceSparklesIcon({
   );
 }
 
+/**
+ * Guidance header — the card's only control. Guidance lives in its own tab now,
+ * so a card is never dismissed: the header just collapses and expands it.
+ */
 export function GuidanceAiHeader({
   title,
-  onDismiss,
-  trailing,
+  expanded,
+  onToggle,
   className,
 }: {
   title: string;
-  onDismiss?: () => void;
-  trailing?: React.ReactNode;
+  expanded?: boolean;
+  onToggle?: () => void;
   className?: string;
 }) {
+  const row = cn(
+    "guidance-ai-header flex w-full items-center gap-1 overflow-hidden px-4 py-1.5 text-left",
+    className
+  );
+  const label = (
+    <span className="guidance-ai-title min-w-0 flex-1 truncate text-label-sm font-medium">
+      {title}
+    </span>
+  );
+
+  if (!onToggle) {
+    return (
+      <div className={row}>
+        <GuidanceSparklesIcon className="size-4 shrink-0" />
+        {label}
+      </div>
+    );
+  }
+
   return (
-    <div
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-label={expanded ? `Collapse ${title}` : `Expand ${title}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
       className={cn(
-        "guidance-ai-header flex items-center gap-1 overflow-hidden px-4 py-1.5",
-        className
+        row,
+        "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24"
       )}
     >
       <GuidanceSparklesIcon className="size-4 shrink-0" />
-      <p className="guidance-ai-title min-w-0 flex-1 text-label-sm font-medium">
-        {title}
-      </p>
-      {trailing}
-      {onDismiss ? (
-        <button
-          type="button"
-          aria-label="Dismiss guidance"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDismiss();
-          }}
-          className="-mr-1 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted-foreground hover:bg-white/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-        >
-          <IconClose size={16} />
-        </button>
-      ) : null}
-    </div>
+      {label}
+      <span
+        className="-mr-1 flex size-6 shrink-0 items-center justify-center text-muted-foreground"
+        aria-hidden="true"
+      >
+        {expanded ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+      </span>
+    </button>
   );
 }
 
@@ -289,11 +310,11 @@ export function GuidanceTalkingPoints({
         {points.map((point) => (
           <li
             key={point}
-            className="flex items-center gap-1.5 overflow-hidden rounded-md p-1"
+            className="flex items-start gap-1.5 overflow-hidden rounded-md p-1"
           >
             <IconCircleCheckFilled
               size={16}
-              className="size-4 shrink-0 text-success"
+              className="mt-0.5 size-4 shrink-0 text-success"
             />
             <span className="min-w-0 flex-1 text-pretty text-label-md font-medium text-foreground">
               {point}
@@ -424,7 +445,6 @@ export interface GuidanceCardProps {
   feedback?: GuidanceFeedback;
   onHelpful?: () => void;
   onNotHelpful?: () => void;
-  onDismiss?: () => void;
   onViewResource?: (resource: GuidanceResource) => void;
   /** Hide agent actions — used only if a static preview is needed. */
   showActions?: boolean;
@@ -651,7 +671,6 @@ export function GuidanceCard({
   feedback = null,
   onHelpful,
   onNotHelpful,
-  onDismiss,
   onViewResource,
   showActions = true,
   className,
@@ -663,12 +682,9 @@ export function GuidanceCard({
 
   return (
     <article className={cn(GUIDANCE_AI_THEME.card, className)}>
-      <GuidanceAiHeader
-        title={item.name}
-        onDismiss={showActions ? onDismiss : undefined}
-      />
+      <GuidanceAiHeader title={item.name} />
 
-      <div className="flex flex-col gap-4 bg-white px-4 pt-2 pb-4">
+      <div className="flex flex-col gap-4 bg-white px-4 pt-4 pb-4">
         {response ? <GuidanceSuggestedResponse text={response} /> : null}
 
         <GuidanceTalkingPoints points={talkingPoints} />
