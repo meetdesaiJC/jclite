@@ -28,7 +28,11 @@ import { IconJcaiSettings } from "./icons/JustCallAiNavIcons";
 import { AgentAssistCallSheet, LiveTranscriptPanel } from "./AgentAssistCallSheet";
 import { LiveGuidancePanel } from "./LiveGuidance";
 import { CallWaveform } from "./CallWaveform";
-import { useNotesTranscriptMotion } from "./useNotesTranscriptMotion";
+import {
+  NOTES_TEXTAREA_MAX_H,
+  NOTES_TEXTAREA_MIN_H,
+  useNotesTranscriptMotion,
+} from "./useNotesTranscriptMotion";
 import { CALL_SCENARIOS, scenarioById, type CallScenario } from "./callSimulation";
 import usFlag from "./assets/dialer/us-flag.svg";
 import phoneFilled from "./assets/dialer/phone-filled.svg";
@@ -591,7 +595,7 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
       aria-modal="true"
       aria-label="Dialer"
       className={cn(
-        "fixed inset-0 z-[100] flex flex-col items-center overflow-hidden bg-white pt-8 pb-8",
+        "fixed inset-0 z-[100] flex flex-col items-center overflow-hidden bg-secondary-bg pt-8 pb-8",
         className
       )}
     >
@@ -600,7 +604,7 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
           type="button"
           aria-label="Close dialer"
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 flex size-8 items-center justify-center rounded-[4px] text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+          className="absolute top-4 right-4 z-10 flex size-8 items-center justify-center rounded-[4px] text-muted-foreground outline-none transition-colors hover:bg-white hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
         >
           <IconClose size={20} />
         </button>
@@ -1139,16 +1143,12 @@ function LiveCallStage({
   };
 
   useLayoutEffect(() => {
-    if (!notesOpen) return;
     const el = notesAreaRef.current;
     if (!el) return;
-    if (!transcriptExpanded) {
-      el.style.height = "";
-      return;
-    }
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [notes, notesOpen, transcriptExpanded]);
+    el.style.height = `${Math.min(el.scrollHeight, NOTES_TEXTAREA_MAX_H)}px`;
+    if (notesOpen) notesMotion.syncLayout();
+  }, [notes, notesOpen]);
 
   useLayoutEffect(() => {
     if (!notesMotion.interactive) return;
@@ -1219,7 +1219,7 @@ function LiveCallStage({
               aria-hidden={!notesMotion.announced}
               inert={!notesMotion.announced || undefined}
             >
-              <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[16px] bg-white shadow-600">
+              <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[16px] border border-line bg-white">
                 <header className="flex h-11 shrink-0 items-center justify-between gap-1.5 border-b border-line px-4">
                   <div className="flex items-center gap-1.5">
                     <NotesPaneIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -1240,7 +1240,7 @@ function LiveCallStage({
                 <div
                   ref={notesMotion.notesInnerRef}
                   className={cn(
-                    "notes-inner flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-4",
+                    "notes-inner flex flex-col gap-1 p-4",
                     notesMotion.interactive && "is-ready"
                   )}
                   inert={!notesMotion.interactive || undefined}
@@ -1252,11 +1252,12 @@ function LiveCallStage({
                     rows={3}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    wrapperClassName={cn("min-h-0", !transcriptExpanded && "flex-1")}
-                    className={cn(
-                      "resize-none overflow-y-auto",
-                      transcriptExpanded ? "h-auto min-h-[72px] max-h-full" : "h-full min-h-0"
-                    )}
+                    wrapperClassName="min-h-0"
+                    className="h-auto resize-none overflow-y-auto"
+                    style={{
+                      minHeight: NOTES_TEXTAREA_MIN_H,
+                      maxHeight: NOTES_TEXTAREA_MAX_H,
+                    }}
                     aria-label="Call notes"
                   />
                   <p className="shrink-0 text-right text-label-sm text-muted-foreground tabular-nums">
@@ -1266,7 +1267,7 @@ function LiveCallStage({
               </div>
             </div>
             <div ref={notesMotion.transcriptRef} className="transcript-slot">
-              <div className="h-full min-h-0 w-full overflow-hidden rounded-[16px] bg-white shadow-600">
+              <div className="h-full min-h-0 w-full overflow-hidden rounded-[16px] border border-line bg-white">
                 <LiveTranscriptPanel
                   key={scenario.id}
                   elapsedMs={elapsedMs}
@@ -1304,7 +1305,7 @@ function StagePane({
     <div
       className={cn(
         "flex min-h-0 min-w-0 flex-col",
-        surface && "overflow-hidden rounded-[16px] bg-white shadow-600",
+        surface && "overflow-hidden rounded-[16px] border border-line bg-white",
         !reduced && "call-stage-pane-in"
       )}
       style={
