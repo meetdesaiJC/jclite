@@ -1,9 +1,12 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
-const NOTES_SHARE = 0.42;
+export const NOTES_TEXTAREA_MIN_H = 72;
+export const NOTES_TEXTAREA_MAX_H = 160;
+
 const GAP = 12;
 const HEADER_FALLBACK = 44;
 const INPUT_READY_MS = 150;
+const COUNTER_FALLBACK = 16;
 
 const EASE_OUT = cubicBezier(0.2, 0, 0, 1);
 const EASE_CLOSE = cubicBezier(0.4, 0, 0.2, 1);
@@ -30,9 +33,9 @@ type MotionTiming = {
 };
 
 /**
- * Notes ↔ transcript share one column. Heights are driven together so the
- * transcript can vacate space before Notes fills it, and follow Notes back up
- * on close — never overlapping.
+ * Notes <-> transcript share one column. Notes hugs its field (the textarea
+ * grows to a max); the transcript takes whatever is left. Heights move
+ * together so the two never overlap on open or close.
  */
 export function useNotesTranscriptMotion({
   open,
@@ -75,29 +78,38 @@ export function useNotesTranscriptMotion({
     return header?.getBoundingClientRect().height || HEADER_FALLBACK;
   };
 
-  const targetFrame = (nextOpen: boolean, expanded: boolean, columnH: number): NotesMotionFrame => {
-    const headerH = measureHeader();
-    if (!expanded) {
-      if (!nextOpen) {
-        return {
-          notesH: 0,
-          notesOpacity: 0,
-          innerOpacity: 0,
-          innerY: 4,
-          transcriptTop: 0,
-          transcriptH: headerH,
-        };
-      }
-      const notesH = Math.max(0, columnH - headerH - GAP);
-      return {
-        notesH,
-        notesOpacity: 1,
-        innerOpacity: 1,
-        innerY: 0,
-        transcriptTop: notesH + GAP,
-        transcriptH: headerH,
-      };
+  const measureNotesContentH = () => {
+    const notes = notesRef.current;
+    const inner = notesInnerRef.current;
+    const headerH =
+      notes?.querySelector("header")?.getBoundingClientRect().height ||
+      HEADER_FALLBACK;
+    const textarea = inner?.querySelector("textarea");
+    const taH = textarea
+      ? Math.min(
+          NOTES_TEXTAREA_MAX_H,
+          Math.max(NOTES_TEXTAREA_MIN_H, textarea.scrollHeight)
+        )
+      : NOTES_TEXTAREA_MIN_H;
+    const cardBorder = 2;
+    if (!inner) {
+      return headerH + 32 + 4 + COUNTER_FALLBACK + taH + cardBorder;
     }
+    const cs = getComputedStyle(inner);
+    const padY =
+      (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const gap = parseFloat(cs.rowGap || cs.gap) || 0;
+    const counter = inner.querySelector("p");
+    const counterH = counter?.getBoundingClientRect().height || COUNTER_FALLBACK;
+    return Math.round(headerH + padY + gap + counterH + taH + cardBorder);
+  };
+
+  const targetFrame = (
+    nextOpen: boolean,
+    expanded: boolean,
+    columnH: number
+  ): NotesMotionFrame => {
+    const headerH = measureHeader();
     if (!nextOpen) {
       return {
         notesH: 0,
@@ -105,11 +117,14 @@ export function useNotesTranscriptMotion({
         innerOpacity: 0,
         innerY: 4,
         transcriptTop: 0,
-        transcriptH: columnH,
+        transcriptH: expanded ? columnH : headerH,
       };
     }
-    const notesH = Math.round(columnH * NOTES_SHARE);
-    const transcriptH = Math.max(headerH, columnH - notesH - GAP);
+    const maxNotesH = Math.max(0, columnH - headerH - GAP);
+    const notesH = Math.min(measureNotesContentH(), maxNotesH);
+    const transcriptH = expanded
+      ? Math.max(headerH, columnH - notesH - GAP)
+      : headerH;
     return {
       notesH,
       notesOpacity: 1,
@@ -224,7 +239,7 @@ export function useNotesTranscriptMotion({
     const innerFromY = from.innerY;
     const innerToY = nextOpen ? 0 : -2;
     const start = performance.now();
-    let armedInput = nextOpen && (from.notesH > to.notesH * 0.35);
+    let armedInput = nextOpen && from.notesH > to.notesH * 0.35;
 
     const tick = (now: number) => {
       const elapsed = now - start;
@@ -246,10 +261,7 @@ export function useNotesTranscriptMotion({
         setInteractive(true);
       }
 
-      const done =
-        notesT >= 1 &&
-        vacT >= 1 &&
-        innerT >= 1;
+      const done = notesT >= 1 && vacT >= 1 && innerT >= 1;
 
       if (!done) {
         rafRef.current = requestAnimationFrame(tick);
@@ -258,7 +270,8 @@ export function useNotesTranscriptMotion({
 
       rafRef.current = 0;
       animatingRef.current = false;
-      applyFrame(to);
+      const settledH = measureColumn();
+      applyFrame(settledH ? targetFrame(nextOpen, expanded, settledH) : to);
       const notesEl = notesRef.current;
       const transcriptEl = transcriptRef.current;
       if (notesEl) notesEl.style.willChange = "";
@@ -268,6 +281,13 @@ export function useNotesTranscriptMotion({
     };
 
     rafRef.current = requestAnimationFrame(tick);
+  };
+
+  const syncLayout = () => {
+    if (animatingRef.current) return;
+    const columnH = measureColumn();
+    if (!columnH) return;
+    applyFrame(targetFrame(prevOpenRef.current, prevExpandedRef.current, columnH));
   };
 
   useLayoutEffect(() => {
@@ -324,6 +344,7 @@ export function useNotesTranscriptMotion({
     transcriptRef,
     interactive,
     announced,
+    syncLayout,
   };
 }
 
