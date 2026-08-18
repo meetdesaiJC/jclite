@@ -105,22 +105,26 @@ function IconTalk(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Speedtest — `icon-library/Agent Assist/brand-speedtest.svg`. Speaking too fast. */
 function IconPace(props: SVGProps<SVGSVGElement>) {
   return (
-    <CueSvg viewBox="0 0 20 20" {...props}>
-      <path d="M4 14.15a6 6 0 1 1 12 0" {...iconStroke} />
-      <path d="M10 14.15 13.15 9.9" {...iconStroke} />
-      <path d="M10 14.15h.01" {...iconStroke} />
+    <CueSvg {...props}>
+      <path
+        d="M3.75734 12.9106C2.91823 12.0715 2.34679 11.0024 2.11529 9.83848C1.88378 8.6746 2.0026 7.4682 2.45673 6.37185C2.91086 5.2755 3.6799 4.33843 4.66659 3.67915C5.65328 3.01986 6.81332 2.66797 8 2.66797C9.18669 2.66797 10.3467 3.01986 11.3334 3.67915C12.3201 4.33843 13.0891 5.2755 13.5433 6.37185C13.9974 7.4682 14.1162 8.6746 13.8847 9.83848C13.6532 11.0024 13.0818 12.0715 12.2427 12.9106M10.6667 6.00122L8 8.66789"
+        {...iconStroke}
+      />
     </CueSvg>
   );
 }
 
+/** Clock-play — `icon-library/Agent Assist/clock-play.svg`. Long silence. */
 function IconMonologue(props: SVGProps<SVGSVGElement>) {
   return (
-    <CueSvg viewBox="0 0 20 20" {...props}>
-      <path d="M10 5.2a5.55 5.55 0 1 1 0 11.1 5.55 5.55 0 0 1 0-11.1Z" {...iconStroke} />
-      <path d="M10 8.15v3.05l2.15 1.25" {...iconStroke} />
-      <path d="M8.2 3.4h3.6M10 3.4V5.2" {...iconStroke} />
+    <CueSvg {...props}>
+      <path
+        d="M7.99967 4.66634V7.99967L9.33301 9.33301M8.67759 13.9616C7.42284 14.1042 6.15508 13.8473 5.05485 13.2274C3.95462 12.6076 3.07803 11.6564 2.5499 10.5093C2.02177 9.36216 1.86904 8.07768 2.11346 6.83873C2.35788 5.59977 2.98698 4.46953 3.91117 3.60894C4.83537 2.74836 6.00753 2.20132 7.26074 2.04572C8.51395 1.89013 9.78431 2.13392 10.8909 2.74237C11.9975 3.35082 12.8839 4.29291 13.4238 5.43447C13.9638 6.57604 14.1298 7.85887 13.8983 9.10029M11.333 14.6663L14.6663 12.6663L11.333 10.6663V14.6663Z"
+        {...iconStroke}
+      />
     </CueSvg>
   );
 }

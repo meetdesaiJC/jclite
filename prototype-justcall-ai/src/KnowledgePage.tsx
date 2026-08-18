@@ -219,7 +219,7 @@ export function KnowledgePage({
         description="Add knowledge that Voice Agents can use to answer customers and Agent Assist can surface to agents during calls."
         actions={
           isEmpty ? null : (
-            <Button size="sm">Create Knowledge Base</Button>
+            <Button size="sm">Create knowledge base</Button>
           )
         }
       />
@@ -244,7 +244,7 @@ export function KnowledgePage({
                 questions on its own — for Voice Agent, Agent Assist, or both.
               </p>
             </div>
-            <Button size="md">Create Knowledge Base</Button>
+            <Button size="md">Create knowledge base</Button>
           </div>
         </div>
       ) : (
