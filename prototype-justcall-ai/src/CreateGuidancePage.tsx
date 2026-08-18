@@ -9,7 +9,6 @@ import {
   IconClose,
   IconEye,
   IconFile,
-  IconInfoCircle,
   IconSparkles,
 } from "@/components/Icon";
 import { cn } from "@/lib/utils";
@@ -107,21 +106,6 @@ function FieldLabel({
     <label htmlFor={htmlFor} className="text-label-md text-foreground">
       {children}
     </label>
-  );
-}
-
-function HelpText({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-1 text-paragraph-sm">
-      <span className="inline-flex h-[1lh] w-4 shrink-0 items-center justify-center text-muted-foreground">
-        <IconInfoCircle
-          size={16}
-          className="block size-4"
-          aria-hidden="true"
-        />
-      </span>
-      <p className="m-0 text-muted-foreground">{children}</p>
-    </div>
   );
 }
 
@@ -342,11 +326,16 @@ export function CreateGuidancePage({
               including integrations and FAQs. AI drafting stays available
               rather than being the thing that decides what's allowed. */}
           {!isEditing ? (
-            <div className="flex items-center gap-2 rounded-lg border border-line bg-secondary-bg px-3 py-2.5">
-              <p className="min-w-0 flex-1 text-pretty text-paragraph-sm text-muted-foreground">
-                Build a response card for anything you want agents to handle a
-                particular way — objections, policies, integrations, FAQs.
-              </p>
+            <div className="flex items-center gap-4 rounded-lg border border-line bg-secondary-bg px-3.5 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-label-md-semi text-foreground">
+                  Build a response card
+                </p>
+                <p className="mt-0.5 text-pretty text-paragraph-md text-foreground">
+                  For anything you want agents to handle a particular way —
+                  objections, policies, integrations, FAQs.
+                </p>
+              </div>
               <Button
                 variant="link"
                 size="sm"
@@ -366,8 +355,6 @@ export function CreateGuidancePage({
                 placeholder={placeholders.name}
                 value={draft.name}
                 onChange={(e) => patch({ name: e.target.value })}
-                helpText="Give this response card an internal name so your team can identify it."
-                helpIcon
                 clearable={false}
               />
             </div>
@@ -382,10 +369,6 @@ export function CreateGuidancePage({
                 placeholder={placeholders.trigger}
                 className={textareaClass}
               />
-              <HelpText>
-                Describe the conversation or customer intent that should trigger this
-                response card.
-              </HelpText>
               {showCoverage && coverage ? (
                 <KnowledgeCoverageHint
                   entryTitle={coverage.entry.title}
@@ -414,11 +397,6 @@ export function CreateGuidancePage({
                 className="w-full max-w-[240px]"
                 triggerClassName="h-9"
               />
-              <HelpText>
-                Who has to say it before this fires. Apply-to is set by the
-                assignment on the left. CRM property, call stage, sentiment, and
-                plan conditions are coming later.
-              </HelpText>
             </div>
           </SectionCard>
 
@@ -436,18 +414,26 @@ export function CreateGuidancePage({
             </div>
 
             <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-3">
-                <FieldLabel>Key talking points</FieldLabel>
-                <Button variant="link" size="sm" onClick={addTalkingPoint}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col gap-1">
+                  <FieldLabel>Key talking points</FieldLabel>
+                  {draft.talkingPoints.length === 0 ? (
+                    <p className="text-paragraph-sm text-muted-foreground">
+                      Optional short bullets the agent can scan during a call. Either a
+                      suggested response or talking points is enough.
+                    </p>
+                  ) : null}
+                </div>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto shrink-0 py-0"
+                  onClick={addTalkingPoint}
+                >
                   Add talking point
                 </Button>
               </div>
-              {draft.talkingPoints.length === 0 ? (
-                <p className="text-paragraph-sm text-muted-foreground">
-                  Optional short bullets the agent can scan during a call. Either a
-                  suggested response or talking points is enough.
-                </p>
-              ) : (
+              {draft.talkingPoints.length > 0 ? (
                 <div className="flex flex-col gap-2">
                   {draft.talkingPoints.map((point, index) => (
                     <div key={`point-${index}`} className="flex items-center gap-2">
@@ -480,7 +466,7 @@ export function CreateGuidancePage({
                     </div>
                   ))}
                 </div>
-              )}
+              ) : null}
             </div>
           </SectionCard>
 

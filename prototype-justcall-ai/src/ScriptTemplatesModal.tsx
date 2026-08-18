@@ -129,8 +129,8 @@ export function ScriptTemplatesModal({
       open={open}
       onClose={onClose}
       size="md"
-      title="What kind of conversation are you preparing agents for?"
-      description="Start from a template, or create your own from scratch."
+      title="Create a script"
+      description="Choose the type of conversation you want to prepare agents for. Start with a template or create your own from scratch."
     >
       <div className="flex flex-col gap-5">
         <section>

@@ -40,7 +40,7 @@ export function AgentAssistNav({
     <nav
       aria-label="Agent Assist"
       className={cn(
-        "flex h-full w-[288px] shrink-0 flex-col gap-8 overflow-y-auto border-r border-line bg-white p-8",
+        "flex h-full w-[288px] shrink-0 flex-col gap-8 overflow-y-auto border-r border-line bg-white px-8 pb-8 pt-5",
         className
       )}
     >

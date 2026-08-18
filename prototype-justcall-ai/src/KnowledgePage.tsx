@@ -216,7 +216,7 @@ export function KnowledgePage({
     <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <AdminPageHeader
         title="Knowledge"
-        description="Add knowledge that Voice Agents can use to answer customers and Agent Assist can surface to agents during calls."
+        description="Add knowledge to help agents answer customer questions during calls."
         actions={
           isEmpty ? null : (
             <Button size="sm">Create knowledge base</Button>

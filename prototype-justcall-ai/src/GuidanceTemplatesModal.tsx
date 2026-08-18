@@ -2,7 +2,8 @@ import { Modal } from "@/components/Modal";
 import { IconSparkles } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import {
-  GUIDANCE_TEMPLATES,
+  GUIDANCE_TEMPLATE_GROUPS,
+  guidanceTemplatesInGroup,
   type GuidanceTemplateId,
 } from "./guidanceData";
 
@@ -48,29 +49,36 @@ export function GuidanceTemplatesModal({
       open={open}
       onClose={onClose}
       size="md"
-      title="What would you like to help agents with?"
-      description="Start from a template, write it yourself, or let AI draft it from your knowledge bases. You can change everything later."
+      title="Create a response card"
+      description="Choose what you want to help agents handle during calls. Start with a template, create your own, or let AI draft one from your knowledge base."
     >
       <div className="flex flex-col gap-5">
-        <div className="grid grid-cols-2 items-stretch gap-2">
-          {GUIDANCE_TEMPLATES.map((template) => (
-            <button
-              key={template.id}
-              type="button"
-              onClick={() =>
-                onSelect({ type: "template", templateId: template.id })
-              }
-              className={cn("flex h-full flex-col gap-1 px-3.5 py-3", choiceCardClass)}
-            >
-              <span className="text-balance text-label-md-semi text-foreground">
-                {template.name}
-              </span>
-              <span className="text-pretty text-paragraph-sm text-muted-foreground">
-                {template.description}
-              </span>
-            </button>
-          ))}
-        </div>
+        {GUIDANCE_TEMPLATE_GROUPS.map((group) => (
+          <section key={group.id} className="flex flex-col gap-2">
+            <h3 className="text-label-sm font-medium tracking-[0.04em] text-muted-foreground uppercase">
+              {group.label}
+            </h3>
+            <div className="grid grid-cols-2 items-stretch gap-2">
+              {guidanceTemplatesInGroup(group.id).map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() =>
+                    onSelect({ type: "template", templateId: template.id })
+                  }
+                  className={cn("flex h-full flex-col gap-1 px-3.5 py-3", choiceCardClass)}
+                >
+                  <span className="text-balance text-label-md-semi text-foreground">
+                    {template.name}
+                  </span>
+                  <span className="text-pretty text-paragraph-sm text-muted-foreground">
+                    {template.description}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
 
         <div className="flex items-center gap-3" role="separator" aria-label="or">
           <span className="h-px flex-1 bg-line" />

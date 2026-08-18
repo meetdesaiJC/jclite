@@ -26,7 +26,6 @@ import {
   TableCell,
   TableCellText,
   TablePagination,
-  TableBulkBar,
 } from "@/components/Table";
 import scriptsEmptyIllustration from "./assets/scripts-empty.png";
 import faqsEmptyIllustration from "./assets/faqs-empty.png";
@@ -74,8 +73,6 @@ import {
   AdminPageHeader,
   IconTrash,
   StatusToggle,
-  TableSelectCell,
-  TableSelectHead,
 } from "./AgentAssistAdmin";
 import {
   CoachingPreview,
@@ -118,22 +115,7 @@ const KIND_LABEL_LOWER = {
   coaching: "live coaching",
 } as const;
 
-const KIND_LABEL_PLURAL = {
-  script: "scripts",
-  guidance: "response cards",
-  coaching: "live coaching items",
-} as const;
-
 type GuidanceKind = keyof typeof KIND_LABEL;
-
-interface RowSelection {
-  selectedIds: string[];
-  allSelected: boolean;
-  someSelected: boolean;
-  onToggleAll: () => void;
-  onToggleRow: (id: string) => void;
-  selectAllLabel: string;
-}
 
 interface ScriptRow {
   id: string;
@@ -146,13 +128,6 @@ interface ScriptRow {
 }
 
 type PlaybookTab = "scripts" | "guidance" | "coaching";
-
-/** The tab keys are plural; the vocabulary above is keyed by the singular kind. */
-const TAB_KIND: Record<PlaybookTab, GuidanceKind> = {
-  scripts: "script",
-  guidance: "guidance",
-  coaching: "coaching",
-};
 
 const TABS: TabItem[] = [
   { key: "scripts", label: "Scripts" },
@@ -173,12 +148,12 @@ const TAB_COPY: Record<PlaybookTab, { title: string; description: string }> = {
   guidance: {
     title: "Response Cards",
     description:
-      "Surface the right response when specific questions, topics, or objections come up.",
+      "Surface the right response when it matters.",
   },
   coaching: {
     title: "Live Coaching",
     description:
-      "Guide agents in real time based on conversation signals, behaviors, and sentiment.",
+      "Coach agents on how the conversation is going — talk balance, delivery, and customer signals.",
   },
 };
 
@@ -485,8 +460,6 @@ export function AgentAssistPlaybooksPage({
     | { type: "coaching"; row: CoachingRule }
     | null
   >(null);
-  const [selected, setSelected] = React.useState<string[]>([]);
-  const [bulkDeleting, setBulkDeleting] = React.useState(false);
   const isScripts = tab === "scripts";
   const isGuidance = tab === "guidance";
   const isCoaching = tab === "coaching";
@@ -544,32 +517,6 @@ export function AgentAssistPlaybooksPage({
   const visibleScripts = filteredScripts.slice(start, start + pageSize);
   const visibleGuidance = filteredGuidance.slice(start, start + pageSize);
   const visibleCoaching = filteredCoaching.slice(start, start + pageSize);
-  const visibleRows = isScripts
-    ? visibleScripts
-    : isGuidance
-      ? visibleGuidance
-      : visibleCoaching;
-  // Header checkbox and bulk bar act on the page in front of the admin.
-  const visibleIds = visibleRows.map((row) => row.id);
-  const selectedVisible = selected.filter((id) => visibleIds.includes(id));
-  const allSelected =
-    visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
-  const someSelected = selectedVisible.length > 0 && !allSelected;
-  const selection: RowSelection = {
-    selectedIds: selected,
-    allSelected,
-    someSelected,
-    onToggleAll: () => setSelected(allSelected ? [] : visibleIds),
-    onToggleRow: (id) =>
-      setSelected((current) =>
-        current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
-      ),
-    selectAllLabel: isScripts
-      ? "Select all scripts"
-      : isGuidance
-        ? "Select all response cards"
-        : "Select all live coaching",
-  };
 
   const openScriptTemplates = () => setTemplatesOpen(true);
 
@@ -717,23 +664,6 @@ export function AgentAssistPlaybooksPage({
     ]);
   };
 
-  const dropSelectedIds = (ids: string[]) => {
-    setSelected((current) => current.filter((id) => !ids.includes(id)));
-  };
-
-  const confirmBulkDelete = () => {
-    const ids = selectedVisible;
-    if (isScripts) {
-      setScripts((current) => current.filter((item) => !ids.includes(item.id)));
-    } else if (isGuidance) {
-      onGuidanceItemsChange(guidanceItems.filter((item) => !ids.includes(item.id)));
-    } else {
-      onCoachingRulesChange(coachingRules.filter((item) => !ids.includes(item.id)));
-    }
-    dropSelectedIds(ids);
-    setBulkDeleting(false);
-  };
-
   if (guidanceLaunch) {
     return (
       <CreateGuidancePage
@@ -829,7 +759,7 @@ export function AgentAssistPlaybooksPage({
             illustrationSrc={faqsEmptyIllustration}
             illustrationAlt=""
             title="No live coaching yet"
-            description="Start from a template to nudge agents when the conversation balance, delivery, or customer experience drifts."
+            description="Start from a coaching concept — talk balance, delivery, or customer signals — then set when it should fire."
             actionLabel="Create live coaching"
             onAction={() => setCoachingTemplatesOpen(true)}
           />
@@ -838,7 +768,7 @@ export function AgentAssistPlaybooksPage({
             illustrationSrc={faqsEmptyIllustration}
             illustrationAlt=""
             title="No response cards yet"
-            description="Surface relevant answers, talking points, and resources to agents based on what's being discussed during calls."
+            description="Surface answers when a topic comes up, or remind agents when something required still needs covering."
             actionLabel="Create response card"
             onAction={openGuidanceTemplates}
           />
@@ -954,13 +884,12 @@ export function AgentAssistPlaybooksPage({
             </div>
           </div>
 
-          <div className="relative flex min-h-0 flex-1 flex-col px-6 pb-6">
+          <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
               <div className="min-h-0 flex-1 overflow-auto">
                 {isScripts ? (
                   <ScriptsTable
                     rows={visibleScripts}
-                    selection={selection}
                     onEdit={(row) => setBuilder({ type: "edit", playbook: row.playbook })}
                     onPreview={(row) => setPreviewScript(row.playbook)}
                     onAssign={(row) => setAssignTarget({ type: "script", row })}
@@ -971,7 +900,6 @@ export function AgentAssistPlaybooksPage({
                     }}
                     onDelete={(row) => {
                       setScripts((current) => current.filter((item) => item.id !== row.id));
-                      dropSelectedIds([row.id]);
                     }}
                     onStatusChange={(row, live) =>
                       setScripts((current) =>
@@ -986,7 +914,6 @@ export function AgentAssistPlaybooksPage({
                 ) : isGuidance ? (
                   <GuidanceTable
                     rows={visibleGuidance}
-                    selection={selection}
                     onEdit={(row) =>
                       setGuidanceLaunch({ mode: "edit", item: row })
                     }
@@ -997,7 +924,6 @@ export function AgentAssistPlaybooksPage({
                       onGuidanceItemsChange(
                         guidanceItems.filter((item) => item.id !== row.id)
                       );
-                      dropSelectedIds([row.id]);
                     }}
                     onStatusChange={(row, live) => {
                       if (live && guidanceAssignees(row).length === 0) return;
@@ -1013,7 +939,6 @@ export function AgentAssistPlaybooksPage({
                 ) : (
                   <CoachingTable
                     rows={visibleCoaching}
-                    selection={selection}
                     onEdit={(row) => setCoachingLaunch({ mode: "edit", rule: row })}
                     onPreview={setPreviewCoaching}
                     onAssign={(row) => setAssignTarget({ type: "coaching", row })}
@@ -1022,7 +947,6 @@ export function AgentAssistPlaybooksPage({
                       onCoachingRulesChange(
                         coachingRules.filter((item) => item.id !== row.id)
                       );
-                      dropSelectedIds([row.id]);
                     }}
                     onStatusChange={(row, live) => {
                       if (live && row.teamMembers.length + row.userGroups.length === 0) {
@@ -1047,20 +971,6 @@ export function AgentAssistPlaybooksPage({
                 />
               </div>
             </div>
-            <TableBulkBar
-              count={selectedVisible.length}
-              label="selected"
-              actions={
-                <Button
-                  variant="grey-outline"
-                  size="sm"
-                  className="bg-white"
-                  onClick={() => setBulkDeleting(true)}
-                >
-                  Delete
-                </Button>
-              }
-            />
           </div>
         </>
       )}
@@ -1159,15 +1069,6 @@ export function AgentAssistPlaybooksPage({
           }}
         />
       ) : null}
-
-      {bulkDeleting && selectedVisible.length > 0 ? (
-        <BulkDeleteModal
-          kind={TAB_KIND[tab]}
-          count={selectedVisible.length}
-          onClose={() => setBulkDeleting(false)}
-          onConfirm={confirmBulkDelete}
-        />
-      ) : null}
     </main>
   );
 }
@@ -1236,49 +1137,8 @@ function AssignModal({
   );
 }
 
-function BulkDeleteModal({
-  kind,
-  count,
-  onClose,
-  onConfirm,
-}: {
-  kind: GuidanceKind;
-  count: number;
-  onClose: () => void;
-  onConfirm: () => void;
-}) {
-  const singular = KIND_LABEL_LOWER[kind];
-  const plural = KIND_LABEL_PLURAL[kind];
-  const title = count === 1 ? `Delete ${singular}` : `Delete ${plural}`;
-  const description =
-    count === 1
-      ? `This ${singular} will be removed from Agent Assist.`
-      : `${count} ${plural} will be removed from Agent Assist.`;
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      size="sm"
-      title={title}
-      description={description}
-      footer={
-        <>
-          <Button variant="grey-outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="error" size="sm" onClick={onConfirm}>
-            Delete
-          </Button>
-        </>
-      }
-    />
-  );
-}
-
 function ScriptsTable({
   rows,
-  selection,
   onEdit,
   onPreview,
   onDuplicate,
@@ -1287,7 +1147,6 @@ function ScriptsTable({
   onStatusChange,
 }: {
   rows: ScriptRow[];
-  selection: RowSelection;
   onEdit: (row: ScriptRow) => void;
   onPreview: (row: ScriptRow) => void;
   onDuplicate: (row: ScriptRow) => void;
@@ -1299,12 +1158,6 @@ function ScriptsTable({
     <Table className="table-fixed">
       <TableHeader className="[&_tr]:border-b-0">
         <TableRow>
-          <TableSelectHead
-            allSelected={selection.allSelected}
-            someSelected={selection.someSelected}
-            onToggleAll={selection.onToggleAll}
-            label={selection.selectAllLabel}
-          />
           <TableHead className="sticky top-0 z-10 w-[280px]">Name</TableHead>
           <TableHead className="sticky top-0 z-10 w-[160px]">Assigned</TableHead>
           <TableHead className="sticky top-0 z-10 w-[100px]">Steps</TableHead>
@@ -1314,19 +1167,8 @@ function ScriptsTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => {
-          const isSelected = selection.selectedIds.includes(row.id);
-          return (
-            <TableRow
-              key={row.id}
-              state={isSelected ? "selected" : "default"}
-              className="border-b-0"
-            >
-              <TableSelectCell
-                checked={isSelected}
-                onToggle={() => selection.onToggleRow(row.id)}
-                label={`Select ${row.name}`}
-              />
+        {rows.map((row) => (
+          <TableRow key={row.id} className="border-b-0">
               <TableCell>
                 <TableCellText primary={row.name} />
               </TableCell>
@@ -1353,8 +1195,7 @@ function ScriptsTable({
                 />
               </TableCell>
             </TableRow>
-          );
-        })}
+        ))}
       </TableBody>
     </Table>
   );
@@ -1362,7 +1203,6 @@ function ScriptsTable({
 
 function GuidanceTable({
   rows,
-  selection,
   onEdit,
   onPreview,
   onDuplicate,
@@ -1371,7 +1211,6 @@ function GuidanceTable({
   onStatusChange,
 }: {
   rows: GuidanceItem[];
-  selection: RowSelection;
   onEdit: (row: GuidanceItem) => void;
   onPreview: (row: GuidanceItem) => void;
   onDuplicate: (row: GuidanceItem) => void;
@@ -1383,12 +1222,6 @@ function GuidanceTable({
     <Table className="table-fixed">
       <TableHeader className="[&_tr]:border-b-0">
         <TableRow>
-          <TableSelectHead
-            allSelected={selection.allSelected}
-            someSelected={selection.someSelected}
-            onToggleAll={selection.onToggleAll}
-            label={selection.selectAllLabel}
-          />
           <TableHead className="sticky top-0 z-10 w-[220px]">Response card</TableHead>
           <TableHead className="sticky top-0 z-10">Trigger</TableHead>
           <TableHead className="sticky top-0 z-10 w-[160px]">Assigned to</TableHead>
@@ -1399,18 +1232,11 @@ function GuidanceTable({
       </TableHeader>
       <TableBody>
         {rows.map((row) => {
-          const isSelected = selection.selectedIds.includes(row.id);
           return (
             <TableRow
               key={row.id}
-              state={isSelected ? "selected" : "default"}
               className="border-b-0"
             >
-              <TableSelectCell
-                checked={isSelected}
-                onToggle={() => selection.onToggleRow(row.id)}
-                label={`Select ${row.name}`}
-              />
               <TableCell>
                 <button
                   type="button"
@@ -1465,13 +1291,12 @@ function GuidanceTable({
 }
 
 /**
- * Live Coaching reads differently from a response card: what's being measured
- * is the important column. Preview still exists — it shows the mid-call banner
- * rather than a card.
+ * Live Coaching reads differently from a response card: the coaching concept
+ * and when it fires are the important columns. Preview still exists — it shows
+ * the mid-call banner rather than a card.
  */
 function CoachingTable({
   rows,
-  selection,
   onEdit,
   onPreview,
   onDuplicate,
@@ -1480,7 +1305,6 @@ function CoachingTable({
   onStatusChange,
 }: {
   rows: CoachingRule[];
-  selection: RowSelection;
   onEdit: (row: CoachingRule) => void;
   onPreview: (row: CoachingRule) => void;
   onDuplicate: (row: CoachingRule) => void;
@@ -1492,12 +1316,6 @@ function CoachingTable({
     <Table className="table-fixed">
       <TableHeader className="[&_tr]:border-b-0">
         <TableRow>
-          <TableSelectHead
-            allSelected={selection.allSelected}
-            someSelected={selection.someSelected}
-            onToggleAll={selection.onToggleAll}
-            label={selection.selectAllLabel}
-          />
           <TableHead className="sticky top-0 z-10 w-[240px]">Live coaching</TableHead>
           <TableHead className="sticky top-0 z-10">Detect</TableHead>
           <TableHead className="sticky top-0 z-10 w-[140px]">Assigned to</TableHead>
@@ -1508,18 +1326,11 @@ function CoachingTable({
       </TableHeader>
       <TableBody>
         {rows.map((row) => {
-          const isSelected = selection.selectedIds.includes(row.id);
           return (
             <TableRow
               key={row.id}
-              state={isSelected ? "selected" : "default"}
               className="border-b-0"
             >
-              <TableSelectCell
-                checked={isSelected}
-                onToggle={() => selection.onToggleRow(row.id)}
-                label={`Select ${row.name}`}
-              />
               <TableCell>
                 <button
                   type="button"
