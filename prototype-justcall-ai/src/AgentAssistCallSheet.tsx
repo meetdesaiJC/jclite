@@ -1194,6 +1194,19 @@ function TranscriptPane({
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Notes open/close resizes this pane. Stay pinned to latest if the agent
+  // already was; otherwise keep the same top anchor and reveal more below.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (!autoScrollActive.current) return;
+      el.scrollTop = el.scrollHeight - el.clientHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const jumpToLatest = () => {
     endRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "end" });
     autoScrollActive.current = true;
@@ -1216,7 +1229,7 @@ function TranscriptPane({
       <ol
         ref={scrollRef}
         className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4",
+          "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 [overflow-anchor:none]",
           !reduced && !exiting && "animate-[assist-now-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]",
           !reduced && exiting && "assist-stream-out"
         )}
