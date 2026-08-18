@@ -44,12 +44,6 @@ const TONE: Record<
     well: "bg-coach-teal-surface text-coach-teal-text",
     hover: "hover:bg-white/70",
   },
-  red: {
-    card: "border border-l-2 border-coach-red-border border-l-coach-red bg-coach-red-surface",
-    ink: "text-coach-red-text",
-    well: "bg-coach-red-surface text-coach-red-text",
-    hover: "hover:bg-white/70",
-  },
 };
 
 export function coachingTone(templateId: CoachingTemplateId) {
@@ -105,7 +99,7 @@ function IconTalk(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Speedtest — `icon-library/Agent Assist/brand-speedtest.svg`. Speaking too fast. */
+/** Speedtest — `icon-library/Agent Assist/brand-speedtest.svg`. Speaking pace. */
 function IconPace(props: SVGProps<SVGSVGElement>) {
   return (
     <CueSvg {...props}>
@@ -129,18 +123,6 @@ function IconMonologue(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function IconCompliance(props: SVGProps<SVGSVGElement>) {
-  return (
-    <CueSvg viewBox="0 0 20 20" {...props}>
-      <path
-        d="M10 3.15 16.1 5.5v5.15c0 3.35-2.5 5.7-6.1 6.7-3.6-1-6.1-3.35-6.1-6.7V5.5L10 3.15Z"
-        {...iconStroke}
-      />
-      <path d="M10 8.15v2.85M10 13.35h.01" {...iconStroke} />
-    </CueSvg>
-  );
-}
-
 const SIGNAL_ICON: Record<
   CoachingSignal,
   (props: SVGProps<SVGSVGElement>) => ReactNode
@@ -150,7 +132,6 @@ const SIGNAL_ICON: Record<
   talk: IconTalk,
   pace: IconPace,
   monologue: IconMonologue,
-  compliance: IconCompliance,
 };
 
 export function CoachingCueIcon({

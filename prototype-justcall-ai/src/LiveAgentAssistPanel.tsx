@@ -58,7 +58,6 @@ import {
 } from "./GuidanceCard";
 import {
   CriticalGuidanceAlert,
-  GuidanceStackOverflow,
   InCallGuidanceSlot,
 } from "./LiveGuidance";
 import {
@@ -69,14 +68,9 @@ import {
 
 /**
  * In-call Agent Assist — one panel for everything the agent gets in real time.
- * There are no tabs. Cards share a single stream: new items surface newest
- * first and stay for the rest of the call; the column scrolls when it fills up.
- *
- * Guidance is the exception to newest-first, and deliberately so: it is the one
- * thing the agent reads while talking, so its cards move as a group and only
- * ever on the agent's own action. While a guidance card is open the group is
- * pinned to the top and new suggestions queue underneath it, so nothing shifts
- * out from under the sentence being read (§3, §6, §10).
+ * There are no tabs. Cards share a single stream: each one lands in the order
+ * it fired and stays there. Coaching, guidance, knowledge, and actions do not
+ * regroup by type, so a newer card never gets buried under an older block.
  */
 
 /** Executed actions confirm, then collapse out of the way. */
@@ -688,37 +682,26 @@ function integrationName(action: SuggestedAction, integrations: Integration[]): 
 // Panel
 // ---------------------------------------------------------------------------
 
-const GUIDANCE_STACK_ID = "guidance-stack";
-
 interface StreamRow {
   id: string;
   atMs: number;
-  /** Guidance holds the top of the column while one of its cards is open. */
-  pinned: boolean;
 }
 
 /**
- * Newest first — except while the agent is reading, hovering or scrolling. Then
- * the order they can see is frozen and anything new lands underneath it, so the
- * column never rearranges itself around them (§6). Ordering catches up the next
- * time something arrives and the agent is idle.
+ * Arrival order, frozen. New cards prepend newest-first so the latest cue is
+ * at the top; cards already on screen never swap places with each other.
  */
-function useStableStreamOrder<T extends StreamRow>(rows: T[], interacting: boolean) {
+function useStableStreamOrder<T extends StreamRow>(rows: T[]) {
   const orderRef = useRef<string[]>([]);
   const byId = new Map(rows.map((row) => [row.id, row]));
 
   const kept = orderRef.current.filter((id) => byId.has(id));
-  const added = rows.map((row) => row.id).filter((id) => !kept.includes(id));
+  const added = rows
+    .filter((row) => !kept.includes(row.id))
+    .sort((a, b) => b.atMs - a.atMs)
+    .map((row) => row.id);
 
-  const order = interacting
-    ? [...kept, ...added]
-    : [...rows]
-        .sort((a, b) => {
-          if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-          return b.atMs - a.atMs;
-        })
-        .map((row) => row.id);
-
+  const order = [...added, ...kept];
   orderRef.current = order;
   return order.map((id) => byId.get(id)!).filter(Boolean);
 }
@@ -939,57 +922,25 @@ export function LiveAgentAssistPanel({
     />
   );
 
-  /**
-   * Guidance moves as one group — the active card plus its queue — so the
-   * agent's reading position survives whatever else arrives (§3, §10).
-   */
-  const renderGuidanceStack = (key: string) => (
-    <div key={key} className="flex shrink-0 flex-col gap-3">
-      {stream.criticalAlert ? (
-        <CriticalGuidanceAlert
-          name={stream.criticalAlert.suggestion.item.name}
-          reduced={reduced}
-          onFocus={stream.focusCriticalAlert}
-        />
-      ) : null}
-      {stream.visibleCards.map(renderGuidance)}
-      {stream.hiddenCount > 0 ? (
-        <GuidanceStackOverflow
-          count={stream.hiddenCount}
-          reduced={reduced}
-          onShowAll={stream.showAllCards}
-        />
-      ) : null}
-    </div>
-  );
-
-  // Coaching, knowledge and actions share one newest-first line, so whatever
-  // just landed is the first thing the agent sees. Guidance joins that line as
-  // a single group, sitting at its newest card — and pins to the top for as
-  // long as one of its cards is open.
+  // One line, one card each. Arrival time is the only order — a coaching cue
+  // that fires between two guidance cards sits between them, not under both.
   const streamStack = [
-    ...(stream.cards.length > 0
-      ? [
-          {
-            kind: "guidance" as const,
-            atMs: Math.max(...stream.cards.map((entry) => entry.suggestion.atMs)),
-            id: GUIDANCE_STACK_ID,
-            pinned: stream.expandedId !== null,
-          },
-        ]
-      : []),
+    ...stream.cards.map((entry) => ({
+      kind: "guidance" as const,
+      atMs: entry.suggestion.atMs,
+      id: entry.suggestion.id,
+      entry,
+    })),
     ...coaching.stack.map((cue) => ({
       kind: "coaching" as const,
       atMs: cue.atMs,
       id: cue.id,
-      pinned: false,
       cue,
     })),
     ...snapshot.knowledge.map((surface) => ({
       kind: "knowledge" as const,
       atMs: surface.atMs,
       id: surface.id,
-      pinned: false,
       surface,
     })),
     ...snapshot.actions
@@ -998,12 +949,11 @@ export function LiveAgentAssistPanel({
         kind: "action" as const,
         atMs: entry.atMs,
         id: entry.id,
-        pinned: false,
         action: entry.action,
       })),
   ];
 
-  const ordered = useStableStreamOrder(streamStack, stream.interacting);
+  const ordered = useStableStreamOrder(streamStack);
 
   const nothingYet =
     stream.cards.length === 0 &&
@@ -1073,6 +1023,14 @@ export function LiveAgentAssistPanel({
           </p>
         ) : null}
 
+        {stream.criticalAlert ? (
+          <CriticalGuidanceAlert
+            name={stream.criticalAlert.suggestion.item.name}
+            reduced={reduced}
+            onFocus={stream.focusCriticalAlert}
+          />
+        ) : null}
+
         {ordered.map((item) =>
           item.kind === "coaching" ? (
             <CoachingCard
@@ -1083,7 +1041,7 @@ export function LiveAgentAssistPanel({
               onAcknowledge={() => coaching.acknowledge(item.id)}
             />
           ) : item.kind === "guidance" ? (
-            renderGuidanceStack(item.id)
+            renderGuidance(item.entry)
           ) : item.kind === "action" ? (
             renderAction(item.action)
           ) : (

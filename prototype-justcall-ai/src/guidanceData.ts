@@ -554,7 +554,7 @@ export const GUIDANCE_KIND_META: Record<
 
 export function inferGuidanceKind(item: GuidanceItem): GuidanceKind {
   const hay = `${item.name} ${item.trigger} ${item.examplePhrases.join(" ")}`.toLowerCase();
-  if (/card number|cvv|\bpci\b|disclosure|legal|compliance|don't take|do not take|sensitive payment/.test(hay)) {
+  if (/card number|cvv|\bpci\b|disclosure|legal|compliance|don't take|do not take|sensitive payment|required question|required step/.test(hay)) {
     return "compliance";
   }
   if (/status-quo|discovery|quantify the pain/.test(hay)) return "objection";
@@ -641,12 +641,26 @@ export function stanceLabel(stance: GuidanceStance): string {
   return "Optional";
 }
 
+export type GuidanceTemplateGroup = "when-it-comes-up" | "call-coverage";
+
+export const GUIDANCE_TEMPLATE_GROUPS: {
+  id: GuidanceTemplateGroup;
+  label: string;
+}[] = [
+  { id: "when-it-comes-up", label: "When something comes up" },
+  { id: "call-coverage", label: "Call coverage" },
+];
+
 export type GuidanceTemplateId =
   | "answer-question"
   | "handle-objection"
   | "competitor-comparison"
   | "troubleshoot"
-  | "process-policy";
+  | "process-policy"
+  | "discovery-missing"
+  | "compliance-missing"
+  | "required-question-missing"
+  | "required-step-missing";
 
 export interface GuidanceFieldPlaceholders {
   name: string;
@@ -658,6 +672,7 @@ export interface GuidanceFieldPlaceholders {
 
 export interface GuidanceTemplateCatalogItem {
   id: GuidanceTemplateId;
+  group: GuidanceTemplateGroup;
   name: string;
   description: string;
   placeholders: GuidanceFieldPlaceholders;
@@ -676,6 +691,7 @@ const DEFAULT_PLACEHOLDERS: GuidanceFieldPlaceholders = {
 export const GUIDANCE_TEMPLATES: GuidanceTemplateCatalogItem[] = [
   {
     id: "answer-question",
+    group: "when-it-comes-up",
     name: "Answer a question",
     description: "Give agents approved answers to common customer questions",
     placeholders: {
@@ -690,8 +706,9 @@ export const GUIDANCE_TEMPLATES: GuidanceTemplateCatalogItem[] = [
   },
   {
     id: "handle-objection",
+    group: "when-it-comes-up",
     name: "Handle an objection",
-    description: "Help agents respond to concerns about price, value, or fit",
+    description: "Help agents respond when a customer raises an objection",
     placeholders: {
       name: "e.g. Pricing objection",
       trigger:
@@ -704,6 +721,7 @@ export const GUIDANCE_TEMPLATES: GuidanceTemplateCatalogItem[] = [
   },
   {
     id: "competitor-comparison",
+    group: "when-it-comes-up",
     name: "Competitor comparison",
     description: "Surface talking points when another product is mentioned",
     placeholders: {
@@ -718,6 +736,7 @@ export const GUIDANCE_TEMPLATES: GuidanceTemplateCatalogItem[] = [
   },
   {
     id: "troubleshoot",
+    group: "when-it-comes-up",
     name: "Troubleshoot an issue",
     description: "Guide agents through common customer problems",
     placeholders: {
@@ -732,6 +751,7 @@ export const GUIDANCE_TEMPLATES: GuidanceTemplateCatalogItem[] = [
   },
   {
     id: "process-policy",
+    group: "when-it-comes-up",
     name: "Process or policy",
     description: "Remind agents about important steps or requirements",
     placeholders: {
@@ -744,11 +764,80 @@ export const GUIDANCE_TEMPLATES: GuidanceTemplateCatalogItem[] = [
       testInput: "I was charged twice last month. Can I get a refund?",
     },
   },
+  {
+    id: "discovery-missing",
+    group: "call-coverage",
+    name: "Discovery missing",
+    description: "Prompt the agent to explore the customer's needs before moving on",
+    placeholders: {
+      name: "e.g. Qualify the current setup",
+      trigger:
+        "e.g. When the agent starts pitching or proposing next steps before learning the customer's current setup and needs.",
+      suggestedResponse:
+        "Before I show a workflow — what does that cost you in a typical week? Missed leads, slow follow-up, or time the team spends chasing the same call?",
+      talkingPoint: "e.g. Quantify before you pitch",
+      testInput: "Let me walk you through how the product works.",
+    },
+  },
+  {
+    id: "compliance-missing",
+    group: "call-coverage",
+    name: "Compliance statement missing",
+    description: "Remind the agent to cover a required disclosure",
+    placeholders: {
+      name: "e.g. Recording disclosure",
+      trigger:
+        "e.g. When a required disclosure hasn't been mentioned yet, such as that the call is being recorded.",
+      suggestedResponse:
+        "Before we continue — this call may be recorded for quality and training. Is it alright if we keep going?",
+      talkingPoint: "e.g. State the disclosure before collecting details",
+      testInput: "Can I get your account number to look this up?",
+    },
+  },
+  {
+    id: "required-question-missing",
+    group: "call-coverage",
+    name: "Required question missing",
+    description: "Remind the agent to ask a question that must be covered",
+    placeholders: {
+      name: "e.g. Confirm account owner",
+      trigger:
+        "e.g. When a required qualifying question hasn't been asked yet.",
+      suggestedResponse:
+        "Before I make any changes — can you confirm you're the account owner, and the email on the account?",
+      talkingPoint: "e.g. Verify identity before account changes",
+      testInput: "I can update that for you right now.",
+    },
+  },
+  {
+    id: "required-step-missing",
+    group: "call-coverage",
+    name: "Required step missing",
+    description: "Remind the agent to complete a required step in the workflow",
+    placeholders: {
+      name: "e.g. Confirm next step before wrap",
+      trigger:
+        "e.g. When a required workflow step hasn't been covered yet, such as confirming the follow-up before ending the call.",
+      suggestedResponse:
+        "Before we wrap — let's lock the next step so nothing sits. I'll send the summary and we'll confirm a time with ops.",
+      talkingPoint: "e.g. Don't end without an agreed next step",
+      testInput: "Alright, I think that's everything.",
+    },
+  },
 ];
+
+export function guidanceTemplatesInGroup(
+  group: GuidanceTemplateGroup
+): GuidanceTemplateCatalogItem[] {
+  return GUIDANCE_TEMPLATES.filter((template) => template.group === group);
+}
 
 const GUIDANCE_TEMPLATE_STARTERS: Record<
   GuidanceTemplateId,
-  Pick<GuidanceItem, "name" | "trigger" | "examplePhrases" | "suggestedResponse" | "talkingPoints">
+  Pick<
+    GuidanceItem,
+    "name" | "trigger" | "examplePhrases" | "suggestedResponse" | "talkingPoints" | "triggeredBy"
+  >
 > = {
   "answer-question": {
     name: "",
@@ -834,6 +923,78 @@ const GUIDANCE_TEMPLATE_STARTERS: Record<
       "List required information or steps",
       "Set expectations for timing",
     ],
+  },
+  "discovery-missing": {
+    name: "Discovery missing",
+    trigger:
+      "When the agent starts pitching or proposing next steps before learning the customer's current setup and needs.",
+    examplePhrases: [
+      "Let me walk you through how the product works.",
+      "I can show you the plans we have.",
+      "The next step is a demo.",
+    ],
+    suggestedResponse:
+      "Before I show a workflow — what does that cost you in a typical week? Missed leads, slow follow-up, or time the team spends chasing the same call?",
+    talkingPoints: [
+      "Quantify before you pitch",
+      "Ask for a number — leads, hours, or revenue",
+      "Get who else feels it on the record",
+    ],
+    triggeredBy: "agent",
+  },
+  "compliance-missing": {
+    name: "Compliance statement missing",
+    trigger:
+      "When a required disclosure hasn't been mentioned yet — for example, that the call is being recorded, or that card details shouldn't be spoken aloud.",
+    examplePhrases: [
+      "Can I get your account number?",
+      "I'll take payment on this call.",
+      "Let me pull up the account.",
+    ],
+    suggestedResponse:
+      "Before we continue — this call may be recorded for quality and training. Is it alright if we keep going?",
+    talkingPoints: [
+      "State the disclosure before collecting details",
+      "Don't skip it even on a follow-up call",
+      "If details were already spoken, don't repeat them back",
+    ],
+    triggeredBy: "agent",
+  },
+  "required-question-missing": {
+    name: "Required question missing",
+    trigger:
+      "When a required qualifying question hasn't been asked yet — for example, confirming the caller is the account owner before making changes.",
+    examplePhrases: [
+      "I can update that for you right now.",
+      "Let me change the number on the account.",
+      "I'll go ahead and process that.",
+    ],
+    suggestedResponse:
+      "Before I make any changes — can you confirm you're the account owner, and the email on the account?",
+    talkingPoints: [
+      "Verify identity before account changes",
+      "Ask the required question in your own words",
+      "Don't proceed until you have the answer",
+    ],
+    triggeredBy: "agent",
+  },
+  "required-step-missing": {
+    name: "Required step missing",
+    trigger:
+      "When a required workflow step hasn't been covered yet — for example, confirming the follow-up before ending the call.",
+    examplePhrases: [
+      "Alright, I think that's everything.",
+      "I'll let you get back to it.",
+      "Sounds like we're all set.",
+    ],
+    suggestedResponse:
+      "Before we wrap — let's lock the next step so nothing sits. I'll send the summary and we'll confirm a time with ops.",
+    talkingPoints: [
+      "Don't end without an agreed next step",
+      "Confirm owner, time, and what success looks like",
+      "Send the recap while the conversation is fresh",
+    ],
+    triggeredBy: "agent",
   },
 };
 

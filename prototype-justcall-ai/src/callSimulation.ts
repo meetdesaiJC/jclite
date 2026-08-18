@@ -276,7 +276,7 @@ export const CALL_SCENARIOS: CallScenario[] = [
       { id: "script", label: "Script progression", atMs: 5500 },
       { id: "product-knowledge", label: "Product knowledge", atMs: 15000 },
       { id: "policy-knowledge", label: "Policy knowledge", atMs: 22000 },
-      { id: "objection", label: "Objection guidance", atMs: 32500 },
+      { id: "objection", label: "Aircall comparison", atMs: 32500 },
       { id: "talk-ratio", label: "Talk-ratio coaching", atMs: 39500 },
       { id: "discovery", label: "Discovery guidance", atMs: 46500 },
       { id: "interrupt", label: "Interruption coaching", atMs: 51000 },
@@ -288,7 +288,7 @@ export const CALL_SCENARIOS: CallScenario[] = [
       { id: "schedule", label: "Schedule meeting", atMs: 87500 },
       { id: "combined", label: "Knowledge + guidance", atMs: 95500 },
       { id: "priority", label: "Guidance + coaching", atMs: 99000 },
-      { id: "queue", label: "New while reading", atMs: 102000 },
+      { id: "queue", label: "Aircall again", atMs: 102000 },
       { id: "end", label: "End of call", atMs: 122000 },
       {
         id: "resolved",
@@ -438,12 +438,14 @@ export const CALL_SCENARIOS: CallScenario[] = [
         speaker: "agent",
         quote: "Got it. What's the tool stack on the team today?",
       },
-      // 5. Objection-handling guidance
+      // 5. Competitor named — Aircall battlecard is the card the agent reads.
+      // Status-quo queues underneath so two matching cards don't fight for the
+      // same expanded slot. Later "how are you different" re-activates this one.
       {
         atMs: 32500,
         speaker: "customer",
         quote: "We're pretty happy with Aircall actually. Not sure why we'd switch.",
-        guidanceIds: ["g-status-quo"],
+        guidanceIds: ["g-aircall", "g-status-quo"],
         skipActions: true,
       },
       {
@@ -519,14 +521,11 @@ export const CALL_SCENARIOS: CallScenario[] = [
         quote:
           "I'll send you a one-page comparison you can forward internally — calling, messaging, and CRM on one plan versus stacking add-ons.",
       },
-      // 12. Send/share action — review, then rest on the default card until wrap.
+      // 12. Send/share action — stay on the suggestion card until the agent
+      // reviews it. Auto-opening the form is noisy in a live demo.
       { atMs: 66500, actionId: "act-send-comparison" },
-      { atMs: 68500, actionId: "act-send-comparison", actionState: "reviewing" },
-      { atMs: 71000, actionId: "act-send-comparison", actionState: "suggested" },
-      // 13. CRM update — same: review, then default until wrap.
+      // 13. CRM update — same: suggestion only, until wrap.
       { atMs: 73500, actionId: "act-update-competitor" },
-      { atMs: 75500, actionId: "act-update-competitor", actionState: "reviewing" },
-      { atMs: 78000, actionId: "act-update-competitor", actionState: "suggested" },
       {
         atMs: 79500,
         speaker: "customer",
@@ -534,14 +533,10 @@ export const CALL_SCENARIOS: CallScenario[] = [
         skipKnowledge: true,
         skipActions: true,
       },
-      // 14. Create task — review, then default until wrap.
+      // 14. Create task — suggestion only, until wrap.
       { atMs: 80500, actionId: "act-followup-task" },
-      { atMs: 82500, actionId: "act-followup-task", actionState: "reviewing" },
-      { atMs: 85000, actionId: "act-followup-task", actionState: "suggested" },
-      // 15. Schedule meeting — reviewed, then left open so wrap-up still has work.
+      // 15. Schedule meeting — left as a suggestion so wrap-up still has work.
       { atMs: 87500, actionId: "act-schedule-meeting" },
-      { atMs: 89500, actionId: "act-schedule-meeting", actionState: "reviewing" },
-      { atMs: 92000, actionId: "act-schedule-meeting", actionState: "suggested" },
       { atMs: 94000, scriptIndex: 5 },
       // 16. Knowledge + guidance together
       {
@@ -552,13 +547,15 @@ export const CALL_SCENARIOS: CallScenario[] = [
         knowledgeQuery: "does justcall integrate with salesforce",
         skipActions: true,
       },
-      // 17. Guidance + coaching together — coaching is the interrupt, guidance stays
+      // 17. Guidance + coaching together — a different cue than talk-ratio so
+      // the stacked demo doesn't repeat the same card. Coaching is the interrupt;
+      // Salesforce guidance stays.
       {
         atMs: 99000,
-        coachingRuleId: "cr-overtalking",
-        coachingDetail: "You've spoken for 75% of the last 2 minutes.",
+        coachingRuleId: "cr-pace",
+        coachingDetail: "You're speaking faster than your usual pace.",
       },
-      // 18. New suggestion while the agent is still on an open card
+      // 18. Same competitor again — re-activates the Aircall card (Relevant again)
       {
         atMs: 102000,
         speaker: "customer",
@@ -597,7 +594,7 @@ export const CALL_SCENARIOS: CallScenario[] = [
       // 22. Five seconds after wrap: resolved coaching and sent/done actions.
       {
         atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS,
-        resolveCoachingIds: ["cr-overtalking", "cr-interruptions"],
+        resolveCoachingIds: ["cr-overtalking", "cr-interruptions", "cr-pace"],
       },
       {
         atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS + 200,

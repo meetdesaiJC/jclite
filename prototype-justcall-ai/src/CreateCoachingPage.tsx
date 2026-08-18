@@ -3,7 +3,7 @@ import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
 import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
-import { IconChevronDown, IconClose } from "@/components/Icon";
+import { IconClose } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import { useAgentAssistTakeover } from "./agentAssistTakeover";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
@@ -12,14 +12,16 @@ import { TEAM_MEMBERS, USER_GROUPS } from "./guidanceData";
 import {
   COACHING_REPEAT_OPTIONS,
   COACHING_TEMPLATE_GROUPS,
+  applyCoachingTrigger,
   coachingCardMessage,
   coachingFrequencyLabel,
   coachingOnRecommendedDetection,
-  coachingRecommendedLabel,
   coachingStartSentence,
   coachingTemplate,
   coachingTemplatesInGroup,
+  coachingTriggerOption,
   coachingTriggerSentence,
+  coachingWindowOptions,
   createCoachingRuleFromTemplate,
   restoreCoachingDetection,
   type CoachingFrequency,
@@ -30,16 +32,10 @@ import {
 import { CoachingCardFace, CoachingCueIcon, coachingTone } from "./coachingVisuals";
 
 /**
- * Live Coaching setup, template-first (§3). New coaching always starts from the
- * template gallery — grouped by the way admins describe the problem, each
- * carrying recommended thresholds — so the flow is pick, adjust, assign,
- * publish.
- *
- * Setup is meant to feel like switching a coaching behaviour on, not
- * configuring a rule engine: detection arrives already tuned by the template
- * and is read back as a sentence, so the only fields most admins touch are the
- * title and the audience. The signal itself is fixed by the template; the
- * thresholds behind it stay one disclosure away.
+ * Live Coaching setup, template-first. The picker shows coaching concepts
+ * (how the conversation is going), not detection variants. After a pick,
+ * recommended trigger values are pre-filled so the admin can adjust
+ * direction, threshold, duration, repeat, message, and audience.
  */
 
 export type CoachingStartChoice = { type: "template"; templateId: CoachingTemplateId };
@@ -58,8 +54,8 @@ export function CoachingTemplatesModal({
       open={open}
       onClose={onClose}
       size="md"
-      title="What should Agent Assist coach on?"
-      description="Live Coaching reacts to how the conversation is going, not what it's about. Pick a template — it arrives with recommended thresholds you can adjust."
+      title="Set up live coaching"
+      description="Choose the conversation behaviors you want Agent Assist to monitor and coach on during calls. Each option comes with recommended settings you can adjust."
     >
       <div className="flex flex-col gap-5">
         {COACHING_TEMPLATE_GROUPS.map((group) => (
@@ -90,9 +86,6 @@ export function CoachingTemplatesModal({
                       <span className="text-pretty text-paragraph-sm text-muted-foreground">
                         {template.description}
                       </span>
-                      <span className="text-pretty text-paragraph-sm text-muted-foreground">
-                        Recommended · {coachingRecommendedLabel(template)}
-                      </span>
                     </span>
                   </button>
                 </li>
@@ -122,12 +115,12 @@ export function CreateCoachingPage({
   const [draft, setDraft] = React.useState<CoachingRule>(initial);
   const [publishOpen, setPublishOpen] = React.useState(false);
   const template = coachingTemplate(draft.templateId);
+  const trigger = coachingTriggerOption(template, draft.triggerId);
+  const windowOptions = coachingWindowOptions(template, draft.triggerId);
+  const showDirection = template.triggers.length > 1;
+  const showThreshold = trigger.thresholdOptions.length > 1;
+  const showWindow = windowOptions.length > 1;
   const onDefaults = coachingOnRecommendedDetection(draft);
-  // Templates open closed; a rule already tuned away from its defaults opens
-  // expanded, so an edit never hides the settings that were changed.
-  const [detectionOpen, setDetectionOpen] = React.useState(
-    () => !coachingOnRecommendedDetection(initial)
-  );
 
   const patch = (partial: Partial<CoachingRule>) =>
     setDraft((current) => ({ ...current, ...partial }));
@@ -178,86 +171,67 @@ export function CreateCoachingPage({
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-auto pr-1">
           <SectionCard title="When to coach">
-            <div className="flex flex-col gap-1">
-              <Sentence segments={coachingTriggerSentence(draft)} />
-              <Sentence segments={coachingStartSentence(draft)} />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                aria-expanded={detectionOpen}
-                onClick={() => setDetectionOpen((current) => !current)}
-                className="inline-flex cursor-pointer items-center gap-1 rounded-[4px] text-label-md text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
-              >
-                Customize detection
-                <IconChevronDown
-                  size={16}
-                  className={cn("transition-transform", detectionOpen && "rotate-180")}
-                />
-              </button>
-              {onDefaults ? null : (
-                <Button
-                  variant="link"
-                  size="sm"
-                  onClick={() => setDraft((current) => restoreCoachingDetection(current))}
-                >
-                  Restore recommended
-                </Button>
-              )}
-            </div>
-
-            {detectionOpen ? (
-              <div className="grid grid-cols-2 gap-3 border-t border-line pt-4">
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-label-md text-foreground">Signal</span>
-                  <p className="flex h-9 items-center rounded-[4px] border border-line bg-secondary-bg px-3 text-paragraph-md text-foreground">
-                    {draft.metricLabel}
-                  </p>
-                </div>
+            <div className="grid grid-cols-2 gap-3">
+              {showDirection ? (
                 <Dropdown
-                  label={draft.comparator}
+                  label={template.triggerLabel}
                   searchable={false}
-                  options={toOptions(template.thresholdOptions)}
+                  options={template.triggers.map((item) => ({
+                    value: item.id,
+                    label: item.label,
+                  }))}
+                  value={draft.triggerId}
+                  onValueChange={(value) =>
+                    setDraft((current) =>
+                      applyCoachingTrigger(
+                        current,
+                        Array.isArray(value) ? value[0]! : value
+                      )
+                    )
+                  }
+                  triggerClassName="h-9"
+                />
+              ) : null}
+              {showThreshold ? (
+                <Dropdown
+                  label={template.thresholdLabel}
+                  searchable={false}
+                  options={toOptions(trigger.thresholdOptions)}
                   value={draft.threshold}
                   onValueChange={(value) =>
                     patch({ threshold: Array.isArray(value) ? value[0]! : value })
                   }
                   triggerClassName="h-9"
                 />
+              ) : null}
+              {showWindow ? (
                 <Dropdown
-                  label="Measurement window"
+                  label={template.windowLabel}
                   searchable={false}
-                  options={toOptions(template.windowOptions)}
+                  options={toOptions(windowOptions)}
                   value={draft.window}
                   onValueChange={(value) =>
                     patch({ window: Array.isArray(value) ? value[0]! : value })
                   }
                   triggerClassName="h-9"
                 />
-                <Dropdown
-                  label="Detection start time"
-                  searchable={false}
-                  options={toOptions(template.startAfterOptions)}
-                  value={draft.startAfter}
-                  onValueChange={(value) =>
-                    patch({ startAfter: Array.isArray(value) ? value[0]! : value })
-                  }
-                  triggerClassName="h-9"
-                />
-              </div>
-            ) : null}
-          </SectionCard>
+              ) : null}
+              <Dropdown
+                label="Start checking"
+                searchable={false}
+                options={toOptions(template.startAfterOptions)}
+                value={draft.startAfter}
+                onValueChange={(value) =>
+                  patch({ startAfter: Array.isArray(value) ? value[0]! : value })
+                }
+                triggerClassName="h-9"
+              />
+            </div>
 
-          <SectionCard title="What the agent sees">
-            <InputField
-              label="Title"
-              placeholder={template.message}
-              value={draft.message}
-              onChange={(event) => patch({ message: event.target.value })}
-              clearable={false}
-            />
-            <CoachingPreview rule={draft} caption={false} />
+            <div className="flex flex-col gap-1">
+              <Sentence segments={coachingTriggerSentence(draft)} />
+              <Sentence segments={coachingStartSentence(draft)} />
+            </div>
 
             <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
               <span className="text-label-md text-foreground">Repeat coaching</span>
@@ -290,7 +264,27 @@ export function CreateCoachingPage({
                   <span className="text-paragraph-md text-muted-foreground">minutes</span>
                 </div>
               ) : null}
+              {onDefaults ? null : (
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => setDraft((current) => restoreCoachingDetection(current))}
+                >
+                  Restore recommended
+                </Button>
+              )}
             </div>
+          </SectionCard>
+
+          <SectionCard title="What the agent sees">
+            <InputField
+              label="Coaching message"
+              placeholder={trigger.message}
+              value={draft.message}
+              onChange={(event) => patch({ message: event.target.value })}
+              clearable={false}
+            />
+            <CoachingPreview rule={draft} caption={false} />
           </SectionCard>
         </div>
       </div>
