@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Alert } from "@/components/Alert";
 import { Button } from "@/components/Button";
 import { IconChevronDown, IconClose, IconSparkles } from "@/components/Icon";
+import { useDropdownPresence } from "@/components/Dropdown";
 import { cn } from "@/lib/utils";
 import { HeaderEditableTitle } from "./HeaderEditableTitle";
 import {
@@ -613,6 +614,8 @@ function ScriptWordingField({
   onReplace: () => void;
   onCancelDraft: () => void;
 }) {
+  const menuPresence = useDropdownPresence(menuOpen && !preview);
+
   return (
     <div
       className={cn(
@@ -690,11 +693,12 @@ function ScriptWordingField({
         </button>
       ) : null}
 
-      {menuOpen && !preview ? (
+      {menuPresence.mounted ? (
         <AiImprovePopover
           anchorRef={sparklesRef}
           customOpen={customOpen}
           selection={frozenSelection}
+          panelState={menuPresence.state}
           onClose={onCloseMenu}
           onRequestCustom={onRequestCustom}
           onBackFromCustom={onBackFromCustom}
@@ -817,6 +821,7 @@ function AiSuggestionActions({
   onToneChange: (tone: WordingTone) => void;
 }) {
   const [toneOpen, setToneOpen] = React.useState(false);
+  const { mounted: toneMounted, state: toneState } = useDropdownPresence(toneOpen);
   const toneRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -864,12 +869,17 @@ function AiSuggestionActions({
           className={cn(actionClass, "inline-flex items-center gap-0.5 text-muted-foreground hover:text-foreground")}
         >
           Tone
-          <IconChevronDown size={14} />
+          <IconChevronDown
+            size={14}
+            className="dropdown-chevron"
+            data-open={toneOpen ? "true" : "false"}
+          />
         </button>
-        {toneOpen ? (
+        {toneMounted ? (
           <ul
             role="listbox"
-            className="absolute bottom-full left-0 z-30 mb-1 min-w-[148px] overflow-hidden rounded-[6px] border border-line bg-white py-1 shadow-200"
+            data-state={toneState}
+            className="dropdown-panel absolute bottom-full left-0 z-30 mb-1 min-w-[148px] overflow-hidden rounded-[6px] border border-line bg-white py-1 shadow-200"
           >
             {WORDING_TONES.map((option) => (
               <li key={option.value} role="none">
@@ -882,7 +892,7 @@ function AiSuggestionActions({
                     if (option.value !== tone) onToneChange(option.value);
                   }}
                   className={cn(
-                    "flex w-full px-3 py-1.5 text-left text-paragraph-sm text-foreground hover:bg-secondary-bg",
+                    "dropdown-item flex w-full px-3 py-1.5 text-left text-paragraph-sm text-foreground hover:bg-secondary-bg",
                     option.value === tone && "bg-brand-subtle"
                   )}
                 >
@@ -901,6 +911,7 @@ function AiImprovePopover({
   anchorRef,
   customOpen,
   selection,
+  panelState,
   onClose,
   onRequestCustom,
   onBackFromCustom,
@@ -909,6 +920,7 @@ function AiImprovePopover({
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   customOpen: boolean;
   selection: TextRange | null;
+  panelState: "open" | "closed";
   onClose: () => void;
   onRequestCustom: () => void;
   onBackFromCustom: () => void;
@@ -981,7 +993,8 @@ function AiImprovePopover({
       ref={panelRef}
       role="menu"
       aria-label="Improve with AI"
-      className="ai-improve-popover z-50 overflow-hidden rounded-[8px] border border-line bg-white py-1 shadow-200"
+      data-state={panelState}
+      className="dropdown-panel ai-improve-popover z-50 overflow-hidden rounded-[8px] border border-line bg-white py-1 shadow-200"
       style={{
         position: "fixed",
         top: pos.top,
@@ -1038,7 +1051,7 @@ function AiImprovePopover({
                 }
                 runAction(action.value, action.tone);
               }}
-              className="flex w-full px-3 py-1.5 text-left text-paragraph-sm text-foreground hover:bg-secondary-bg focus-visible:bg-secondary-bg focus-visible:outline-none"
+              className="dropdown-item flex w-full px-3 py-1.5 text-left text-paragraph-sm text-foreground hover:bg-secondary-bg focus-visible:bg-secondary-bg focus-visible:outline-none"
             >
               {action.label}
             </button>

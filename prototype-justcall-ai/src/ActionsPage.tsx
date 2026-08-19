@@ -1,11 +1,21 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
+import { Checkbox } from "@/components/Checkbox";
 import { Modal } from "@/components/Modal";
-import { Dropdown } from "@/components/Dropdown";
+import { Dropdown, useDropdownPresence } from "@/components/Dropdown";
 import { InputField } from "@/components/InputField";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
-import { IconCopy, IconFilter, IconPencil, IconSearch } from "@/components/Icon";
+import {
+  IconCopy,
+  IconDotsVertical,
+  IconEye,
+  IconFilter,
+  IconPencil,
+  IconSearch,
+  IconTeamManagement,
+} from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import {
   Table,
@@ -22,16 +32,17 @@ import {
   AdminPageHeader,
   IconTrash,
   StatusToggle,
-  TableSelectCell,
-  TableSelectHead,
 } from "./AgentAssistAdmin";
 import { AssignmentAvatarStack } from "./AssignmentAvatarStack";
+import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
 import { CreateActionPage } from "./CreateActionPage";
 import { IconAaActions } from "./icons/AgentAssistNavIcons";
 import { IntegrationLogo, IntegrationName } from "./icons/IntegrationLogos";
+import { ActionInCallPreview } from "./InCallActionCard";
 import { TEAM_MEMBERS, USER_GROUPS } from "./guidanceData";
 import {
   actionAssignees,
+  actionIsAssigned,
   actionLibraryStatus,
   cloneAction,
   createEmptyAction,
@@ -72,13 +83,14 @@ export function ActionsPage({
   const [statusFilter, setStatusFilter] = React.useState<string[]>([]);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(25);
+  const [selected, setSelected] = React.useState<string[]>([]);
   const [launch, setLaunch] = React.useState<{
     mode: "create" | "edit";
     item: AgentAction;
   } | null>(null);
-  const [deleteTarget, setDeleteTarget] = React.useState<AgentAction | null>(null);
-  const [selected, setSelected] = React.useState<string[]>([]);
-  const [bulkDeleting, setBulkDeleting] = React.useState(false);
+  const [deleting, setDeleting] = React.useState<AgentAction[] | null>(null);
+  const [previewTarget, setPreviewTarget] = React.useState<AgentAction | null>(null);
+  const [assignTarget, setAssignTarget] = React.useState<AgentAction | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
 
   const query = search.trim().toLowerCase();
@@ -126,22 +138,23 @@ export function ActionsPage({
   const currentPage = Math.min(page, pageCount);
   const start = (currentPage - 1) * pageSize;
   const visible = filtered.slice(start, start + pageSize);
-  // Header checkbox and bulk bar act on the page in front of the admin.
   const visibleIds = visible.map((row) => row.id);
   const selectedVisible = selected.filter((id) => visibleIds.includes(id));
   const allSelected =
     visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
-  const selection: ActionSelection = {
-    selectedIds: selected,
-    allSelected,
-    someSelected: selectedVisible.length > 0 && !allSelected,
-    onToggleAll: () => setSelected(allSelected ? [] : visibleIds),
-    onToggleRow: (id) =>
-      setSelected((current) =>
-        current.includes(id)
-          ? current.filter((value) => value !== id)
-          : [...current, id]
-      ),
+  const someSelected = selectedVisible.length > 0 && !allSelected;
+  const selectedVisibleRows = actions.filter((row) =>
+    selectedVisible.includes(row.id)
+  );
+
+  const toggleAll = () => {
+    setSelected(allSelected ? [] : visibleIds);
+  };
+
+  const toggleRow = (id: string) => {
+    setSelected((current) =>
+      current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
+    );
   };
 
   const createAction = () =>
@@ -158,9 +171,10 @@ export function ActionsPage({
     setToast(exists ? "Action saved" : "Action created");
   };
 
-  const deleteActions = (ids: string[]) => {
+  const removeActions = (ids: string[]) => {
     onActionsChange(actions.filter((row) => !ids.includes(row.id)));
     setSelected((current) => current.filter((id) => !ids.includes(id)));
+    setDeleting(null);
   };
 
   const connectIntegration = (id: IntegrationId) => {
@@ -173,14 +187,26 @@ export function ActionsPage({
     if (integration) setToast(`${integration.name} connected`);
   };
 
-  const confirmDelete = (item: AgentAction) => {
-    deleteActions([item.id]);
-    setDeleteTarget(null);
+  const confirmDelete = (items: AgentAction[]) => {
+    removeActions(items.map((item) => item.id));
   };
 
-  const confirmBulkDelete = () => {
-    deleteActions(selectedVisible);
-    setBulkDeleting(false);
+  const assignAction = (row: AgentAction, members: string[], groups: string[]) => {
+    onActionsChange(
+      actions.map((item) => {
+        if (item.id !== row.id) return item;
+        const next: AgentAction = {
+          ...item,
+          teamMembers: members,
+          userGroups: groups,
+          audience: members.length > 0 ? "users" : groups.length > 0 ? "teams" : item.audience,
+          updated: "Just now",
+        };
+        return !actionIsAssigned(next) && next.status === "active"
+          ? { ...next, status: "inactive" as const }
+          : next;
+      })
+    );
   };
 
   React.useEffect(() => {
@@ -363,9 +389,15 @@ export function ActionsPage({
               <div className="min-h-0 flex-1 overflow-auto">
                 <ActionsTable
                   rows={visible}
-                  selection={selection}
                   integrations={integrations}
+                  selectedIds={selected}
+                  allSelected={allSelected}
+                  someSelected={someSelected}
+                  onToggleAll={toggleAll}
+                  onToggleRow={toggleRow}
                   onEdit={(row) => setLaunch({ mode: "edit", item: row })}
+                  onPreview={setPreviewTarget}
+                  onAssign={setAssignTarget}
                   onDuplicate={(row) =>
                     onActionsChange([cloneAction(row), ...actions])
                   }
@@ -384,7 +416,7 @@ export function ActionsPage({
                     )
                   }
                   onConnectIntegration={connectIntegration}
-                  onDelete={setDeleteTarget}
+                  onDelete={(row) => setDeleting([row])}
                 />
               </div>
               <div className="shrink-0 border-t border-line">
@@ -409,7 +441,7 @@ export function ActionsPage({
                   variant="grey-outline"
                   size="sm"
                   className="bg-white"
-                  onClick={() => setBulkDeleting(true)}
+                  onClick={() => setDeleting(selectedVisibleRows)}
                 >
                   Delete
                 </Button>
@@ -419,58 +451,62 @@ export function ActionsPage({
         </>
       )}
 
-      {deleteTarget ? (
+      {previewTarget ? (
         <Modal
           open
-          onClose={() => setDeleteTarget(null)}
+          onClose={() => setPreviewTarget(null)}
+          size="md"
+          title="Preview"
+          description="What the agent would see during a call"
+        >
+          <ActionInCallPreview
+            key={previewTarget.id}
+            action={previewTarget}
+            integrations={integrations}
+          />
+        </Modal>
+      ) : null}
+
+      {assignTarget ? (
+        <AssignActionModal
+          key={assignTarget.id}
+          action={assignTarget}
+          onClose={() => setAssignTarget(null)}
+          onSave={(members, groups) => {
+            assignAction(assignTarget, members, groups);
+            setAssignTarget(null);
+          }}
+        />
+      ) : null}
+
+      {deleting && deleting.length > 0 ? (
+        <Modal
+          open
+          onClose={() => setDeleting(null)}
           size="sm"
-          title={`Delete “${deleteTarget.name}”?`}
-          description="This Action will no longer be available to agents."
+          title={
+            deleting.length === 1 ? `Delete “${deleting[0]!.name}”?` : "Delete actions"
+          }
+          description={
+            deleting.length === 1
+              ? "This Action will no longer be available to agents."
+              : `${deleting.length} actions will no longer be available to agents.`
+          }
           footer={
             <>
               <Button
                 variant="grey-outline"
                 size="sm"
-                onClick={() => setDeleteTarget(null)}
+                onClick={() => setDeleting(null)}
               >
                 Cancel
               </Button>
               <Button
                 variant="error"
                 size="sm"
-                onClick={() => confirmDelete(deleteTarget)}
+                onClick={() => confirmDelete(deleting)}
               >
-                Delete Action
-              </Button>
-            </>
-          }
-        />
-      ) : null}
-
-      {bulkDeleting && selectedVisible.length > 0 ? (
-        <Modal
-          open
-          onClose={() => setBulkDeleting(false)}
-          size="sm"
-          title={
-            selectedVisible.length === 1 ? "Delete action" : "Delete actions"
-          }
-          description={
-            selectedVisible.length === 1
-              ? "This action will be removed from Agent Assist."
-              : `${selectedVisible.length} actions will be removed from Agent Assist.`
-          }
-          footer={
-            <>
-              <Button
-                variant="grey-outline"
-                size="sm"
-                onClick={() => setBulkDeleting(false)}
-              >
-                Cancel
-              </Button>
-              <Button variant="error" size="sm" onClick={confirmBulkDelete}>
-                Delete
+                {deleting.length === 1 ? "Delete Action" : "Delete"}
               </Button>
             </>
           }
@@ -515,19 +551,144 @@ function ActionsEmptyState({ onAction }: { onAction: () => void }) {
   );
 }
 
+interface ActionMenuItem {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  onSelect?: () => void;
+  destructive?: boolean;
+}
+
 /**
- * Actions rows only carry three commands, so they all sit upfront as a
- * segmented group instead of hiding behind a kebab.
+ * Kebab menu for secondary row actions. The list body scrolls and clips,
+ * so the popover renders in a portal and tracks the trigger.
  */
+function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }) {
+  const [open, setOpen] = React.useState(false);
+  const { mounted, state } = useDropdownPresence(open);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useLayoutEffect(() => {
+    if (!mounted) return;
+    const update = () => {
+      const trigger = triggerRef.current;
+      const menu = menuRef.current;
+      if (!trigger || !menu) return;
+      const rect = trigger.getBoundingClientRect();
+      const { offsetWidth: width, offsetHeight: height } = menu;
+      const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+      const below = rect.bottom + 4;
+      const top = below + height > window.innerHeight - 8 ? rect.top - height - 4 : below;
+      menu.style.top = `${top}px`;
+      menu.style.left = `${left}px`;
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [mounted]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <TooltipTrigger
+        placement="bottom"
+        disabled={open}
+        content={<Tooltip theme="dark" arrow="top-center" title="More actions" />}
+      >
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={label}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+          className={cn(
+            "flex size-9 items-center justify-center rounded-r-[4px] border border-line bg-white text-foreground hover:bg-secondary-bg",
+            open && "bg-secondary-bg"
+          )}
+        >
+          <IconDotsVertical size={20} />
+        </button>
+      </TooltipTrigger>
+      {mounted && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="menu"
+              aria-label={label}
+              data-state={state}
+              className="dropdown-panel fixed z-[100] min-w-[180px] rounded-[6px] border border-line bg-white py-1 shadow-400"
+              style={{ top: 0, left: 0 }}
+            >
+              {items.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    item.onSelect?.();
+                  }}
+                  className={cn(
+                    "dropdown-item flex w-full items-center gap-2 px-3 py-2 text-left text-paragraph-md",
+                    item.destructive
+                      ? "text-error hover:bg-error-subtle"
+                      : "text-foreground hover:bg-secondary-bg"
+                  )}
+                >
+                  <span className="flex size-4 shrink-0 items-center justify-center">
+                    {item.icon}
+                  </span>
+                  {item.label}
+                </button>
+              ))}
+            </div>,
+            document.body
+          )
+        : null}
+    </>
+  );
+}
+
+/** Same row chrome as Scripts, Response Cards, and Live Coaching. */
 function ActionRowButtons({
   name,
   onEdit,
+  onPreview,
   onDuplicate,
+  onAssign,
   onDelete,
 }: {
   name: string;
   onEdit: () => void;
+  onPreview: () => void;
   onDuplicate: () => void;
+  onAssign: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -547,41 +708,94 @@ function ActionRowButtons({
       </TooltipTrigger>
       <TooltipTrigger
         placement="bottom"
-        content={<Tooltip theme="dark" arrow="top-center" title="Duplicate" />}
+        content={<Tooltip theme="dark" arrow="top-center" title="Preview" />}
       >
         <button
           type="button"
-          aria-label={`Duplicate ${name}`}
-          onClick={onDuplicate}
+          aria-label={`Preview ${name}`}
+          onClick={onPreview}
           className="-mr-px flex size-9 items-center justify-center border border-line bg-white text-foreground hover:bg-secondary-bg"
         >
-          <IconCopy size={20} />
+          <IconEye size={20} />
         </button>
       </TooltipTrigger>
-      <TooltipTrigger
-        placement="bottom"
-        content={<Tooltip theme="dark" arrow="top-center" title="Delete" />}
-      >
-        <button
-          type="button"
-          aria-label={`Delete ${name}`}
-          onClick={onDelete}
-          className="flex size-9 items-center justify-center rounded-r-[4px] border border-line bg-white text-foreground hover:bg-error-subtle hover:text-error"
-        >
-          <IconTrash size={20} />
-        </button>
-      </TooltipTrigger>
+      <ActionMenu
+        label={`More actions for ${name}`}
+        items={[
+          {
+            key: "duplicate",
+            label: "Duplicate",
+            icon: <IconCopy size={16} />,
+            onSelect: onDuplicate,
+          },
+          {
+            key: "assign",
+            label: "Assign",
+            icon: <IconTeamManagement size={16} />,
+            onSelect: onAssign,
+          },
+          {
+            key: "delete",
+            label: "Delete",
+            icon: <IconTrash size={16} />,
+            onSelect: onDelete,
+            destructive: true,
+          },
+        ]}
+      />
     </div>
   );
 }
 
-/** Multi-select state for the list, owned by the page. */
-interface ActionSelection {
-  selectedIds: string[];
-  allSelected: boolean;
-  someSelected: boolean;
-  onToggleAll: () => void;
-  onToggleRow: (id: string) => void;
+function AssignActionModal({
+  action,
+  onClose,
+  onSave,
+}: {
+  action: AgentAction;
+  onClose: () => void;
+  onSave: (members: string[], groups: string[]) => void;
+}) {
+  const [selectedMembers, setSelectedMembers] = React.useState(action.teamMembers);
+  const [selectedGroups, setSelectedGroups] = React.useState(action.userGroups);
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      className="overflow-visible"
+      bodyClassName="overflow-visible"
+      title="Assign"
+      description="Choose who sees this action on their calls."
+      footer={
+        <>
+          <Button variant="grey-outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={() => onSave(selectedMembers, selectedGroups)}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <dl className="flex flex-col gap-3">
+        <div>
+          <dt className="text-label-sm text-muted-foreground">Action</dt>
+          <dd className="text-paragraph-md text-foreground">{action.name}</dd>
+        </div>
+        <AssignTeamAndGroups
+          variant="summary"
+          members={TEAM_MEMBERS}
+          groups={USER_GROUPS}
+          selectedMembers={selectedMembers}
+          selectedGroups={selectedGroups}
+          onMembersChange={setSelectedMembers}
+          onGroupsChange={setSelectedGroups}
+        />
+      </dl>
+    </Modal>
+  );
 }
 
 function ActionStatusToggle({
@@ -602,7 +816,7 @@ function ActionStatusToggle({
   const disconnected = Boolean(blocked && integration && !integration.connected);
   // Same rule as response cards and live coaching: nothing goes live until
   // someone is assigned to it.
-  const unassigned = status !== "active" && actionAssignees(row).length === 0;
+  const unassigned = status !== "active" && !actionIsAssigned(row);
 
   return (
     <StatusToggle
@@ -636,19 +850,31 @@ function ActionStatusToggle({
 
 function ActionsTable({
   rows,
-  selection,
   integrations,
+  selectedIds,
+  allSelected,
+  someSelected,
+  onToggleAll,
+  onToggleRow,
   onEdit,
+  onPreview,
   onDuplicate,
+  onAssign,
   onToggleStatus,
   onConnectIntegration,
   onDelete,
 }: {
   rows: AgentAction[];
-  selection: ActionSelection;
   integrations: Integration[];
+  selectedIds: string[];
+  allSelected: boolean;
+  someSelected: boolean;
+  onToggleAll: () => void;
+  onToggleRow: (id: string) => void;
   onEdit: (row: AgentAction) => void;
+  onPreview: (row: AgentAction) => void;
   onDuplicate: (row: AgentAction) => void;
+  onAssign: (row: AgentAction) => void;
   onToggleStatus: (row: AgentAction) => void;
   onConnectIntegration: (id: IntegrationId) => void;
   onDelete: (row: AgentAction) => void;
@@ -657,36 +883,42 @@ function ActionsTable({
     <Table className="table-fixed">
       <TableHeader className="[&_tr]:border-b-0">
         <TableRow>
-          <TableSelectHead
-            allSelected={selection.allSelected}
-            someSelected={selection.someSelected}
-            onToggleAll={selection.onToggleAll}
-            label="Select all actions"
-          />
+          <TableHead className="sticky top-0 z-10 w-11">
+            <Checkbox
+              size="sm"
+              checked={allSelected}
+              indeterminate={someSelected}
+              onCheckedChange={onToggleAll}
+              aria-label="Select all actions"
+            />
+          </TableHead>
           <TableHead className="sticky top-0 z-10 w-[220px]">Action</TableHead>
           <TableHead className="sticky top-0 z-10 w-[160px]">Integration</TableHead>
           <TableHead className="sticky top-0 z-10 w-[150px]">Assigned to</TableHead>
           <TableHead className="sticky top-0 z-10 w-[140px]">Status</TableHead>
           <TableHead className="sticky top-0 z-10 w-[120px]">Last updated</TableHead>
-          <TableHead className="sticky top-0 z-10 w-[148px] text-center"> </TableHead>
+          <TableHead className="sticky top-0 z-10 w-[148px] text-center">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {rows.map((row) => {
           const status = actionLibraryStatus(row, integrations);
           const people = actionAssignees(row);
-          const isSelected = selection.selectedIds.includes(row.id);
+          const isSelected = selectedIds.includes(row.id);
           return (
             <TableRow
               key={row.id}
               state={isSelected ? "selected" : "default"}
               className="border-b-0"
             >
-              <TableSelectCell
-                checked={isSelected}
-                onToggle={() => selection.onToggleRow(row.id)}
-                label={`Select ${row.name}`}
-              />
+              <TableCell className="w-11">
+                <Checkbox
+                  size="sm"
+                  checked={isSelected}
+                  onCheckedChange={() => onToggleRow(row.id)}
+                  aria-label={`Select ${row.name}`}
+                />
+              </TableCell>
               <TableCell>
                 <button
                   type="button"
@@ -706,7 +938,11 @@ function ActionsTable({
                 />
               </TableCell>
               <TableCell>
-                <AssignmentAvatarStack people={people} />
+                {row.audience === "everyone" ? (
+                  <TableCellText primary="Everyone" />
+                ) : (
+                  <AssignmentAvatarStack people={people} />
+                )}
               </TableCell>
               <TableCell>
                 <ActionStatusToggle
@@ -722,7 +958,9 @@ function ActionsTable({
                 <ActionRowButtons
                   name={row.name}
                   onEdit={() => onEdit(row)}
+                  onPreview={() => onPreview(row)}
                   onDuplicate={() => onDuplicate(row)}
+                  onAssign={() => onAssign(row)}
                   onDelete={() => onDelete(row)}
                 />
               </TableCell>

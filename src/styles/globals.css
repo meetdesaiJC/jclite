@@ -436,6 +436,108 @@ input[type="radio"]:not(:disabled) {
 }
 
 /* ================================================================== */
+/* DROPDOWN MOTION                                                     */
+/* Open/close, chevron, item hover, and selected-check. Used by the    */
+/* Dropdown component and any overlay menu that adds these classes.    */
+/* Keep CLOSE 120ms in sync with DROPDOWN_CLOSE_MS in                  */
+/* useDropdownPresence.ts — the panel stays mounted that long so the   */
+/* exit animation can finish. Overlay only: never in document flow.    */
+/* ================================================================== */
+@keyframes dropdown-open {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dropdown-close {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes dropdown-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dropdown-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dropdown-check-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dropdown-panel[data-state="open"] {
+  animation: dropdown-open 160ms ease-out both;
+}
+
+.dropdown-panel[data-state="closed"] {
+  animation: dropdown-close 120ms ease-in both;
+  pointer-events: none;
+}
+
+.dropdown-chevron {
+  display: inline-flex;
+  transform: rotate(0deg);
+  transition: transform 160ms ease-out;
+}
+
+.dropdown-chevron[data-open="true"] {
+  transform: rotate(180deg);
+}
+
+.dropdown-item {
+  transition: background-color 80ms ease-out;
+}
+
+.dropdown-item[aria-selected="true"] {
+  transition-duration: 120ms;
+}
+
+.dropdown-check {
+  animation: dropdown-check-in 120ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropdown-panel[data-state="open"] {
+    animation-name: dropdown-fade-in;
+  }
+
+  .dropdown-panel[data-state="closed"] {
+    animation-name: dropdown-fade-out;
+  }
+
+  .dropdown-chevron {
+    transition: none;
+  }
+}
+
+/* ================================================================== */
 /* SIDENAV NAV-BODY SWAP (JustCall AI micro-interaction)               */
 /* Logo + footer stay fixed. Only the scrollable nav body moves.       */
 /* Exit: 150ms ease-in ~20px. Enter: 200ms ease-out ~20px.             */

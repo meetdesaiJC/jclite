@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { Checkbox } from "@/components/Checkbox";
-import { Dropdown } from "@/components/Dropdown";
+import { Dropdown, useDropdownPresence } from "@/components/Dropdown";
 import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
 import { Radio } from "@/components/Radio";
@@ -382,7 +382,7 @@ export function KnowledgePage({
                       <TableHead className="sticky top-0 z-10">Knowledge Base</TableHead>
                       <TableHead className="sticky top-0 z-10 w-[132px]">Status</TableHead>
                       <TableHead className="sticky top-0 z-10 w-[160px]">
-                        Assigned Agents
+                        Assigned to
                       </TableHead>
                       <TableHead className="sticky top-0 z-10 w-[150px]">
                         Last Updated
@@ -774,11 +774,12 @@ interface ActionMenuItem {
 
 function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }) {
   const [open, setOpen] = React.useState(false);
+  const { mounted, state } = useDropdownPresence(open);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
   React.useLayoutEffect(() => {
-    if (!open) return;
+    if (!mounted) return;
     const update = () => {
       const trigger = triggerRef.current;
       const menu = menuRef.current;
@@ -802,7 +803,7 @@ function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }
       window.removeEventListener("scroll", update, true);
       window.removeEventListener("resize", update);
     };
-  }, [open]);
+  }, [mounted]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -849,13 +850,14 @@ function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }
           <IconDotsVertical size={20} />
         </button>
       </TooltipTrigger>
-      {open && typeof document !== "undefined"
+      {mounted && typeof document !== "undefined"
         ? createPortal(
             <div
               ref={menuRef}
               role="menu"
               aria-label={label}
-              className="fixed z-[100] min-w-[180px] rounded-[6px] border border-line bg-white py-1 shadow-400"
+              data-state={state}
+              className="dropdown-panel fixed z-[100] min-w-[180px] rounded-[6px] border border-line bg-white py-1 shadow-400"
               style={{ top: 0, left: 0 }}
             >
               {items.map((item) => (
@@ -868,7 +870,7 @@ function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }
                     item.onSelect?.();
                   }}
                   className={cn(
-                    "flex w-full items-center gap-2 px-3 py-2 text-left text-paragraph-md",
+                    "dropdown-item flex w-full items-center gap-2 px-3 py-2 text-left text-paragraph-md",
                     item.destructive
                       ? "text-error hover:bg-error-subtle"
                       : "text-foreground hover:bg-secondary-bg"

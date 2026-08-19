@@ -3,29 +3,40 @@ import { Banner } from "@/components/Banner";
 import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
 import { InputField } from "@/components/InputField";
+import { Modal } from "@/components/Modal";
 import { Radio } from "@/components/Radio";
 import { Toggle } from "@/components/Toggle";
-import { IconChevronRight, IconClose } from "@/components/Icon";
+import { IconChevronRight, IconClose, IconFile } from "@/components/Icon";
+import { cn } from "@/lib/utils";
 import { useAgentAssistTakeover } from "./agentAssistTakeover";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
 import { TEAM_MEMBERS, USER_GROUPS } from "./guidanceData";
-import { InCallActionSuggestionCard } from "./InCallActionCard";
+import { ActionInCallPreview } from "./InCallActionCard";
 import {
   ACTION_OBJECT_OPTIONS,
   ACTION_PROPERTY_OPTIONS,
+  EMAIL_ATTACHMENT_PRESETS,
+  EMAIL_CRM_FIELD_OPTIONS,
+  EMAIL_RECIPIENT_OPTIONS,
+  EMAIL_TEMPLATE_VARIABLES,
   VALUE_SOURCE_OPTIONS,
   capabilityById,
   capabilityNeedsRecord,
+  createDefaultEmailConfig,
   createEmptyAction,
   defaultExtractPrompt,
   defaultPropertyForCapability,
+  emailConfigReady,
   integrationById,
+  isSendEmailCapability,
   operationsForIntegration,
-  previewExtractedValue,
   suggestedAgentLabel,
   suggestedInternalName,
   type ActionValueSource,
   type AgentAction,
+  type EmailActionConfig,
+  type EmailAttachment,
+  type EmailRecipientKind,
   type Integration,
   type IntegrationId,
 } from "./actionsData";
@@ -69,7 +80,6 @@ export function CreateActionPage({
       initial?.value.kind === "from_conversation" &&
       Boolean(initial.value.extractPrompt)
   );
-  const [examplesOpen, setExamplesOpen] = React.useState(false);
   const [thenPickerOpen, setThenPickerOpen] = React.useState(
     () => !initial?.capabilityId
   );
@@ -105,9 +115,11 @@ export function CreateActionPage({
       ? ACTION_OBJECT_OPTIONS.filter((item) => objects.includes(item.value))
       : ACTION_OBJECT_OPTIONS;
   const needsRecord = capabilityNeedsRecord(capability);
+  const isEmail = isSendEmailCapability(capability);
 
-  const valueReady =
-    draft.value.kind === "fixed"
+  const valueReady = isEmail
+    ? emailConfigReady(draft.email)
+    : draft.value.kind === "fixed"
       ? draft.value.value.trim().length > 0
       : draft.value.extractPrompt.trim().length > 0;
 
@@ -119,12 +131,19 @@ export function CreateActionPage({
     Boolean(draft.capabilityId) &&
     Boolean(integration?.connected) &&
     valueReady &&
-    (!needsRecord || (Boolean(draft.object) && Boolean(draft.property))) &&
-    draft.detectWhen.trim().length > 0;
+    (!needsRecord || (Boolean(draft.object) && Boolean(draft.property)));
+
+  const patchEmail = (partial: Partial<EmailActionConfig>) =>
+    setDraft((current) =>
+      withGenerated(current, {
+        email: { ...(current.email ?? createDefaultEmailConfig()), ...partial },
+      })
+    );
 
   const selectOperation = (integrationId: IntegrationId, capabilityId: string) => {
     const next = capabilityById(integrations, integrationId, capabilityId);
-    const defaultObject = next?.objects?.[0] ?? "";
+    const sendingEmail = isSendEmailCapability(next);
+    const defaultObject = sendingEmail ? "Contact" : (next?.objects?.[0] ?? "");
     const defaultProperty = capabilityNeedsRecord(next)
       ? draft.integrationId === integrationId
         ? draft.property
@@ -142,8 +161,10 @@ export function CreateActionPage({
       integrationId,
       capabilityId,
       object: defaultObject,
-      property: defaultProperty,
+      property: sendingEmail ? "" : defaultProperty,
       value: nextValue,
+      email: sendingEmail ? (draft.email ?? createDefaultEmailConfig()) : draft.email,
+      requiresConfirmation: sendingEmail ? true : draft.requiresConfirmation,
     });
     setThenPickerOpen(false);
   };
@@ -196,6 +217,12 @@ export function CreateActionPage({
       trigger: "ai_recommended",
       detectWhen: draft.detectWhen.trim(),
       detectExamples: draft.detectExamples.filter((item) => item.trim()),
+      audience:
+        draft.teamMembers.length > 0
+          ? "users"
+          : draft.userGroups.length > 0
+            ? "teams"
+            : "users",
       // An unassigned action has nobody to show it to, so it saves inactive —
       // the same way an unassigned response card stays a draft.
       status:
@@ -208,8 +235,6 @@ export function CreateActionPage({
     if (!canSave) return;
     onSave(published());
   };
-
-  const extractedPreview = previewExtractedValue(draft);
 
   return (
     <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
@@ -270,54 +295,6 @@ export function CreateActionPage({
 
             <section className="flex flex-col gap-4">
               <header className="flex flex-col gap-1">
-                <SectionKicker>When</SectionKicker>
-                <h2 className="text-label-md-semi text-foreground">
-                  When should this action be available?
-                </h2>
-                <p className="text-pretty text-paragraph-sm text-muted-foreground">
-                  AI detects a relevant moment in the conversation and recommends
-                  the Action.
-                </p>
-              </header>
-
-              <div className="flex flex-col gap-3">
-                <InputField
-                  label="When"
-                  placeholder="Customer mentions a competitor they use or are evaluating"
-                  value={draft.detectWhen}
-                  onChange={(event) => patch({ detectWhen: event.target.value })}
-                  clearable={false}
-                />
-                <div className="flex flex-col gap-2">
-                  <Button
-                    variant="link"
-                    size="sm"
-                    className="self-start"
-                    onClick={() => setExamplesOpen((open) => !open)}
-                  >
-                    {examplesOpen
-                      ? "Hide examples"
-                      : draft.detectExamples.filter((item) => item.trim()).length > 0
-                        ? `Examples (${draft.detectExamples.filter((item) => item.trim()).length})`
-                        : "+ Add examples"}
-                  </Button>
-                  {examplesOpen ? (
-                    <ExamplePhrases
-                      phrases={
-                        draft.detectExamples.length > 0
-                          ? draft.detectExamples
-                          : [""]
-                      }
-                      onChange={(detectExamples) => patch({ detectExamples })}
-                    />
-                  ) : null}
-                </div>
-              </div>
-            </section>
-
-            <section className="flex flex-col gap-4">
-              <header className="flex flex-col gap-1">
-                <SectionKicker>Then</SectionKicker>
                 <h2 className="text-label-md-semi text-foreground">
                   What should the agent be able to do?
                 </h2>
@@ -350,84 +327,68 @@ export function CreateActionPage({
               )}
 
               {capability && integration?.connected ? (
-                <div className="flex flex-col gap-3">
-                  {needsRecord ? (
-                    <ConfigChain
-                      object={draft.object}
-                      objectOptions={objectOptions}
-                      property={draft.property}
-                      valueKind={draft.value.kind}
-                      onObjectChange={(object) => patch({ object })}
-                      onPropertyChange={(property) => {
-                        patch({
-                          property,
-                          value:
-                            draft.value.kind === "from_conversation" &&
-                            !extractTouched
-                              ? {
-                                  kind: "from_conversation",
-                                  extractPrompt: defaultExtractPrompt(property),
-                                }
-                              : draft.value,
-                        });
-                      }}
-                      onValueKindChange={setValueSource}
-                    />
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <ChainDropdown
-                        placeholder="Value"
-                        options={VALUE_SOURCE_OPTIONS}
-                        value={draft.value.kind}
-                        onChange={(kind) =>
-                          setValueSource(kind as ActionValueSource["kind"])
-                        }
-                      />
-                    </div>
-                  )}
-
-                  {needsRecord && !draft.property ? null : draft.value.kind ===
-                    "from_conversation" ? (
-                    <InputField
-                      label="What should AI extract?"
-                      placeholder="The competitor the customer is currently using or evaluating."
-                      value={draft.value.extractPrompt}
-                      onChange={(event) => {
-                        setExtractTouched(true);
-                        patch({
-                          value: {
-                            kind: "from_conversation",
-                            extractPrompt: event.target.value,
-                          },
-                        });
-                      }}
-                      clearable={false}
-                    />
-                  ) : (
-                    <InputField
-                      label="Fixed value"
-                      placeholder="e.g. Qualified"
-                      value={draft.value.value}
-                      onChange={(event) =>
-                        patch({
-                          value: { kind: "fixed", value: event.target.value },
-                        })
-                      }
-                      clearable={false}
-                    />
-                  )}
-
-                  <Toggle
-                    size="sm"
-                    checked={draft.requiresConfirmation}
-                    onCheckedChange={(checked) =>
-                      patch({ requiresConfirmation: checked })
-                    }
-                    label="Ask the agent to confirm before writing"
-                    description="On by default for actions that write to a connected app."
+                isEmail ? (
+                  <EmailThenConfig
+                    email={draft.email ?? createDefaultEmailConfig()}
+                    onChange={patchEmail}
                   />
-                </div>
+                ) : (
+                  <RecordThenConfig
+                    needsRecord={needsRecord}
+                    object={draft.object}
+                    objectOptions={objectOptions}
+                    property={draft.property}
+                    value={draft.value}
+                    onObjectChange={(object) => patch({ object })}
+                    onPropertyChange={(property) => {
+                      patch({
+                        property,
+                        value:
+                          draft.value.kind === "from_conversation" &&
+                          !extractTouched
+                            ? {
+                                kind: "from_conversation",
+                                extractPrompt: defaultExtractPrompt(property),
+                              }
+                            : draft.value,
+                      });
+                    }}
+                    onValueKindChange={setValueSource}
+                    onExtractChange={(extractPrompt) => {
+                      setExtractTouched(true);
+                      patch({
+                        value: { kind: "from_conversation", extractPrompt },
+                      });
+                    }}
+                    onFixedChange={(value) =>
+                      patch({ value: { kind: "fixed", value } })
+                    }
+                  />
+                )
               ) : null}
+            </section>
+
+            <section className="flex flex-col gap-3">
+              <SectionKicker>Agent confirmation</SectionKicker>
+              <Toggle
+                size="sm"
+                controlPosition="end"
+                checked={draft.requiresConfirmation}
+                onCheckedChange={(checked) =>
+                  patch({ requiresConfirmation: checked })
+                }
+                label={
+                  isEmail
+                    ? "Ask agent to review before sending"
+                    : "Ask the agent to confirm before writing"
+                }
+                description={
+                  isEmail
+                    ? "The agent can review and edit the generated email before it is sent."
+                    : "On by default for actions that write to a connected app."
+                }
+                wrapperClassName="justify-between"
+              />
             </section>
 
             <div className="flex flex-col gap-4 lg:hidden">
@@ -439,23 +400,13 @@ export function CreateActionPage({
                 onMembersChange={(teamMembers) => patch({ teamMembers })}
                 onGroupsChange={(userGroups) => patch({ userGroups })}
               />
-              <AgentPreviewPanel
-                draft={draft}
-                integrationName={integration?.name}
-                capabilityLabel={capability?.label}
-                extracted={extractedPreview}
-              />
+              <AgentPreviewPanel draft={draft} integrations={integrations} />
             </div>
           </div>
         </div>
 
-        <aside className="hidden w-[340px] shrink-0 flex-col overflow-auto border-l border-line bg-secondary-bg lg:flex">
-          <AgentPreviewPanel
-            draft={draft}
-            integrationName={integration?.name}
-            capabilityLabel={capability?.label}
-            extracted={extractedPreview}
-          />
+        <aside className="hidden w-[360px] shrink-0 flex-col overflow-auto border-l border-line bg-secondary-bg lg:flex">
+          <AgentPreviewPanel draft={draft} integrations={integrations} />
         </aside>
       </div>
     </main>
@@ -654,26 +605,415 @@ function ExamplePhrases({
   );
 }
 
-function previewRecordValue(object: string): string {
-  const key = object.trim().toLowerCase();
-  if (key === "contact" || key === "person") return "Elena Vasquez";
-  return "Acme Corp";
+function RecordThenConfig({
+  needsRecord,
+  object,
+  objectOptions,
+  property,
+  value,
+  onObjectChange,
+  onPropertyChange,
+  onValueKindChange,
+  onExtractChange,
+  onFixedChange,
+}: {
+  needsRecord: boolean;
+  object: string;
+  objectOptions: { value: string; label: string }[];
+  property: string;
+  value: ActionValueSource;
+  onObjectChange: (value: string) => void;
+  onPropertyChange: (value: string) => void;
+  onValueKindChange: (kind: ActionValueSource["kind"]) => void;
+  onExtractChange: (value: string) => void;
+  onFixedChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      {needsRecord ? (
+        <ConfigChain
+          object={object}
+          objectOptions={objectOptions}
+          property={property}
+          valueKind={value.kind}
+          onObjectChange={onObjectChange}
+          onPropertyChange={onPropertyChange}
+          onValueKindChange={onValueKindChange}
+        />
+      ) : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <ChainDropdown
+            placeholder="Value"
+            options={VALUE_SOURCE_OPTIONS}
+            value={value.kind}
+            onChange={(kind) =>
+              onValueKindChange(kind as ActionValueSource["kind"])
+            }
+          />
+        </div>
+      )}
+
+      {needsRecord && !property ? null : value.kind === "from_conversation" ? (
+        <InputField
+          label="What should AI extract?"
+          placeholder="The competitor the customer is currently using or evaluating."
+          value={value.kind === "from_conversation" ? value.extractPrompt : ""}
+          onChange={(event) => onExtractChange(event.target.value)}
+          clearable={false}
+        />
+      ) : (
+        <InputField
+          label="Fixed value"
+          placeholder="e.g. Qualified"
+          value={value.kind === "fixed" ? value.value : ""}
+          onChange={(event) => onFixedChange(event.target.value)}
+          clearable={false}
+        />
+      )}
+    </div>
+  );
+}
+
+const textareaClass =
+  "w-full resize-y rounded-[4px] border border-line bg-white px-3 py-2.5 text-paragraph-md text-foreground placeholder:text-disabled-fg outline-none hover:border-control-border focus:border-brand focus:ring-2 focus:ring-brand/16";
+
+function FieldLabel({
+  htmlFor,
+  children,
+}: {
+  htmlFor?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label htmlFor={htmlFor} className="text-label-md text-foreground">
+      {children}
+    </label>
+  );
+}
+
+function VariableChips({
+  onInsert,
+}: {
+  onInsert: (token: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {EMAIL_TEMPLATE_VARIABLES.map((variable) => (
+        <button
+          key={variable}
+          type="button"
+          onClick={() => onInsert(`{{${variable}}}`)}
+          className="cursor-pointer rounded-[4px] border border-line bg-secondary-bg px-1.5 py-0.5 font-mono text-[12px] leading-4 text-muted-foreground outline-none hover:border-brand hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/24"
+        >
+          {`{{${variable}}}`}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function appendToken(current: string, token: string): string {
+  if (current.includes(token)) return current;
+  if (!current.trim()) return token;
+  return `${current.trim()} ${token}`;
+}
+
+function EmailThenConfig({
+  email,
+  onChange,
+}: {
+  email: EmailActionConfig;
+  onChange: (partial: Partial<EmailActionConfig>) => void;
+}) {
+  const [attachOpen, setAttachOpen] = React.useState(false);
+  const [linkOpen, setLinkOpen] = React.useState(false);
+  const [linkName, setLinkName] = React.useState("");
+  const [linkUrl, setLinkUrl] = React.useState("");
+  const attachedIds = new Set(email.attachments.map((item) => item.id));
+
+  const addAttachment = (item: EmailAttachment) => {
+    if (attachedIds.has(item.id)) return;
+    onChange({ attachments: [...email.attachments, item] });
+  };
+
+  const addLink = () => {
+    const name = linkName.trim();
+    const href = linkUrl.trim();
+    if (!name || !href) return;
+    addAttachment({
+      id: `att-${Date.now()}`,
+      name,
+      kind: "url",
+      href,
+    });
+    setLinkName("");
+    setLinkUrl("");
+    setLinkOpen(false);
+    setAttachOpen(false);
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <h3 className="text-label-md-semi text-foreground">Recipient</h3>
+        <Dropdown
+          label="Send email to"
+          placeholder="Choose recipient"
+          options={EMAIL_RECIPIENT_OPTIONS}
+          value={email.recipient}
+          onValueChange={(next) => {
+            const recipient = (
+              Array.isArray(next) ? next[0] : next
+            ) as EmailRecipientKind;
+            onChange({ recipient });
+          }}
+          className="max-w-[320px]"
+          triggerClassName="h-9"
+        />
+        {email.recipient === "crm_field" ? (
+          <Dropdown
+            label="CRM email field"
+            placeholder="Choose field"
+            options={EMAIL_CRM_FIELD_OPTIONS}
+            value={email.crmField}
+            onValueChange={(next) =>
+              onChange({ crmField: Array.isArray(next) ? next[0] ?? "" : next })
+            }
+            className="max-w-[320px]"
+            triggerClassName="h-9"
+          />
+        ) : null}
+        {email.recipient === "custom" ? (
+          <InputField
+            label="Email address"
+            type="email"
+            placeholder="name@company.com"
+            value={email.customEmail}
+            onChange={(event) => onChange({ customEmail: event.target.value })}
+            clearable={false}
+            wrapperClassName="max-w-[320px]"
+          />
+        ) : null}
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <h3 className="text-label-md-semi text-foreground">Email content</h3>
+        <div className="flex flex-col gap-2">
+          <InputField
+            label="Subject"
+            placeholder="JustCall vs {{competitor_name}}"
+            value={email.subject}
+            onChange={(event) => onChange({ subject: event.target.value })}
+            clearable={false}
+          />
+          <VariableChips
+            onInsert={(token) => onChange({ subject: appendToken(email.subject, token) })}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <FieldLabel htmlFor="action-email-message">Message</FieldLabel>
+          <textarea
+            id="action-email-message"
+            rows={8}
+            value={email.message}
+            onChange={(event) => onChange({ message: event.target.value })}
+            placeholder="Hi {{first_name}},&#10;&#10;Based on what we discussed…"
+            className={textareaClass}
+          />
+          <VariableChips
+            onInsert={(token) => onChange({ message: appendToken(email.message, token) })}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <h3 className="text-label-md-semi text-foreground">AI personalization</h3>
+        <Toggle
+          size="sm"
+          controlPosition="end"
+          checked={email.personalize}
+          onCheckedChange={(personalize) => onChange({ personalize })}
+          label="Personalize using conversation context"
+          description="AI adapts the email using relevant details from the current conversation."
+          wrapperClassName="justify-between"
+        />
+        {email.personalize ? (
+          <div className="flex flex-col gap-2">
+            <FieldLabel htmlFor="action-email-include">What should AI include?</FieldLabel>
+            <textarea
+              id="action-email-include"
+              rows={3}
+              value={email.includeInstructions}
+              onChange={(event) =>
+                onChange({ includeInstructions: event.target.value })
+              }
+              placeholder="Include the competitor discussed, relevant JustCall differentiators, and any follow-up items promised during the call."
+              className={textareaClass}
+            />
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <Button
+          variant="link"
+          size="sm"
+          className="self-start"
+          onClick={() => setAttachOpen(true)}
+        >
+          + Add document or link
+        </Button>
+        {email.attachments.length > 0 ? (
+          <ul className="flex flex-col gap-2">
+            {email.attachments.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center gap-3 rounded-[4px] border border-line px-3 py-2"
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-[6px] bg-secondary-bg text-muted-foreground">
+                  <IconFile size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-label-md text-foreground">{item.name}</p>
+                  <p className="text-label-sm text-muted-foreground">
+                    {item.kind === "url"
+                      ? "Link"
+                      : item.kind === "article"
+                        ? "Help article"
+                        : item.kind === "pdf"
+                          ? "PDF"
+                          : "Document"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label={`Remove ${item.name}`}
+                  onClick={() =>
+                    onChange({
+                      attachments: email.attachments.filter(
+                        (attachment) => attachment.id !== item.id
+                      ),
+                    })
+                  }
+                  className="flex size-8 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                >
+                  <IconClose size={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+
+      <Modal
+        open={attachOpen}
+        onClose={() => setAttachOpen(false)}
+        size="sm"
+        title="Add document or link"
+        footer={
+          <Button
+            variant="grey-outline"
+            size="sm"
+            onClick={() => setAttachOpen(false)}
+          >
+            Done
+          </Button>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <ul className="flex flex-col gap-1">
+            {EMAIL_ATTACHMENT_PRESETS.map((item) => {
+              const added = attachedIds.has(item.id);
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    disabled={added}
+                    onClick={() => addAttachment(item)}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-[4px] px-2 py-2 text-left outline-none hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-brand/24 disabled:opacity-50",
+                      added && "cursor-default"
+                    )}
+                  >
+                    <span className="text-label-md text-foreground">{item.name}</span>
+                    <span className="text-label-sm text-muted-foreground">
+                      {added
+                        ? "Added"
+                        : item.kind === "article"
+                          ? "Article"
+                          : item.kind === "pdf"
+                            ? "PDF"
+                            : "Document"}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <Button
+            variant="link"
+            size="sm"
+            className="self-start"
+            onClick={() => setLinkOpen(true)}
+          >
+            + Add URL
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={linkOpen}
+        onClose={() => setLinkOpen(false)}
+        size="sm"
+        title="Add link"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="grey-outline"
+              size="sm"
+              onClick={() => setLinkOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!linkName.trim() || !linkUrl.trim()}
+              onClick={addLink}
+            >
+              Add link
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <InputField
+            label="Name"
+            placeholder="e.g. JustCall vs Dialpad"
+            value={linkName}
+            onChange={(event) => setLinkName(event.target.value)}
+            clearable={false}
+          />
+          <InputField
+            label="URL"
+            placeholder="https://"
+            value={linkUrl}
+            onChange={(event) => setLinkUrl(event.target.value)}
+            clearable={false}
+          />
+        </div>
+      </Modal>
+    </div>
+  );
 }
 
 function AgentPreviewPanel({
   draft,
-  integrationName,
-  capabilityLabel,
-  extracted,
+  integrations,
 }: {
   draft: AgentAction;
-  integrationName?: string;
-  capabilityLabel?: string;
-  extracted: string;
+  integrations: Integration[];
 }) {
   const ready = Boolean(draft.capabilityId);
-  const property = draft.property || capabilityLabel || "Value";
-  const recordKind = draft.object || "Record";
 
   return (
     <div className="flex flex-col gap-4 p-5">
@@ -685,15 +1025,7 @@ function AgentPreviewPanel({
       </div>
 
       {ready ? (
-        <InCallActionSuggestionCard
-          title={draft.agentLabel || draft.name || "Untitled action"}
-          property={property}
-          value={extracted.trim() ? extracted : "Select a value"}
-          recordLabel={
-            integrationName ? `${integrationName} ${recordKind}` : recordKind
-          }
-          recordValue={previewRecordValue(draft.object)}
-        />
+        <ActionInCallPreview action={draft} integrations={integrations} />
       ) : (
         <div className="rounded-lg border border-dashed border-line bg-white px-3 py-4">
           <p className="text-pretty text-paragraph-sm text-muted-foreground">

@@ -3,10 +3,10 @@ import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 import {
   IconChevronDown,
-  IconChevronUp,
   IconClose,
   IconSearch,
 } from "@/components/Icon";
+import { useDropdownPresence } from "./useDropdownPresence";
 import noResultsIllustration from "./assets/no-results.svg";
 
 /** Decorative checkbox for menu rows (rows are the interactive control). */
@@ -38,7 +38,7 @@ function MenuCheckbox({
           height={10}
           viewBox="0 0 16 16"
           fill="none"
-          className="text-white"
+          className="dropdown-check text-white"
         >
           <path
             d="M3.5 8.5L6.5 11.5L12.5 4.5"
@@ -55,7 +55,7 @@ function MenuCheckbox({
           height={10}
           viewBox="0 0 16 16"
           fill="none"
-          className="text-white"
+          className="dropdown-check text-white"
         >
           <path
             d="M3.5 8H12.5"
@@ -83,6 +83,11 @@ function MenuCheckbox({
  *
  * A dropdown menu lets people pick one or many choices from a list — used in
  * forms and for filtering / sorting UI.
+ *
+ * Motion (globals.css): open 160ms ease-out fade + translateY(-4px→0);
+ * close 120ms ease-in fade + translateY(0→-3px); chevron 160ms 0°↔180°;
+ * item hover 80ms; checkmark 120ms. Overlay only — never pushes layout.
+ * Reduced motion keeps opacity and drops translation.
  */
 
 /* ------------------------------------------------------------------ */
@@ -144,7 +149,7 @@ const triggerVariants = cva(
 /* ------------------------------------------------------------------ */
 
 const itemVariants = cva(
-  "flex w-full items-center gap-2 px-3 py-2 text-left text-paragraph-md outline-none transition-colors",
+  "dropdown-item flex w-full items-center gap-2 px-3 py-2 text-left text-paragraph-md outline-none",
   {
     variants: {
       state: {
@@ -300,6 +305,8 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
     const [query, setQuery] = React.useState("");
     const [highlight, setHighlight] = React.useState(-1);
 
+    const { mounted, state: panelState } = useDropdownPresence(open);
+
     const rootRef = React.useRef<HTMLDivElement>(null);
     const listRef = React.useRef<HTMLDivElement>(null);
     const searchRef = React.useRef<HTMLInputElement>(null);
@@ -311,13 +318,16 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
       (next: boolean) => {
         if (!isOpenControlled) setInternalOpen(next);
         onOpenChange?.(next);
-        if (!next) {
-          setQuery("");
-          setHighlight(-1);
-        }
       },
       [isOpenControlled, onOpenChange]
     );
+
+    // Keep the list stable while the close animation plays.
+    React.useEffect(() => {
+      if (mounted) return;
+      setQuery("");
+      setHighlight(-1);
+    }, [mounted]);
 
     const setValue = React.useCallback(
       (next: string | string[]) => {
@@ -530,7 +540,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
             disabled={disabled}
             aria-haspopup="listbox"
             aria-expanded={open}
-            aria-controls={open ? listboxId : undefined}
+            aria-controls={mounted ? listboxId : undefined}
             data-open={open ? "true" : "false"}
             onClick={() => !disabled && setOpen(!open)}
             onKeyDown={onTriggerKeyDown}
@@ -630,32 +640,31 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
             ) : (
               <span
                 className={cn(
-                  "inline-flex size-5 shrink-0 items-center justify-center",
+                  "dropdown-chevron inline-flex size-5 shrink-0 items-center justify-center",
                   disabled ? "text-disabled-fg" : "text-foreground"
                 )}
+                data-open={open ? "true" : "false"}
               >
-                {open ? (
-                  <IconChevronUp size={20} className="size-5" aria-hidden="true" />
-                ) : (
-                  <IconChevronDown
-                    size={20}
-                    className="size-5"
-                    aria-hidden="true"
-                  />
-                )}
+                <IconChevronDown
+                  size={20}
+                  className="size-5"
+                  aria-hidden="true"
+                />
               </span>
             )}
           </button>
 
-          {open && (
+          {mounted && (
             <div
               id={listboxId}
               role="listbox"
               aria-multiselectable={multiple || undefined}
+              aria-hidden={!open}
               tabIndex={-1}
               onKeyDown={onMenuKeyDown}
+              data-state={panelState}
               className={cn(
-                "absolute top-[calc(100%+8px)] left-0 z-50 flex w-full flex-col overflow-hidden rounded-[4px] border border-line bg-white shadow-400",
+                "dropdown-panel absolute top-[calc(100%+8px)] left-0 z-50 flex w-full flex-col overflow-hidden rounded-[4px] border border-line bg-white shadow-400",
                 menuClassName
               )}
             >
@@ -724,7 +733,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
                   <button
                     type="button"
                     onClick={toggleSelectAll}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-surface-hover"
+                    className="dropdown-item flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-surface-hover"
                   >
                     <MenuCheckbox
                       checked={allSelected}

@@ -2,8 +2,9 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
+import { Checkbox } from "@/components/Checkbox";
 import { Modal } from "@/components/Modal";
-import { Dropdown, type DropdownListItem } from "@/components/Dropdown";
+import { Dropdown, useDropdownPresence, type DropdownListItem } from "@/components/Dropdown";
 import { Tabs, type TabItem } from "@/components/Tabs";
 import { InputField } from "@/components/InputField";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
@@ -26,6 +27,7 @@ import {
   TableCell,
   TableCellText,
   TablePagination,
+  TableBulkBar,
 } from "@/components/Table";
 import scriptsEmptyIllustration from "./assets/scripts-empty.png";
 import faqsEmptyIllustration from "./assets/faqs-empty.png";
@@ -115,6 +117,20 @@ const KIND_LABEL_LOWER = {
   coaching: "live coaching",
 } as const;
 
+const KIND_LABEL_PLURAL = {
+  script: "scripts",
+  guidance: "response cards",
+  coaching: "live coaching rules",
+} as const;
+
+interface RowSelection {
+  selectedIds: string[];
+  allSelected: boolean;
+  someSelected: boolean;
+  onToggleAll: () => void;
+  onToggleRow: (id: string) => void;
+}
+
 type GuidanceKind = keyof typeof KIND_LABEL;
 
 interface ScriptRow {
@@ -188,11 +204,12 @@ interface ActionMenuItem {
  */
 function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }) {
   const [open, setOpen] = React.useState(false);
+  const { mounted, state } = useDropdownPresence(open);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
   React.useLayoutEffect(() => {
-    if (!open) return;
+    if (!mounted) return;
     const update = () => {
       const trigger = triggerRef.current;
       const menu = menuRef.current;
@@ -212,7 +229,7 @@ function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }
       window.removeEventListener("scroll", update, true);
       window.removeEventListener("resize", update);
     };
-  }, [open]);
+  }, [mounted]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -257,13 +274,14 @@ function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }
           <IconDotsVertical size={20} />
         </button>
       </TooltipTrigger>
-      {open && typeof document !== "undefined"
+      {mounted && typeof document !== "undefined"
         ? createPortal(
             <div
               ref={menuRef}
               role="menu"
               aria-label={label}
-              className="fixed z-[100] min-w-[180px] rounded-[6px] border border-line bg-white py-1 shadow-400"
+              data-state={state}
+              className="dropdown-panel fixed z-[100] min-w-[180px] rounded-[6px] border border-line bg-white py-1 shadow-400"
               style={{ top: 0, left: 0 }}
             >
               {items.map((item) => (
@@ -276,7 +294,7 @@ function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }
                     item.onSelect?.();
                   }}
                   className={cn(
-                    "flex w-full items-center gap-2 px-3 py-2 text-left text-paragraph-md",
+                    "dropdown-item flex w-full items-center gap-2 px-3 py-2 text-left text-paragraph-md",
                     item.destructive
                       ? "text-error hover:bg-error-subtle"
                       : "text-foreground hover:bg-secondary-bg"
@@ -432,6 +450,8 @@ export function AgentAssistPlaybooksPage({
   const [groupFilter, setGroupFilter] = React.useState<string[]>([]);
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(25);
+  const [selected, setSelected] = React.useState<string[]>([]);
+  const [deleting, setDeleting] = React.useState(false);
   const [templatesOpen, setTemplatesOpen] = React.useState(false);
   const [guidanceTemplatesOpen, setGuidanceTemplatesOpen] = React.useState(false);
   const [coachingTemplatesOpen, setCoachingTemplatesOpen] = React.useState(false);
@@ -517,6 +537,48 @@ export function AgentAssistPlaybooksPage({
   const visibleScripts = filteredScripts.slice(start, start + pageSize);
   const visibleGuidance = filteredGuidance.slice(start, start + pageSize);
   const visibleCoaching = filteredCoaching.slice(start, start + pageSize);
+  const visibleIds = (
+    isScripts ? visibleScripts : isGuidance ? visibleGuidance : visibleCoaching
+  ).map((row) => row.id);
+  const selectedVisible = selected.filter((id) => visibleIds.includes(id));
+  const allSelected =
+    visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+  const someSelected = selectedVisible.length > 0 && !allSelected;
+  const selection: RowSelection = {
+    selectedIds: selected,
+    allSelected,
+    someSelected,
+    onToggleAll: () => setSelected(allSelected ? [] : visibleIds),
+    onToggleRow: (id) =>
+      setSelected((current) =>
+        current.includes(id)
+          ? current.filter((value) => value !== id)
+          : [...current, id]
+      ),
+  };
+  const activeKind: GuidanceKind = isScripts
+    ? "script"
+    : isGuidance
+      ? "guidance"
+      : "coaching";
+  const selectedVisibleRows = isScripts
+    ? scripts.filter((row) => selectedVisible.includes(row.id))
+    : isGuidance
+      ? guidanceItems.filter((row) => selectedVisible.includes(row.id))
+      : coachingRules.filter((row) => selectedVisible.includes(row.id));
+
+  const removeSelected = () => {
+    const ids = selectedVisible;
+    if (isScripts) {
+      setScripts((current) => current.filter((item) => !ids.includes(item.id)));
+    } else if (isGuidance) {
+      onGuidanceItemsChange(guidanceItems.filter((item) => !ids.includes(item.id)));
+    } else {
+      onCoachingRulesChange(coachingRules.filter((item) => !ids.includes(item.id)));
+    }
+    setSelected((current) => current.filter((id) => !ids.includes(id)));
+    setDeleting(false);
+  };
 
   const openScriptTemplates = () => setTemplatesOpen(true);
 
@@ -884,12 +946,13 @@ export function AgentAssistPlaybooksPage({
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+          <div className="relative flex min-h-0 flex-1 flex-col px-6 pb-6">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
               <div className="min-h-0 flex-1 overflow-auto">
                 {isScripts ? (
                   <ScriptsTable
                     rows={visibleScripts}
+                    selection={selection}
                     onEdit={(row) => setBuilder({ type: "edit", playbook: row.playbook })}
                     onPreview={(row) => setPreviewScript(row.playbook)}
                     onAssign={(row) => setAssignTarget({ type: "script", row })}
@@ -900,6 +963,7 @@ export function AgentAssistPlaybooksPage({
                     }}
                     onDelete={(row) => {
                       setScripts((current) => current.filter((item) => item.id !== row.id));
+                      setSelected((current) => current.filter((id) => id !== row.id));
                     }}
                     onStatusChange={(row, live) =>
                       setScripts((current) =>
@@ -914,6 +978,7 @@ export function AgentAssistPlaybooksPage({
                 ) : isGuidance ? (
                   <GuidanceTable
                     rows={visibleGuidance}
+                    selection={selection}
                     onEdit={(row) =>
                       setGuidanceLaunch({ mode: "edit", item: row })
                     }
@@ -924,6 +989,7 @@ export function AgentAssistPlaybooksPage({
                       onGuidanceItemsChange(
                         guidanceItems.filter((item) => item.id !== row.id)
                       );
+                      setSelected((current) => current.filter((id) => id !== row.id));
                     }}
                     onStatusChange={(row, live) => {
                       if (live && guidanceAssignees(row).length === 0) return;
@@ -939,6 +1005,7 @@ export function AgentAssistPlaybooksPage({
                 ) : (
                   <CoachingTable
                     rows={visibleCoaching}
+                    selection={selection}
                     onEdit={(row) => setCoachingLaunch({ mode: "edit", rule: row })}
                     onPreview={setPreviewCoaching}
                     onAssign={(row) => setAssignTarget({ type: "coaching", row })}
@@ -947,6 +1014,7 @@ export function AgentAssistPlaybooksPage({
                       onCoachingRulesChange(
                         coachingRules.filter((item) => item.id !== row.id)
                       );
+                      setSelected((current) => current.filter((id) => id !== row.id));
                     }}
                     onStatusChange={(row, live) => {
                       if (live && row.teamMembers.length + row.userGroups.length === 0) {
@@ -971,6 +1039,20 @@ export function AgentAssistPlaybooksPage({
                 />
               </div>
             </div>
+            <TableBulkBar
+              count={selectedVisible.length}
+              label="selected"
+              actions={
+                <Button
+                  variant="grey-outline"
+                  size="sm"
+                  className="bg-white"
+                  onClick={() => setDeleting(true)}
+                >
+                  Delete
+                </Button>
+              }
+            />
           </div>
         </>
       )}
@@ -1069,6 +1151,38 @@ export function AgentAssistPlaybooksPage({
           }}
         />
       ) : null}
+
+      {deleting && selectedVisibleRows.length > 0 ? (
+        <Modal
+          open
+          onClose={() => setDeleting(false)}
+          size="sm"
+          title={
+            selectedVisibleRows.length === 1
+              ? `Delete ${KIND_LABEL_LOWER[activeKind]}`
+              : `Delete ${KIND_LABEL_PLURAL[activeKind]}`
+          }
+          description={
+            selectedVisibleRows.length === 1
+              ? `“${selectedVisibleRows[0]!.name}” will no longer be available to agents.`
+              : `${selectedVisibleRows.length} ${KIND_LABEL_PLURAL[activeKind]} will no longer be available to agents.`
+          }
+          footer={
+            <>
+              <Button
+                variant="grey-outline"
+                size="sm"
+                onClick={() => setDeleting(false)}
+              >
+                Cancel
+              </Button>
+              <Button variant="error" size="sm" onClick={removeSelected}>
+                Delete
+              </Button>
+            </>
+          }
+        />
+      ) : null}
     </main>
   );
 }
@@ -1137,8 +1251,54 @@ function AssignModal({
   );
 }
 
+function SelectionHead({
+  allSelected,
+  someSelected,
+  onToggleAll,
+  label,
+}: {
+  allSelected: boolean;
+  someSelected: boolean;
+  onToggleAll: () => void;
+  label: string;
+}) {
+  return (
+    <TableHead className="sticky top-0 z-10 w-11">
+      <Checkbox
+        size="sm"
+        checked={allSelected}
+        indeterminate={someSelected}
+        onCheckedChange={onToggleAll}
+        aria-label={label}
+      />
+    </TableHead>
+  );
+}
+
+function SelectionCell({
+  checked,
+  onToggle,
+  label,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <TableCell className="w-11">
+      <Checkbox
+        size="sm"
+        checked={checked}
+        onCheckedChange={onToggle}
+        aria-label={label}
+      />
+    </TableCell>
+  );
+}
+
 function ScriptsTable({
   rows,
+  selection,
   onEdit,
   onPreview,
   onDuplicate,
@@ -1147,6 +1307,7 @@ function ScriptsTable({
   onStatusChange,
 }: {
   rows: ScriptRow[];
+  selection: RowSelection;
   onEdit: (row: ScriptRow) => void;
   onPreview: (row: ScriptRow) => void;
   onDuplicate: (row: ScriptRow) => void;
@@ -1158,8 +1319,14 @@ function ScriptsTable({
     <Table className="table-fixed">
       <TableHeader className="[&_tr]:border-b-0">
         <TableRow>
+          <SelectionHead
+            allSelected={selection.allSelected}
+            someSelected={selection.someSelected}
+            onToggleAll={selection.onToggleAll}
+            label="Select all scripts"
+          />
           <TableHead className="sticky top-0 z-10 w-[280px]">Name</TableHead>
-          <TableHead className="sticky top-0 z-10 w-[160px]">Assigned</TableHead>
+          <TableHead className="sticky top-0 z-10 w-[160px]">Assigned to</TableHead>
           <TableHead className="sticky top-0 z-10 w-[100px]">Steps</TableHead>
           <TableHead className="sticky top-0 z-10 w-[120px]">Status</TableHead>
           <TableHead className="sticky top-0 z-10 w-[120px]">Updated</TableHead>
@@ -1167,8 +1334,19 @@ function ScriptsTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.id} className="border-b-0">
+        {rows.map((row) => {
+          const isSelected = selection.selectedIds.includes(row.id);
+          return (
+          <TableRow
+            key={row.id}
+            state={isSelected ? "selected" : "default"}
+            className="border-b-0"
+          >
+              <SelectionCell
+                checked={isSelected}
+                onToggle={() => selection.onToggleRow(row.id)}
+                label={`Select ${row.name}`}
+              />
               <TableCell>
                 <TableCellText primary={row.name} />
               </TableCell>
@@ -1195,7 +1373,8 @@ function ScriptsTable({
                 />
               </TableCell>
             </TableRow>
-        ))}
+          );
+        })}
       </TableBody>
     </Table>
   );
@@ -1203,6 +1382,7 @@ function ScriptsTable({
 
 function GuidanceTable({
   rows,
+  selection,
   onEdit,
   onPreview,
   onDuplicate,
@@ -1211,6 +1391,7 @@ function GuidanceTable({
   onStatusChange,
 }: {
   rows: GuidanceItem[];
+  selection: RowSelection;
   onEdit: (row: GuidanceItem) => void;
   onPreview: (row: GuidanceItem) => void;
   onDuplicate: (row: GuidanceItem) => void;
@@ -1222,6 +1403,12 @@ function GuidanceTable({
     <Table className="table-fixed">
       <TableHeader className="[&_tr]:border-b-0">
         <TableRow>
+          <SelectionHead
+            allSelected={selection.allSelected}
+            someSelected={selection.someSelected}
+            onToggleAll={selection.onToggleAll}
+            label="Select all response cards"
+          />
           <TableHead className="sticky top-0 z-10 w-[220px]">Response card</TableHead>
           <TableHead className="sticky top-0 z-10">Trigger</TableHead>
           <TableHead className="sticky top-0 z-10 w-[160px]">Assigned to</TableHead>
@@ -1232,11 +1419,18 @@ function GuidanceTable({
       </TableHeader>
       <TableBody>
         {rows.map((row) => {
+          const isSelected = selection.selectedIds.includes(row.id);
           return (
             <TableRow
               key={row.id}
+              state={isSelected ? "selected" : "default"}
               className="border-b-0"
             >
+              <SelectionCell
+                checked={isSelected}
+                onToggle={() => selection.onToggleRow(row.id)}
+                label={`Select ${row.name}`}
+              />
               <TableCell>
                 <button
                   type="button"
@@ -1297,6 +1491,7 @@ function GuidanceTable({
  */
 function CoachingTable({
   rows,
+  selection,
   onEdit,
   onPreview,
   onDuplicate,
@@ -1305,6 +1500,7 @@ function CoachingTable({
   onStatusChange,
 }: {
   rows: CoachingRule[];
+  selection: RowSelection;
   onEdit: (row: CoachingRule) => void;
   onPreview: (row: CoachingRule) => void;
   onDuplicate: (row: CoachingRule) => void;
@@ -1316,6 +1512,12 @@ function CoachingTable({
     <Table className="table-fixed">
       <TableHeader className="[&_tr]:border-b-0">
         <TableRow>
+          <SelectionHead
+            allSelected={selection.allSelected}
+            someSelected={selection.someSelected}
+            onToggleAll={selection.onToggleAll}
+            label="Select all live coaching"
+          />
           <TableHead className="sticky top-0 z-10 w-[240px]">Live coaching</TableHead>
           <TableHead className="sticky top-0 z-10">Detect</TableHead>
           <TableHead className="sticky top-0 z-10 w-[140px]">Assigned to</TableHead>
@@ -1326,11 +1528,18 @@ function CoachingTable({
       </TableHeader>
       <TableBody>
         {rows.map((row) => {
+          const isSelected = selection.selectedIds.includes(row.id);
           return (
             <TableRow
               key={row.id}
+              state={isSelected ? "selected" : "default"}
               className="border-b-0"
             >
+              <SelectionCell
+                checked={isSelected}
+                onToggle={() => selection.onToggleRow(row.id)}
+                label={`Select ${row.name}`}
+              />
               <TableCell>
                 <button
                   type="button"

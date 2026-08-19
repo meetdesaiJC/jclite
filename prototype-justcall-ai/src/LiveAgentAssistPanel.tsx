@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, type SVGProps } from "react";
-import { InputField } from "@/components/InputField";
 import {
   IconAlertTriangleFilled,
   IconChevronDown,
   IconChevronUp,
-  IconCircleCheckFilled,
   IconInfoCircle,
 } from "@/components/Icon";
 import { cn } from "@/lib/utils";
@@ -24,10 +22,12 @@ import {
   type CoachingRule,
 } from "./coachingData";
 import { CoachingCardFace, coachingTone } from "./coachingVisuals";
-import { IconAaActions } from "./icons/AgentAssistNavIcons";
 import {
-  ActionReviewField,
+  InCallActionDoneCard,
+  InCallActionReviewCard,
   InCallActionSuggestionCard,
+  InCallEmailReviewCard,
+  InCallEmailSuggestionCard,
 } from "./InCallActionCard";
 import {
   SEED_ACTIONS,
@@ -447,7 +447,8 @@ function proposedValue(action: SuggestedAction, runtime: ActionRuntime) {
 
 /**
  * Independent Action card. Lightning, not sparkle — this is work to perform,
- * not generated guidance. The agent always reviews a write before it runs.
+ * not generated guidance. Emails stay in review until the agent sends them
+ * when confirmation is on; other writes follow the same rule.
  */
 function SuggestedActionRow({
   action,
@@ -479,30 +480,12 @@ function SuggestedActionRow({
 
   if (runtime.state === "done") {
     return (
-      <div
-        className={cn(
-          "flex shrink-0 items-start gap-2 rounded-lg border border-success-border bg-success-secondary px-3 py-2",
-          !reduced && "assist-card-enter"
-        )}
-        role="status"
-      >
-        <IconCircleCheckFilled size={16} className="mt-px size-4 shrink-0 text-success" />
-        <div className="min-w-0 flex-1">
-          <p className="text-label-md font-medium text-foreground">
-            {integrationDoneLabel(action, integrations)}
-          </p>
-          {action.viewUrl ? (
-            <a
-              href={action.viewUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-label-sm font-medium text-brand hover:text-brand-hover"
-            >
-              View in {name}
-            </a>
-          ) : null}
-        </div>
-      </div>
+      <InCallActionDoneCard
+        label={integrationDoneLabel(action, integrations)}
+        viewUrl={action.viewUrl}
+        viewName={name}
+        className={cn(!reduced && "assist-card-enter")}
+      />
     );
   }
 
@@ -519,7 +502,8 @@ function SuggestedActionRow({
               Action unavailable
             </p>
             <p className="text-pretty text-paragraph-sm text-muted-foreground">
-              You don’t have permission to update this {name} record.
+              You don’t have permission to{" "}
+              {action.email ? "send this email" : `update this ${name} record`}.
             </p>
           </div>
         </div>
@@ -547,7 +531,9 @@ function SuggestedActionRow({
               {integrationFailedLabel(action, integrations)}
             </p>
             <p className="text-pretty text-paragraph-sm text-muted-foreground">
-              Something went wrong while updating this record. Nothing was changed.
+              {action.email
+                ? "Something went wrong while sending this email. Nothing was sent."
+                : "Something went wrong while updating this record. Nothing was changed."}
             </p>
           </div>
         </div>
@@ -586,6 +572,23 @@ function SuggestedActionRow({
     (field) => !editableFields.some((item) => item.label === field.label)
   );
 
+  if (!reviewing && action.email) {
+    const cta = action.requiresConfirmation ? "Review email" : "Send email";
+    return (
+      <InCallEmailSuggestionCard
+        title={action.title}
+        to={action.email.to}
+        subject={action.email.subject}
+        body={action.email.body}
+        attachments={action.email.attachments}
+        cta={cta}
+        busy={busy}
+        onReview={action.requiresConfirmation ? onReview : onConfirm}
+        className={cn(!reduced && "assist-card-enter")}
+      />
+    );
+  }
+
   if (!reviewing) {
     return (
       <InCallActionSuggestionCard
@@ -605,70 +608,51 @@ function SuggestedActionRow({
     );
   }
 
-  return (
-    <div
-      className={cn(
-        "flex shrink-0 flex-col gap-2 rounded-lg border border-brand bg-white px-3 py-2",
-        !reduced && "assist-card-enter"
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <IconAaActions className="size-4 shrink-0 text-foreground" />
-        <p className="min-w-0 flex-1 text-pretty text-label-md font-medium text-foreground">
-          {writeLabel}
-        </p>
-      </div>
+  if (action.email) {
+    return (
+      <InCallEmailReviewCard
+        title={action.title}
+        to={runtime.filled.To ?? action.email.to}
+        subject={runtime.filled.Subject ?? action.email.subject}
+        message={runtime.filled.Message ?? action.email.body}
+        attachments={action.email.attachments}
+        busy={busy}
+        onToChange={(value) => onFieldChange("To", value)}
+        onSubjectChange={(value) => onFieldChange("Subject", value)}
+        onMessageChange={(value) => onFieldChange("Message", value)}
+        onCancel={onCancelReview}
+        onConfirm={onConfirm}
+        className={cn(!reduced && "assist-card-enter")}
+      />
+    );
+  }
 
-      <div className="flex flex-col gap-2.5 border-t border-line pt-2">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <ActionReviewField label={action.recordLabel} value={action.recordValue} />
-          {readonlyFields.map((field) => (
-            <ActionReviewField
-              key={field.label}
-              label={field.label}
-              value={field.value}
-            />
-          ))}
-          <ActionReviewField label="Current value" value="—" />
-        </dl>
-        {editableFields.map((field) => (
-          <InputField
-            key={field.label}
-            label={field.label === "New value" ? property : field.label}
-            placeholder={`Select ${property.toLowerCase()}`}
-            value={runtime.filled[field.label] ?? field.value}
-            onChange={(event) => onFieldChange(field.label, event.target.value)}
-            helpText={
-              field.missing
-                ? "Not found in the conversation — add it to continue."
-                : undefined
-            }
-            helpIcon={field.missing}
-            clearable={false}
-          />
-        ))}
-        <p className="text-paragraph-sm text-muted-foreground">
-          Nothing is written to {name} until you confirm.
-        </p>
-        <div className="flex items-center justify-end gap-1.5">
-          <button
-            type="button"
-            onClick={onCancelReview}
-            className="inline-flex h-7 cursor-pointer items-center rounded-[4px] px-2 text-label-sm text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={blocked}
-            onClick={onConfirm}
-            className="inline-flex h-7 cursor-pointer items-center rounded-[4px] px-2 text-label-sm font-medium text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24 disabled:cursor-default disabled:opacity-60"
-          >
-            {writeLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+  return (
+    <InCallActionReviewCard
+      writeLabel={writeLabel}
+      recordLabel={action.recordLabel}
+      recordValue={action.recordValue}
+      readonlyFields={readonlyFields.map((field) => ({
+        label: field.label,
+        value: field.value,
+      }))}
+      editableFields={editableFields.map((field) => ({
+        label: field.label,
+        inputLabel: field.label === "New value" ? property : field.label,
+        value: runtime.filled[field.label] ?? field.value,
+        placeholder: `Select ${property.toLowerCase()}`,
+        missing: field.missing,
+        helpText: field.missing
+          ? "Not found in the conversation — add it to continue."
+          : undefined,
+      }))}
+      integrationName={name}
+      onFieldChange={onFieldChange}
+      onCancel={onCancelReview}
+      onConfirm={onConfirm}
+      confirmDisabled={blocked}
+      className={cn(!reduced && "assist-card-enter")}
+    />
   );
 }
 
@@ -789,11 +773,16 @@ export function LiveAgentAssistPanel({
 
   const openReview = (action: SuggestedAction) => {
     const runtime = runtimeFor(action.id);
-    // Seed the editable fields so a missing value has somewhere to land.
     const filled = { ...runtime.filled };
-    action.fields.forEach((field) => {
-      if (field.missing && filled[field.label] === undefined) filled[field.label] = "";
-    });
+    if (action.email) {
+      if (filled.To === undefined) filled.To = action.email.to;
+      if (filled.Subject === undefined) filled.Subject = action.email.subject;
+      if (filled.Message === undefined) filled.Message = action.email.body;
+    } else {
+      action.fields.forEach((field) => {
+        if (field.missing && filled[field.label] === undefined) filled[field.label] = "";
+      });
+    }
     patchRuntime(action.id, { state: "reviewing", filled });
   };
 

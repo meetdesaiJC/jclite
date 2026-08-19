@@ -99,7 +99,7 @@ function MenuItem({ icon: Icon, label, onClick, trailingIcon: TrailingIcon, tone
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2 px-4 py-2 text-left outline-none hover:bg-secondary-bg focus-visible:bg-secondary-bg"
+      className="flex w-full items-center gap-2 px-4 py-2 text-left outline-none dropdown-item hover:bg-secondary-bg focus-visible:bg-secondary-bg"
     >
       <Icon className="size-5 shrink-0" />
       <span

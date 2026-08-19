@@ -22,12 +22,23 @@ export type CapabilityGroup =
   | "Notes"
   | "Companies";
 
+/** Each operation gets its own setup fields — never one generic form. */
+export type ActionOperationKind =
+  | "update_record"
+  | "create_task"
+  | "create_note"
+  | "send_email"
+  | "schedule_meeting"
+  | "create_ticket"
+  | "create_activity";
+
 export interface IntegrationCapability {
   id: string;
   group: CapabilityGroup;
   label: string;
   /** Verb on the agent's confirm button, e.g. "Update HubSpot". */
   actionVerb: string;
+  kind: ActionOperationKind;
   /** Objects this operation can target. Empty = the operation is the object. */
   objects?: string[];
   enabled: boolean;
@@ -53,6 +64,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Deals",
         label: "Update a record",
         actionVerb: "Update HubSpot",
+        kind: "update_record",
         objects: ["Deal", "Contact", "Company"],
         enabled: true,
       },
@@ -61,6 +73,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Tasks",
         label: "Create task",
         actionVerb: "Create HubSpot task",
+        kind: "create_task",
         enabled: true,
       },
       {
@@ -68,6 +81,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Notes",
         label: "Create note",
         actionVerb: "Add HubSpot note",
+        kind: "create_note",
         enabled: true,
       },
       {
@@ -75,7 +89,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Contacts",
         label: "Send email",
         actionVerb: "Send email",
-        objects: ["Contact"],
+        kind: "send_email",
         enabled: true,
       },
       {
@@ -83,6 +97,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Deals",
         label: "Update deal",
         actionVerb: "Update HubSpot deal",
+        kind: "update_record",
         objects: ["Deal"],
         enabled: false,
       },
@@ -91,6 +106,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Contacts",
         label: "Update contact",
         actionVerb: "Update HubSpot",
+        kind: "update_record",
         objects: ["Contact"],
         enabled: false,
       },
@@ -99,6 +115,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Companies",
         label: "Update company",
         actionVerb: "Update HubSpot company",
+        kind: "update_record",
         objects: ["Company"],
         enabled: false,
       },
@@ -115,6 +132,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Tasks",
         label: "Create task",
         actionVerb: "Create Salesforce task",
+        kind: "create_task",
         enabled: true,
       },
       {
@@ -122,6 +140,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Tasks",
         label: "Schedule meeting",
         actionVerb: "Schedule meeting",
+        kind: "schedule_meeting",
         enabled: true,
       },
       {
@@ -129,6 +148,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Contacts",
         label: "Update a record",
         actionVerb: "Update Salesforce",
+        kind: "update_record",
         objects: ["Contact", "Opportunity", "Account"],
         enabled: true,
       },
@@ -145,6 +165,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Tickets",
         label: "Create ticket",
         actionVerb: "Create Zendesk ticket",
+        kind: "create_ticket",
         enabled: true,
       },
     ],
@@ -160,6 +181,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Deals",
         label: "Update a record",
         actionVerb: "Update Pipedrive",
+        kind: "update_record",
         objects: ["Deal", "Person", "Organization"],
         enabled: true,
       },
@@ -168,6 +190,7 @@ export const SEED_INTEGRATIONS: Integration[] = [
         group: "Tasks",
         label: "Create activity",
         actionVerb: "Create Pipedrive activity",
+        kind: "create_activity",
         enabled: true,
       },
     ],
@@ -218,11 +241,254 @@ export type ActionValueSource =
   | { kind: "fixed"; value: string }
   | { kind: "from_conversation"; extractPrompt: string };
 
-
 export const VALUE_SOURCE_OPTIONS: DropdownListItem[] = [
   { value: "from_conversation", label: "From conversation" },
   { value: "fixed", label: "Fixed value" },
 ];
+
+export type ActionAudience = "everyone" | "teams" | "users";
+
+export type EmailRecipientKind =
+  | "current_contact"
+  | "contact_owner"
+  | "crm_field"
+  | "custom";
+
+export const EMAIL_RECIPIENT_OPTIONS: DropdownListItem[] = [
+  { value: "current_contact", label: "Current contact's email" },
+  { value: "contact_owner", label: "Contact owner" },
+  { value: "crm_field", label: "CRM email field" },
+  { value: "custom", label: "Custom email address" },
+];
+
+export const EMAIL_CRM_FIELD_OPTIONS: DropdownListItem[] = [
+  { value: "email", label: "Email" },
+  { value: "work_email", label: "Work email" },
+  { value: "additional_email", label: "Additional email" },
+];
+
+export const EMAIL_TEMPLATE_VARIABLES = [
+  "first_name",
+  "company",
+  "competitor_name",
+] as const;
+
+export type EmailAttachmentKind = "pdf" | "document" | "article" | "url";
+
+export interface EmailAttachment {
+  id: string;
+  name: string;
+  kind: EmailAttachmentKind;
+  href?: string;
+}
+
+export const EMAIL_ATTACHMENT_PRESETS: EmailAttachment[] = [
+  { id: "att-aircall-pdf", name: "JustCall vs Aircall", kind: "pdf" },
+  { id: "att-dialpad-pdf", name: "JustCall vs Dialpad", kind: "pdf" },
+  { id: "att-workflow", name: "Missed-call workflow one-pager", kind: "document" },
+  {
+    id: "att-help-compare",
+    name: "How JustCall compares",
+    kind: "article",
+    href: "https://help.justcall.io/comparisons",
+  },
+];
+
+export interface EmailActionConfig {
+  recipient: EmailRecipientKind;
+  customEmail: string;
+  crmField: string;
+  subject: string;
+  message: string;
+  personalize: boolean;
+  includeInstructions: string;
+  attachments: EmailAttachment[];
+}
+
+export const DEFAULT_EMAIL_SUBJECT = "JustCall vs {{competitor_name}}";
+
+export const DEFAULT_EMAIL_MESSAGE = `Hi {{first_name}},
+
+Based on what we discussed, here’s a quick comparison between JustCall and {{competitor_name}} for {{company}}.
+
+Happy to walk through any of this if it’s useful.
+
+Best,`;
+
+export const DEFAULT_EMAIL_INCLUDE =
+  "Include the competitor discussed, relevant JustCall differentiators, and any follow-up items promised during the call.";
+
+export function createDefaultEmailConfig(): EmailActionConfig {
+  return {
+    recipient: "current_contact",
+    customEmail: "",
+    crmField: "email",
+    subject: DEFAULT_EMAIL_SUBJECT,
+    message: DEFAULT_EMAIL_MESSAGE,
+    personalize: true,
+    includeInstructions: DEFAULT_EMAIL_INCLUDE,
+    attachments: [],
+  };
+}
+
+export function isSendEmailCapability(
+  capability?: IntegrationCapability
+): boolean {
+  return capability?.kind === "send_email";
+}
+
+export const EMAIL_PREVIEW_CONTEXT = {
+  first_name: "Elena",
+  last_name: "Vasquez",
+  full_name: "Elena Vasquez",
+  company: "Acme Corp",
+  competitor_name: "Dialpad",
+  contact_email: "elena@acmecorp.com",
+  owner_name: "Sarah Johnson",
+  owner_email: "sarah.johnson@justcall.io",
+};
+
+export function interpolateTemplate(
+  template: string,
+  vars: Record<string, string>
+): string {
+  return template.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/gi, (match, key: string) => {
+    const found = vars[key] ?? vars[key.toLowerCase()];
+    return found ?? match;
+  });
+}
+
+export function firstNameFrom(fullName: string | undefined): string {
+  if (!fullName?.trim()) return EMAIL_PREVIEW_CONTEXT.first_name;
+  return fullName.trim().split(/\s+/)[0] ?? fullName;
+}
+
+export interface EmailPreview {
+  title: string;
+  to: string;
+  toEmail: string;
+  subject: string;
+  body: string;
+  attachments: EmailAttachment[];
+  cta: string;
+}
+
+function recipientPreview(
+  email: EmailActionConfig,
+  context: typeof EMAIL_PREVIEW_CONTEXT
+): { to: string; toEmail: string } {
+  if (email.recipient === "contact_owner") {
+    return { to: context.owner_name, toEmail: context.owner_email };
+  }
+  if (email.recipient === "custom" && email.customEmail.trim()) {
+    return { to: email.customEmail.trim(), toEmail: email.customEmail.trim() };
+  }
+  if (email.recipient === "crm_field") {
+    const field =
+      EMAIL_CRM_FIELD_OPTIONS.find((item) => item.value === email.crmField)
+        ?.label ?? "Email";
+    return {
+      to: `${context.full_name} · ${field}`,
+      toEmail: context.contact_email,
+    };
+  }
+  return { to: context.full_name, toEmail: context.contact_email };
+}
+
+function conversationPersonalization(
+  instructions: string,
+  competitor: string
+): string {
+  const hay = instructions.toLowerCase();
+  const bits: string[] = [];
+  if (hay.includes("competitor") || hay.includes("differentiat")) {
+    bits.push(
+      `You mentioned evaluating ${competitor}. JustCall bundles calling, messaging, and CRM sync so those don’t have to live in separate tools.`
+    );
+  }
+  if (hay.includes("follow-up") || hay.includes("promised")) {
+    bits.push("I’ve included the follow-up we talked about on the call.");
+  }
+  if (bits.length === 0) {
+    bits.push(
+      `Based on what we discussed, here’s a quick comparison between JustCall and ${competitor}.`
+    );
+  }
+  return bits.join(" ");
+}
+
+function personalizeEmailBody(
+  interpolated: string,
+  instructions: string,
+  competitor: string
+): string {
+  const extra = conversationPersonalization(instructions, competitor);
+  if (interpolated.includes(extra)) return interpolated;
+  const parts = interpolated.split(/\n\n/);
+  if (parts.length >= 2) {
+    return [parts[0], extra, ...parts.slice(1)].join("\n\n");
+  }
+  return `${interpolated}\n\n${extra}`;
+}
+
+export function previewEmailContext(
+  action: Pick<AgentAction, "detectExamples" | "property">,
+  overrides: Partial<typeof EMAIL_PREVIEW_CONTEXT> = {}
+): typeof EMAIL_PREVIEW_CONTEXT {
+  const sample = previewSampleUtterance(action);
+  const competitor =
+    extractVariableValue("competitor_name", sample) ??
+    EMAIL_PREVIEW_CONTEXT.competitor_name;
+  return { ...EMAIL_PREVIEW_CONTEXT, competitor_name: competitor, ...overrides };
+}
+
+export function previewEmail(
+  action: Pick<
+    AgentAction,
+    | "agentLabel"
+    | "name"
+    | "requiresConfirmation"
+    | "detectExamples"
+    | "property"
+    | "email"
+  >,
+  context: typeof EMAIL_PREVIEW_CONTEXT = previewEmailContext(action)
+): EmailPreview {
+  const email = action.email ?? createDefaultEmailConfig();
+  const vars = {
+    first_name: context.first_name,
+    company: context.company,
+    competitor_name: context.competitor_name,
+  };
+  const subject =
+    interpolateTemplate(email.subject, vars).trim() || "Untitled email";
+  let body = interpolateTemplate(email.message, vars).trim();
+  if (email.personalize && email.includeInstructions.trim()) {
+    body = personalizeEmailBody(
+      body,
+      email.includeInstructions,
+      context.competitor_name
+    );
+  }
+  const recipient = recipientPreview(email, context);
+  return {
+    title: action.agentLabel || action.name || "Send email",
+    to: recipient.to,
+    toEmail: recipient.toEmail,
+    subject,
+    body,
+    attachments: email.attachments,
+    cta: action.requiresConfirmation ? "Review email" : "Send email",
+  };
+}
+
+export function emailConfigReady(email?: EmailActionConfig): boolean {
+  if (!email) return false;
+  if (!email.subject.trim() || !email.message.trim()) return false;
+  if (email.recipient === "custom" && !email.customEmail.trim()) return false;
+  if (email.recipient === "crm_field" && !email.crmField.trim()) return false;
+  return true;
+}
 
 export function defaultExtractPrompt(property: string): string {
   const key = property.trim().toLowerCase();
@@ -240,9 +506,25 @@ export function defaultExtractPrompt(property: string): string {
 }
 
 export function suggestedAgentLabel(
-  action: { property: string; capabilityId: string },
+  action: {
+    property: string;
+    capabilityId: string;
+    detectWhen?: string;
+    email?: EmailActionConfig;
+  },
   capability?: IntegrationCapability
 ): string {
+  if (capability?.kind === "send_email") {
+    const hay = `${action.detectWhen ?? ""} ${action.email?.subject ?? ""}`.toLowerCase();
+    if (
+      hay.includes("competitor") ||
+      hay.includes("comparison") ||
+      hay.includes(" vs ")
+    ) {
+      return "Send comparison email";
+    }
+    return "Send email";
+  }
   const property = action.property.trim();
   if (capability?.label.toLowerCase().startsWith("create")) {
     return capability.label;
@@ -265,6 +547,7 @@ export function suggestedInternalName(
 export function capabilityNeedsRecord(
   capability?: IntegrationCapability
 ): boolean {
+  if (capability?.kind === "send_email") return false;
   return Boolean(capability?.objects && capability.objects.length > 0);
 }
 
@@ -355,9 +638,12 @@ export interface AgentAction {
   object: string;
   property: string;
   value: ActionValueSource;
+  /** Present when the selected operation is Send email. */
+  email?: EmailActionConfig;
   trigger: ActionTriggerKind;
   detectWhen: string;
   detectExamples: string[];
+  audience: ActionAudience;
   teamMembers: string[];
   userGroups: string[];
   /** External writes require agent confirmation by default. */
@@ -380,6 +666,7 @@ export function createEmptyAction(): AgentAction {
     trigger: "ai_recommended",
     detectWhen: "",
     detectExamples: [],
+    audience: "everyone",
     teamMembers: [],
     userGroups: [],
     requiresConfirmation: true,
@@ -420,6 +707,7 @@ export const SEED_ACTIONS: AgentAction[] = [
       "We currently use Aircall.",
       "We're also evaluating Dialpad.",
     ],
+    audience: "teams",
     teamMembers: [],
     userGroups: ["sales"],
     requiresConfirmation: true,
@@ -443,6 +731,7 @@ export const SEED_ACTIONS: AgentAction[] = [
       "Let's set up a working session.",
       "Can we follow up next week?",
     ],
+    audience: "teams",
     teamMembers: [],
     userGroups: ["sales"],
     requiresConfirmation: true,
@@ -451,17 +740,38 @@ export const SEED_ACTIONS: AgentAction[] = [
   },
   {
     id: "act-send-comparison",
-    name: "HubSpot · Send comparison",
-    agentLabel: "Send Aircall comparison",
-    description: "Email the Aircall comparison one-pager to the contact on the call.",
+    name: "HubSpot · Send comparison email",
+    agentLabel: "Send comparison email",
+    description:
+      "Email a JustCall comparison to the contact when they mention a competitor.",
     integrationId: "hubspot",
     capabilityId: "hs-send-email",
     object: "Contact",
-    property: "Asset",
-    value: { kind: "fixed", value: "Aircall comparison one-pager" },
+    property: "",
+    value: { kind: "from_conversation", extractPrompt: "" },
+    email: {
+      recipient: "current_contact",
+      customEmail: "",
+      crmField: "email",
+      subject: "JustCall vs {{competitor_name}}",
+      message: DEFAULT_EMAIL_MESSAGE,
+      personalize: true,
+      includeInstructions: DEFAULT_EMAIL_INCLUDE,
+      attachments: [
+        {
+          id: "att-dialpad-pdf",
+          name: "JustCall vs Dialpad",
+          kind: "pdf",
+        },
+      ],
+    },
     trigger: "ai_recommended",
-    detectWhen: "The agent offers to send a comparison, recap, or one-pager.",
-    detectExamples: ["I'll send you a one-page comparison."],
+    detectWhen: "Customer mentions a competitor they use or are evaluating",
+    detectExamples: [
+      "We currently use Aircall.",
+      "We're also evaluating Dialpad.",
+    ],
+    audience: "teams",
     teamMembers: [],
     userGroups: ["sales"],
     requiresConfirmation: true,
@@ -481,6 +791,7 @@ export const SEED_ACTIONS: AgentAction[] = [
     trigger: "ai_recommended",
     detectWhen: "The customer agrees to a working session or names a time to meet.",
     detectExamples: ["Thursday afternoon is open.", "Let's lock a time this week."],
+    audience: "teams",
     teamMembers: [],
     userGroups: ["sales"],
     requiresConfirmation: true,
@@ -504,6 +815,7 @@ export const SEED_ACTIONS: AgentAction[] = [
     detectWhen:
       "The customer reports a billing issue, duplicate charge, or needs a support ticket.",
     detectExamples: ["I was charged twice.", "Can I get a refund?"],
+    audience: "teams",
     teamMembers: [],
     userGroups: ["support"],
     requiresConfirmation: true,
@@ -558,6 +870,10 @@ export function actionAssignees(action: AgentAction): {
   return [...groups, ...members];
 }
 
+export function actionIsAssigned(action: AgentAction): boolean {
+  return action.teamMembers.length > 0 || action.userGroups.length > 0;
+}
+
 export function actionAssignmentLabel(action: AgentAction): string {
   const people = actionAssignees(action);
   if (people.length === 0) return "Unassigned";
@@ -599,6 +915,14 @@ export interface ActionField {
 
 export type ActionOrigin = "ai" | "guidance" | "always" | "conversation";
 
+export interface SuggestedEmail {
+  to: string;
+  toEmail: string;
+  subject: string;
+  body: string;
+  attachments: EmailAttachment[];
+}
+
 export interface SuggestedAction {
   id: string;
   actionId: string;
@@ -615,6 +939,7 @@ export interface SuggestedAction {
   simulateFailure?: boolean;
   simulatePermissionDenied?: boolean;
   viewUrl?: string;
+  email?: SuggestedEmail;
 }
 
 export type ActionState =
@@ -695,6 +1020,53 @@ export function suggestedActionFromLibrary(
   if (!integration?.connected || !capability?.enabled) return null;
   if (action.status !== "active") return null;
 
+  const shared = {
+    id: action.id,
+    actionId: action.id,
+    integrationId: action.integrationId,
+    capabilityId: action.capabilityId,
+    title: action.agentLabel || action.name,
+    origin: context.origin ?? ("ai" as ActionOrigin),
+    guidanceId: context.guidanceId,
+    requiresConfirmation: action.requiresConfirmation,
+    viewUrl: integrationDeepLink(action.integrationId),
+  };
+
+  if (capability.kind === "send_email" && action.email) {
+    const competitor =
+      extractVariableValue("competitor_name", context.utterance ?? "") ??
+      extractVariableValue(
+        "competitor_name",
+        action.detectExamples.join(" ")
+      ) ??
+      "Dialpad";
+    const preview = previewEmail(action, {
+      ...EMAIL_PREVIEW_CONTEXT,
+      first_name: firstNameFrom(context.customerName),
+      full_name: context.customerName ?? EMAIL_PREVIEW_CONTEXT.full_name,
+      company: context.company ?? EMAIL_PREVIEW_CONTEXT.company,
+      competitor_name: competitor,
+    });
+    return {
+      ...shared,
+      summary: `${preview.subject} · ${preview.to}`,
+      recordLabel: "Contact",
+      recordValue: context.customerName ?? preview.to,
+      fields: [
+        { label: "To", value: preview.to },
+        { label: "Subject", value: preview.subject },
+        { label: "Message", value: preview.body },
+      ],
+      email: {
+        to: preview.to,
+        toEmail: preview.toEmail,
+        subject: preview.subject,
+        body: preview.body,
+        attachments: preview.attachments,
+      },
+    };
+  }
+
   let proposed = "";
   let missing = false;
   if (action.value.kind === "fixed") {
@@ -715,11 +1087,7 @@ export function suggestedActionFromLibrary(
     : `${property} · ${proposed}`;
 
   return {
-    id: action.id,
-    actionId: action.id,
-    integrationId: action.integrationId,
-    capabilityId: action.capabilityId,
-    title: action.agentLabel || action.name,
+    ...shared,
     summary,
     recordLabel: context.recordLabel || objectLabel,
     recordValue: context.recordValue,
@@ -731,10 +1099,6 @@ export function suggestedActionFromLibrary(
         missing,
       },
     ],
-    origin: context.origin ?? "ai",
-    guidanceId: context.guidanceId,
-    requiresConfirmation: action.requiresConfirmation,
-    viewUrl: integrationDeepLink(action.integrationId),
   };
 }
 
@@ -747,7 +1111,7 @@ export function integrationDeepLink(id: IntegrationId): string | undefined {
 }
 
 export function integrationWriteLabel(
-  action: SuggestedAction,
+  action: Pick<SuggestedAction, "integrationId" | "capabilityId">,
   integrations: Integration[]
 ): string {
   const name =
@@ -771,7 +1135,7 @@ export function integrationWriteLabel(
 }
 
 export function integrationDoneLabel(
-  action: SuggestedAction,
+  action: Pick<SuggestedAction, "integrationId" | "capabilityId">,
   integrations: Integration[]
 ): string {
   const name =
@@ -801,6 +1165,7 @@ export function integrationFailedLabel(
   const name =
     integrationById(integrations, action.integrationId)?.name ??
     action.integrationId;
+  if (action.email) return `Couldn’t send email`;
   return `Couldn’t update ${name}`;
 }
 
@@ -866,7 +1231,8 @@ export function actionMatchesUtterance(
     (name) =>
       utterance.toLowerCase().includes(name.toLowerCase()) &&
       (action.property.toLowerCase() === "competitor" ||
-        action.name.toLowerCase().includes("competitor"))
+        action.name.toLowerCase().includes("competitor") ||
+        Boolean(action.email))
   );
 }
 
@@ -874,6 +1240,21 @@ export function patchSuggestedValue(
   current: SuggestedAction,
   next: SuggestedAction
 ): SuggestedAction {
+  if (current.email && next.email) {
+    if (
+      current.email.subject === next.email.subject &&
+      current.email.body === next.email.body &&
+      current.email.to === next.email.to
+    ) {
+      return current;
+    }
+    return {
+      ...current,
+      summary: next.summary,
+      fields: next.fields,
+      email: next.email,
+    };
+  }
   const nextValue = next.fields.find((field) => field.label === "New value");
   if (!nextValue || nextValue.missing) return current;
   const currentValue = current.fields.find((field) => field.label === "New value");
