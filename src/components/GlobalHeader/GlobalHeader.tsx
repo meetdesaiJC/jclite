@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/Button";
 import { Avatar, AvatarIndicator, type AvatarStatus } from "@/components/Avatar";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
+import { useDropdownPresence } from "@/components/Dropdown/useDropdownPresence";
 import liveCallSupportAvatar from "./assets/live-call-support-avatar.png";
 
 /**
@@ -127,6 +128,14 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
     const availabilityOpen = isAvailabilityOpenControlled
       ? availabilityOpenProp
       : uncontrolledAvailabilityOpen;
+
+    const notificationsHeld = React.useRef(notificationsPanel);
+    if (notificationsPanel) notificationsHeld.current = notificationsPanel;
+    const notificationsPresence = useDropdownPresence(notificationsOpen);
+
+    const profileHeld = React.useRef(profileMenuPanel);
+    if (profileMenuPanel) profileHeld.current = profileMenuPanel;
+    const profilePresence = useDropdownPresence(profileMenuOpen);
 
     const handleAvailabilityClick = () => {
       if (!isAvailabilityOpenControlled) {
@@ -277,9 +286,12 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
                     {notificationLabel}
                   </span>
                 )}
-                {notificationsOpen && notificationsPanel && (
-                  <div className="absolute top-full right-0 z-50 mt-2">
-                    {notificationsPanel}
+                {notificationsPresence.mounted && notificationsHeld.current && (
+                  <div
+                    className="dropdown-panel absolute top-full right-0 z-50 mt-2"
+                    data-state={notificationsPresence.state}
+                  >
+                    {notificationsHeld.current}
                   </div>
                 )}
               </div>
@@ -312,10 +324,8 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
               </span>
               <IconChevronDown
                 size={16}
-                className={cn(
-                  "shrink-0 text-gray-500 transition-transform",
-                  availabilityOpen && "rotate-180"
-                )}
+                className="dropdown-chevron shrink-0 text-gray-500"
+                data-open={availabilityOpen ? "true" : "false"}
               />
             </button>
 
@@ -334,9 +344,12 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
               >
                 {profileInitials}
               </button>
-              {profileMenuOpen && profileMenuPanel && (
-                <div className="absolute top-full right-0 z-50 mt-2">
-                  {profileMenuPanel}
+              {profilePresence.mounted && profileHeld.current && (
+                <div
+                  className="dropdown-panel absolute top-full right-0 z-50 mt-2"
+                  data-state={profilePresence.state}
+                >
+                  {profileHeld.current}
                 </div>
               )}
             </div>

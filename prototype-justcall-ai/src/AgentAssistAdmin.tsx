@@ -1,7 +1,5 @@
 import * as React from "react";
-import { Checkbox } from "@/components/Checkbox";
 import { IconChevronLeft } from "@/components/Icon";
-import { TableCell, TableHead } from "@/components/Table";
 import { Toggle } from "@/components/Toggle";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import { cn } from "@/lib/utils";
@@ -141,52 +139,6 @@ export function StatusToggle({
         {toggle}
       </span>
     </TooltipTrigger>
-  );
-}
-
-/** Header checkbox for a list that supports multi-select. */
-export function TableSelectHead({
-  allSelected,
-  someSelected,
-  onToggleAll,
-  label,
-}: {
-  allSelected: boolean;
-  someSelected: boolean;
-  onToggleAll: () => void;
-  label: string;
-}) {
-  return (
-    <TableHead className="sticky top-0 z-10 w-11">
-      <Checkbox
-        size="sm"
-        checked={allSelected}
-        indeterminate={someSelected}
-        onCheckedChange={onToggleAll}
-        aria-label={label}
-      />
-    </TableHead>
-  );
-}
-
-export function TableSelectCell({
-  checked,
-  onToggle,
-  label,
-}: {
-  checked: boolean;
-  onToggle: () => void;
-  label: string;
-}) {
-  return (
-    <TableCell className="w-11">
-      <Checkbox
-        size="sm"
-        checked={checked}
-        onCheckedChange={onToggle}
-        aria-label={label}
-      />
-    </TableCell>
   );
 }
 

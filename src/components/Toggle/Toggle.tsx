@@ -36,9 +36,10 @@ const knobSize = {
 
 const labelTextClasses = { sm: "text-paragraph-md", md: "text-paragraph-lg" } as const;
 const descriptionTextClasses = { sm: "text-paragraph-sm", md: "text-paragraph-md" } as const;
+// `start` indents under the label (track + gap). `end` stays flush with the label.
 const descriptionPadding = {
   start: { sm: "pl-10", md: "pl-12" },
-  end: { sm: "pl-5", md: "pl-6" },
+  end: { sm: "pl-0", md: "pl-0" },
 } as const;
 
 export interface ToggleProps
@@ -53,7 +54,7 @@ export interface ToggleProps
   onCheckedChange?: (checked: boolean) => void;
   /** Label rendered next to the track. */
   label?: React.ReactNode;
-  /** Helper text rendered on its own line below, indented under the label. */
+  /** Helper text rendered on its own line below the label. */
   description?: React.ReactNode;
   /** Optional slot rendered after the label (e.g. an info icon with a tooltip). */
   infoIcon?: React.ReactNode;

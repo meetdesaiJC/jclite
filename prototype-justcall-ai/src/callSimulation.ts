@@ -302,18 +302,39 @@ export const CALL_SCENARIOS: CallScenario[] = [
         actionId: "act-send-comparison",
         integrationId: "hubspot",
         capabilityId: "hs-send-email",
-        title: "Send Aircall comparison",
-        summary: "One-pager · email",
+        title: "Send comparison email",
+        summary: "JustCall vs Dialpad · Elena Vasquez",
         recordLabel: "Contact",
         recordValue: "Elena Vasquez",
         fields: [
           { label: "To", value: "Elena Vasquez" },
-          { label: "Channel", value: "Email" },
-          { label: "Asset", value: "Aircall comparison one-pager" },
+          { label: "Subject", value: "JustCall vs Dialpad" },
+          {
+            label: "Message",
+            value:
+              "Hi Elena,\n\nBased on what we discussed, here’s a quick comparison between JustCall and Dialpad...",
+          },
         ],
         origin: "conversation",
         requiresConfirmation: true,
         viewUrl: "https://app.hubspot.com",
+        email: {
+          to: "Elena Vasquez",
+          toEmail: "elena@acmecorp.com",
+          subject: "JustCall vs Dialpad",
+          body: `Hi Elena,
+
+Based on what we discussed, here’s a quick comparison between JustCall and Dialpad.
+
+You mentioned evaluating Dialpad. JustCall bundles calling, messaging, and CRM sync so those don’t have to live in separate tools. I’ve included the follow-up we talked about on the call.
+
+Happy to walk through any of this if it’s useful.
+
+Best,`,
+          attachments: [
+            { id: "att-dialpad-pdf", name: "JustCall vs Dialpad", kind: "pdf" },
+          ],
+        },
       },
       {
         id: "act-update-competitor",
