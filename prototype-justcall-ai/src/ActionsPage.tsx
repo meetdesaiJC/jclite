@@ -90,21 +90,17 @@ export function ActionsPage({
   const hasFilters = activeFilterCount > 0;
 
   const filtered = actions.filter((row) => {
-    // "Everyone" ignores the assignment filters — it already covers whoever
-    // was picked.
-    if (row.assignmentScope !== "everyone") {
-      if (
-        memberFilter.length > 0 &&
-        !memberFilter.some((value) => row.teamMembers.includes(value))
-      ) {
-        return false;
-      }
-      if (
-        groupFilter.length > 0 &&
-        !groupFilter.some((value) => row.userGroups.includes(value))
-      ) {
-        return false;
-      }
+    if (
+      memberFilter.length > 0 &&
+      !memberFilter.some((value) => row.teamMembers.includes(value))
+    ) {
+      return false;
+    }
+    if (
+      groupFilter.length > 0 &&
+      !groupFilter.some((value) => row.userGroups.includes(value))
+    ) {
+      return false;
     }
     if (
       integrationFilter.length > 0 &&
@@ -604,18 +600,23 @@ function ActionStatusToggle({
   const integration = integrationById(integrations, row.integrationId);
   const blocked = status === "needs_attention";
   const disconnected = Boolean(blocked && integration && !integration.connected);
+  // Same rule as response cards and live coaching: nothing goes live until
+  // someone is assigned to it.
+  const unassigned = status !== "active" && actionAssignees(row).length === 0;
 
   return (
     <StatusToggle
       name={row.name}
       checked={status === "active"}
-      disabled={blocked}
+      disabled={blocked || unassigned}
       disabledReason={
         disconnected
           ? (integration?.connectHint ?? `Connect ${integration?.name ?? "this app"} to enable this action`)
           : blocked
             ? `This operation isn’t available in ${integration?.name ?? "the connected app"} yet.`
-            : undefined
+            : unassigned
+              ? "Assign users or groups before publishing"
+              : undefined
       }
       disabledAction={
         disconnected && integration ? (
@@ -705,11 +706,7 @@ function ActionsTable({
                 />
               </TableCell>
               <TableCell>
-                {row.assignmentScope === "everyone" ? (
-                  <span className="text-paragraph-md text-foreground">Everyone</span>
-                ) : (
-                  <AssignmentAvatarStack people={people} />
-                )}
+                <AssignmentAvatarStack people={people} />
               </TableCell>
               <TableCell>
                 <ActionStatusToggle

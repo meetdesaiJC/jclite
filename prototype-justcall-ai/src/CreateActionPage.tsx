@@ -7,6 +7,7 @@ import { Radio } from "@/components/Radio";
 import { Toggle } from "@/components/Toggle";
 import { IconChevronRight, IconClose } from "@/components/Icon";
 import { useAgentAssistTakeover } from "./agentAssistTakeover";
+import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
 import { TEAM_MEMBERS, USER_GROUPS } from "./guidanceData";
 import { InCallActionSuggestionCard } from "./InCallActionCard";
 import {
@@ -23,7 +24,6 @@ import {
   previewExtractedValue,
   suggestedAgentLabel,
   suggestedInternalName,
-  type ActionAssignmentScope,
   type ActionValueSource,
   type AgentAction,
   type Integration,
@@ -111,6 +111,9 @@ export function CreateActionPage({
       ? draft.value.value.trim().length > 0
       : draft.value.extractPrompt.trim().length > 0;
 
+  const hasAssignees =
+    draft.teamMembers.length > 0 || draft.userGroups.length > 0;
+
   const canSave =
     (draft.agentLabel.trim().length > 0 || draft.name.trim().length > 0) &&
     Boolean(draft.capabilityId) &&
@@ -193,7 +196,10 @@ export function CreateActionPage({
       trigger: "ai_recommended",
       detectWhen: draft.detectWhen.trim(),
       detectExamples: draft.detectExamples.filter((item) => item.trim()),
-      status: draft.status === "inactive" ? "inactive" : "active",
+      // An unassigned action has nobody to show it to, so it saves inactive —
+      // the same way an unassigned response card stays a draft.
+      status:
+        draft.status === "inactive" || !hasAssignees ? "inactive" : "active",
       updated: "Just now",
     };
   };
@@ -227,6 +233,19 @@ export function CreateActionPage({
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Assignment reads the same here as on response cards and live coaching:
+            a widget top-left, not a step in the setup flow. */}
+        <aside className="hidden w-[300px] shrink-0 flex-col overflow-auto py-6 pl-6 lg:flex">
+          <AssignTeamAndGroups
+            members={TEAM_MEMBERS}
+            groups={USER_GROUPS}
+            selectedMembers={draft.teamMembers}
+            selectedGroups={draft.userGroups}
+            onMembersChange={(teamMembers) => patch({ teamMembers })}
+            onGroupsChange={(userGroups) => patch({ userGroups })}
+          />
+        </aside>
+
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
           <div className="mx-auto flex w-full max-w-[720px] flex-col gap-8 px-6 py-6">
             {needsReconnect && integration ? (
@@ -397,11 +416,29 @@ export function CreateActionPage({
                       clearable={false}
                     />
                   )}
+
+                  <Toggle
+                    size="sm"
+                    checked={draft.requiresConfirmation}
+                    onCheckedChange={(checked) =>
+                      patch({ requiresConfirmation: checked })
+                    }
+                    label="Ask the agent to confirm before writing"
+                    description="On by default for actions that write to a connected app."
+                  />
                 </div>
               ) : null}
             </section>
 
             <div className="flex flex-col gap-4 lg:hidden">
+              <AssignTeamAndGroups
+                members={TEAM_MEMBERS}
+                groups={USER_GROUPS}
+                selectedMembers={draft.teamMembers}
+                selectedGroups={draft.userGroups}
+                onMembersChange={(teamMembers) => patch({ teamMembers })}
+                onGroupsChange={(userGroups) => patch({ userGroups })}
+              />
               <AgentPreviewPanel
                 draft={draft}
                 integrationName={integration?.name}
@@ -409,87 +446,6 @@ export function CreateActionPage({
                 extracted={extractedPreview}
               />
             </div>
-
-            <section className="flex flex-col gap-4">
-              <header className="flex flex-col gap-1">
-                <SectionKicker>Who</SectionKicker>
-                <h2 className="text-label-md-semi text-foreground">
-                  Who can use this action?
-                </h2>
-              </header>
-
-              <div className="flex flex-col gap-3">
-                {(
-                  [
-                    ["everyone", "Everyone"],
-                    ["teams", "Teams"],
-                    ["users", "Specific users"],
-                  ] as [ActionAssignmentScope, string][]
-                ).map(([value, label]) => (
-                  <Radio
-                    key={value}
-                    name="action-assignment"
-                    size="sm"
-                    label={label}
-                    checked={draft.assignmentScope === value}
-                    onChange={() =>
-                      patch({
-                        assignmentScope: value,
-                        teamMembers:
-                          value === "users" ? draft.teamMembers : [],
-                        userGroups:
-                          value === "teams" ? draft.userGroups : [],
-                      })
-                    }
-                  />
-                ))}
-                {draft.assignmentScope === "teams" ? (
-                  <Dropdown
-                    label="Teams"
-                    placeholder="Search user groups"
-                    searchPlaceholder="Search user groups"
-                    options={USER_GROUPS}
-                    multiple
-                    searchable
-                    maxVisibleTags={2}
-                    value={draft.userGroups}
-                    onValueChange={(value) =>
-                      patch({
-                        userGroups: Array.isArray(value) ? value : [value],
-                        teamMembers: [],
-                      })
-                    }
-                  />
-                ) : null}
-                {draft.assignmentScope === "users" ? (
-                  <Dropdown
-                    label="Users"
-                    placeholder="Search team members"
-                    searchPlaceholder="Search team members"
-                    options={TEAM_MEMBERS}
-                    multiple
-                    searchable
-                    maxVisibleTags={2}
-                    value={draft.teamMembers}
-                    onValueChange={(value) =>
-                      patch({
-                        teamMembers: Array.isArray(value) ? value : [value],
-                        userGroups: [],
-                      })
-                    }
-                  />
-                ) : null}
-              </div>
-              <Toggle
-                size="sm"
-                checked={draft.requiresConfirmation}
-                onCheckedChange={(checked) =>
-                  patch({ requiresConfirmation: checked })
-                }
-                label="Ask the agent to confirm before writing"
-                description="On by default for actions that write to a connected app."
-              />
-            </section>
           </div>
         </div>
 

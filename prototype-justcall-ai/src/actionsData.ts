@@ -342,8 +342,6 @@ export function previewExtractedValue(action: {
 
 export type ActionTriggerKind = "ai_recommended";
 
-export type ActionAssignmentScope = "everyone" | "teams" | "users";
-
 export type ActionPublishStatus = "active" | "inactive";
 
 export interface AgentAction {
@@ -360,7 +358,6 @@ export interface AgentAction {
   trigger: ActionTriggerKind;
   detectWhen: string;
   detectExamples: string[];
-  assignmentScope: ActionAssignmentScope;
   teamMembers: string[];
   userGroups: string[];
   /** External writes require agent confirmation by default. */
@@ -383,7 +380,6 @@ export function createEmptyAction(): AgentAction {
     trigger: "ai_recommended",
     detectWhen: "",
     detectExamples: [],
-    assignmentScope: "everyone",
     teamMembers: [],
     userGroups: [],
     requiresConfirmation: true,
@@ -424,7 +420,6 @@ export const SEED_ACTIONS: AgentAction[] = [
       "We currently use Aircall.",
       "We're also evaluating Dialpad.",
     ],
-    assignmentScope: "teams",
     teamMembers: [],
     userGroups: ["sales"],
     requiresConfirmation: true,
@@ -448,7 +443,6 @@ export const SEED_ACTIONS: AgentAction[] = [
       "Let's set up a working session.",
       "Can we follow up next week?",
     ],
-    assignmentScope: "teams",
     teamMembers: [],
     userGroups: ["sales"],
     requiresConfirmation: true,
@@ -468,7 +462,6 @@ export const SEED_ACTIONS: AgentAction[] = [
     trigger: "ai_recommended",
     detectWhen: "The agent offers to send a comparison, recap, or one-pager.",
     detectExamples: ["I'll send you a one-page comparison."],
-    assignmentScope: "teams",
     teamMembers: [],
     userGroups: ["sales"],
     requiresConfirmation: true,
@@ -488,7 +481,6 @@ export const SEED_ACTIONS: AgentAction[] = [
     trigger: "ai_recommended",
     detectWhen: "The customer agrees to a working session or names a time to meet.",
     detectExamples: ["Thursday afternoon is open.", "Let's lock a time this week."],
-    assignmentScope: "teams",
     teamMembers: [],
     userGroups: ["sales"],
     requiresConfirmation: true,
@@ -512,7 +504,6 @@ export const SEED_ACTIONS: AgentAction[] = [
     detectWhen:
       "The customer reports a billing issue, duplicate charge, or needs a support ticket.",
     detectExamples: ["I was charged twice.", "Can I get a refund?"],
-    assignmentScope: "teams",
     teamMembers: [],
     userGroups: ["support"],
     requiresConfirmation: true,
@@ -546,7 +537,6 @@ export function actionAssignees(action: AgentAction): {
   name: string;
   kind: "member" | "group";
 }[] {
-  if (action.assignmentScope === "everyone") return [];
   const groups = USER_GROUPS.filter(
     (option) =>
       (!option.type || option.type === "option") &&
@@ -569,7 +559,6 @@ export function actionAssignees(action: AgentAction): {
 }
 
 export function actionAssignmentLabel(action: AgentAction): string {
-  if (action.assignmentScope === "everyone") return "Everyone";
   const people = actionAssignees(action);
   if (people.length === 0) return "Unassigned";
   return people.map((person) => person.name).join(", ");
