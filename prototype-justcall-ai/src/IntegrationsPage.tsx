@@ -13,7 +13,7 @@ import {
 } from "./knowledgeData";
 
 /**
- * Account-level connections. Knowledge bases can answer from these without
+ * Account-level connections. Knowledge Bases can answer from these without
  * each one connecting them again; customer context is shared for the person
  * on the call.
  */
@@ -47,7 +47,7 @@ export function IntegrationsPage({
     <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <AdminPageHeader
         title="Integrations"
-        description="Connect each app once. Knowledge bases can answer from them, and Agent Assist can read customer context on the live call."
+        description="Connect each app once. Knowledge Bases can answer from them, and Agent Assist can read customer context on the live call."
         actions={
           isEmpty ? null : (
             <Button size="sm" disabled={full} onClick={() => setPicking(true)}>
@@ -76,8 +76,8 @@ export function IntegrationsPage({
               </p>
               <p className="text-[14px] leading-5 text-muted-foreground">
                 Connect HubSpot, Zendesk, Notion, or any other tool once for the
-                account. Knowledge can feed every knowledge base; customer
-                context stays shared for the person on the call.
+                account. Company knowledge can feed every Knowledge Base;
+                customer context stays shared for the person on the call.
               </p>
             </div>
             <Button size="md" onClick={() => setPicking(true)}>

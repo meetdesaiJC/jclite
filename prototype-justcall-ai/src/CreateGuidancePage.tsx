@@ -49,7 +49,7 @@ export interface CreateGuidancePageProps {
   templateId?: GuidanceTemplateId | null;
   /** Sources AI can draft response cards from (§13). */
   knowledgeSources?: KnowledgeSourceRecord[];
-  /** Opens the AI drafting flow immediately — "Generate from Knowledge" (§13). */
+  /** Opens the AI drafting flow immediately — "Generate from Knowledge Base" (§13). */
   startWithGenerate?: boolean;
   /** Offered when Knowledge already covers the trigger. Optional escape hatch. */
   onUseKnowledgeInstead?: () => void;
@@ -345,7 +345,7 @@ export function CreateGuidancePage({
                 leftIcon={<IconSparkles size={16} />}
                 onClick={() => setGenerateOpen(true)}
               >
-                Generate from Knowledge
+                Generate from Knowledge Base
               </Button>
             </div>
           ) : null}
@@ -825,7 +825,7 @@ function KnowledgeCoverageHint({
       <IconKnowledge className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="text-pretty text-label-md text-foreground">
-          This may already be handled automatically by Knowledge.
+          This may already be handled automatically by your Knowledge Base.
         </p>
         <p className="text-pretty text-paragraph-sm text-muted-foreground">
           “{entryTitle}” in {sourceName} answers this today — agents get it
@@ -835,7 +835,7 @@ function KnowledgeCoverageHint({
           {onUseKnowledge ? (
             <>
               <Button variant="link" size="sm" onClick={onUseKnowledge}>
-                Use Knowledge instead
+                Use Knowledge Base instead
               </Button>
               <span className="h-3 w-px bg-line" aria-hidden="true" />
             </>
@@ -855,7 +855,7 @@ function KnowledgeCoverageHint({
 }
 
 /**
- * Generate from Knowledge (§13). The admin picks the knowledge bases to draw
+ * Generate from Knowledge Base (§13). The admin picks the Knowledge Bases to draw
  * from, AI proposes the whole draft — name, trigger, response, talking points,
  * relevant resources — and the admin reviews every field before publishing.
  */
@@ -911,8 +911,8 @@ function GenerateFromKnowledgeModal({
       open={open}
       onClose={onClose}
       size="md"
-      title="Generate response cards from Knowledge"
-      description="Pick the knowledge bases to draw from. AI proposes a full draft and you review it before anything publishes."
+      title="Generate response cards from Knowledge Base"
+      description="Pick the Knowledge Bases to draw from. AI proposes a full draft and you review it before anything publishes."
       footer={
         <>
           <Button variant="grey-outline" size="sm" onClick={onClose}>
@@ -932,13 +932,13 @@ function GenerateFromKnowledgeModal({
       <div className="flex flex-col gap-4">
         {usable.length === 0 ? (
           <p className="text-pretty text-paragraph-md text-muted-foreground">
-            No knowledge base is available to Agent Assist yet. Add one under
-            Knowledge — or switch Agent Assist on for an existing one — and AI
-            can draft response cards from it.
+            No Knowledge Base is available to Agent Assist yet. Add one under
+            Knowledge Base — or switch Agent Assist on for an existing one — and
+            AI can draft response cards from it.
           </p>
         ) : (
           <div className="flex flex-col gap-2">
-            <span className="text-label-md text-foreground">Knowledge sources</span>
+            <span className="text-label-md text-foreground">Knowledge Bases</span>
             <ul className="flex flex-col gap-1 rounded-lg border border-line p-1">
               {usable.map((source) => (
                 <li key={source.id}>

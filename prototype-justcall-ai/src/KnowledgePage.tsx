@@ -237,7 +237,7 @@ export function KnowledgePage({
             />
             <div className="flex flex-col gap-2">
               <p className="text-[16px] leading-6 font-semibold text-foreground">
-                No knowledge bases yet
+                No Knowledge Bases yet
               </p>
               <p className="text-[14px] leading-5 text-muted-foreground">
                 Connect a help center, upload a document, or start from what
@@ -246,7 +246,7 @@ export function KnowledgePage({
               </p>
             </div>
             <Button size="md" onClick={createSource}>
-              Create knowledge base
+              Create Knowledge Base
             </Button>
           </div>
         </div>
@@ -297,7 +297,7 @@ export function KnowledgePage({
               </Button>
             </div>
             <Button size="sm" onClick={createSource}>
-              Create knowledge base
+              Create Knowledge Base
             </Button>
           </div>
 
@@ -382,7 +382,7 @@ export function KnowledgePage({
                           checked={allSelected}
                           indeterminate={someSelected}
                           onCheckedChange={toggleAll}
-                          aria-label="Select all knowledge bases"
+                          aria-label="Select all Knowledge Bases"
                         />
                       </TableHead>
                       <TableHead className="sticky top-0 z-10">Knowledge Base</TableHead>
@@ -405,7 +405,7 @@ export function KnowledgePage({
                           colSpan={6}
                           className="text-paragraph-md text-muted-foreground"
                         >
-                          No matching knowledge bases
+                          No matching Knowledge Bases
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -518,11 +518,11 @@ export function KnowledgePage({
           open
           onClose={() => setDeleting(null)}
           size="sm"
-          title={deleting.length === 1 ? "Delete knowledge base" : "Delete knowledge bases"}
+          title={deleting.length === 1 ? "Delete Knowledge Base" : "Delete Knowledge Bases"}
           description={
             deleting.length === 1
               ? `“${deleting[0]!.name}” will be removed from Voice Agent and Agent Assist.`
-              : `${deleting.length} knowledge bases will be removed from Voice Agent and Agent Assist.`
+              : `${deleting.length} Knowledge Bases will be removed from Voice Agent and Agent Assist.`
           }
           footer={
             <>
@@ -1091,15 +1091,15 @@ function KnowledgeSourcePage({
             <HeaderEditableTitle
               value={draft.name}
               onChange={(name) => patch({ name })}
-              placeholder="Untitled knowledge base"
-              nameLabel="Knowledge base name"
+              placeholder="Untitled Knowledge Base"
+              nameLabel="Knowledge Base name"
               size="compact"
               pencil="always"
               autoEdit={mode === "create" && !draft.name.trim()}
             />
             <TextArea
               aria-label="Reference note"
-              placeholder="Add a quick reference note for this knowledge base."
+              placeholder="Add a quick reference note for this Knowledge Base."
               value={draft.note}
               onChange={(event) => patch({ note: event.target.value })}
               className="h-24 text-paragraph-md"
@@ -1137,7 +1137,7 @@ function KnowledgeSourcePage({
         onClose={() => setPublishOpen(false)}
         size="sm"
         title={mode === "edit" ? "Save changes" : "Ready to publish"}
-        description="Agents start getting answers from this knowledge base on matching questions."
+        description="Agents start getting answers from this Knowledge Base on matching questions."
         footer={
           <>
             <Button variant="grey-outline" size="sm" onClick={() => setPublishOpen(false)}>
@@ -1150,7 +1150,7 @@ function KnowledgeSourcePage({
         }
       >
         <dl className="flex flex-col gap-3">
-          <SummaryRow label="Knowledge base" value={draft.name || "Untitled knowledge base"} />
+          <SummaryRow label="Knowledge Base" value={draft.name || "Untitled Knowledge Base"} />
           <SummaryRow label="Content" value={contentSummary(draft)} />
           <SummaryRow label="Available to" value={knowledgeAudienceLabel(draft)} />
           <SummaryRow
@@ -1198,7 +1198,7 @@ function ContentTabsBar({
   return (
     <div
       role="tablist"
-      aria-label="Knowledge base content"
+      aria-label="Knowledge Base content"
       className="grid shrink-0 grid-cols-4 rounded-lg border border-line bg-secondary-bg p-1"
     >
       {CONTENT_TABS.map((item, index) => {
@@ -1403,7 +1403,7 @@ function WebPagesTab({
       return;
     }
     if (draft.webPages.some((page) => page.url === href)) {
-      setError("That page is already in this knowledge base.");
+      setError("That page is already in this Knowledge Base.");
       return;
     }
     patch({
@@ -1512,7 +1512,7 @@ function WebPagesTab({
 
           {full ? (
             <p className="text-paragraph-sm text-muted-foreground">
-              This knowledge base is at its {KNOWLEDGE_CONTENT_LIMITS.webPages}-page
+              This Knowledge Base is at its {KNOWLEDGE_CONTENT_LIMITS.webPages}-page
               limit.
             </p>
           ) : null}
@@ -1536,7 +1536,7 @@ function TextTab({
     <ContentCard title={meta.addTitle}>
       <div className="flex flex-col gap-2">
         <TextArea
-          aria-label="Knowledge base text"
+          aria-label="Knowledge Base text"
           placeholder="Paste the policy, positioning, or process you want answers to come from."
           value={draft.text}
           onChange={(event) => patch({ text: event.target.value.slice(0, limit) })}
@@ -1668,7 +1668,7 @@ function FilesTab({
     patch({ files: [...draft.files, ...accepted] });
     setNotice(
       list.length > accepted.length
-        ? `Only ${limit} files fit in one knowledge base — ${
+        ? `Only ${limit} files fit in one Knowledge Base — ${
             list.length - accepted.length
           } skipped.`
         : ""

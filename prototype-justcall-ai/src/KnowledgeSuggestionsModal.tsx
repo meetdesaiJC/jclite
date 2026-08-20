@@ -8,7 +8,7 @@ import { IconAaKnowledge } from "./icons/AgentAssistNavIcons";
 import { SEED_KNOWLEDGE_SOURCES, knowledgeFacts } from "./knowledgeData";
 
 /**
- * "Learn more" for Knowledge suggestions.
+ * "Learn more" for Knowledge Base suggestions.
  *
  * The nav card can only afford one line about the capability, and one line is
  * not enough to decide with: an admin who has never seen a live call cannot
@@ -57,8 +57,8 @@ const POINTS: Array<{ icon: ReactNode; title: string; body: string }> = [
   },
   {
     icon: <IconLayers />,
-    title: "Uses your existing Knowledge",
-    body: "Works with the Knowledge bases your team already maintains.",
+    title: "Uses your existing Knowledge Base",
+    body: "Works with the Knowledge Bases your team already maintains.",
   },
 ];
 
@@ -91,12 +91,12 @@ export function KnowledgeSuggestionsModal({
               <IconAaKnowledge className="size-[18px] text-brand" />
             </span>
             <h2 className="mt-1 text-pretty text-heading-xxl text-foreground">
-              Knowledge, right when agents need it
+              Your Knowledge Base, right when agents need it
             </h2>
             <p className="text-pretty text-paragraph-md text-muted-foreground">
-              Surface relevant answers from your Knowledge automatically during
-              live calls, so agents can respond without searching or switching
-              tabs.
+              Surface relevant answers from your Knowledge Base automatically
+              during live calls, so agents can respond without searching or
+              switching tabs.
             </p>
           </div>
 
@@ -125,7 +125,7 @@ export function KnowledgeSuggestionsModal({
                 onEnable();
               }}
             >
-              Enable Knowledge suggestions
+              Enable Knowledge Base suggestions
             </Button>
           </div>
         </div>
@@ -192,7 +192,7 @@ function KnowledgeSurfacingIllustration() {
               style={{ animationDelay: "180ms" }}
             >
               <IconSparkles size={16} className="size-3.5 shrink-0" />
-              Surfaced from your Knowledge
+              Surfaced from your Knowledge Base
             </div>
 
             <article
@@ -265,7 +265,7 @@ function TextBar({ className }: { className?: string }) {
   );
 }
 
-/** Stacked sheets — "the Knowledge you already have". */
+/** Stacked sheets — "the Knowledge Base you already have". */
 function IconLayers(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
