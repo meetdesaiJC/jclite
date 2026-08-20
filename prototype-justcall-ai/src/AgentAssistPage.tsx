@@ -5,7 +5,6 @@ import { Button } from "@/components/Button";
 import { Checkbox } from "@/components/Checkbox";
 import { Modal } from "@/components/Modal";
 import { Dropdown, useDropdownPresence, type DropdownListItem } from "@/components/Dropdown";
-import { Tabs, type TabItem } from "@/components/Tabs";
 import { InputField } from "@/components/InputField";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import {
@@ -91,12 +90,18 @@ import { CoachingCueIcon, coachingTone } from "./coachingVisuals";
 import type { KnowledgeSourceRecord } from "./knowledgeData";
 
 /**
- * Conversation Guidance — how agents should handle conversations. Scripts,
- * Response Cards, and Live Coaching each have their own list because they
- * answer different questions during the same call: a Script says what to
- * follow, a Response Card says what to say, and Live Coaching says how to
- * adjust. What the agent can *do* in a connected app lives one level up, in
- * In-call Actions — separate from Conversation Guidance.
+ * Scripts, Response Cards, and Behavioral Coaching — three lists that answer
+ * different questions during the same call: a Script says what to follow, a
+ * Response Card says what to say, and Behavioral Coaching says how to adjust.
+ * What the agent can *do* in a connected app is its own destination, In-call
+ * Actions.
+ *
+ * All three used to be tabs under a "Conversation Guidance" parent; they are now
+ * side-nav destinations (see AgentAssistNav), so this page renders whichever one
+ * the nav selected and owns no tab bar of its own. The three lists still share
+ * one component because they share everything below the header — search,
+ * assignment filters, selection, bulk publish, and pagination all behave
+ * identically, and splitting them would mean maintaining that three times.
  */
 
 type PublishStatus = "live" | "draft";
@@ -108,19 +113,19 @@ type PublishStatus = "live" | "draft";
 const KIND_LABEL = {
   script: "Script",
   guidance: "Response Card",
-  coaching: "Live Coaching",
+  coaching: "Behavioral Coaching",
 } as const;
 
 const KIND_LABEL_LOWER = {
   script: "script",
   guidance: "response card",
-  coaching: "live coaching",
+  coaching: "behavioral coaching",
 } as const;
 
 const KIND_LABEL_PLURAL = {
   script: "scripts",
   guidance: "response cards",
-  coaching: "live coaching rules",
+  coaching: "behavioral coaching rules",
 } as const;
 
 interface RowSelection {
@@ -143,19 +148,17 @@ interface ScriptRow {
   playbook: ScriptPlaybook;
 }
 
-type PlaybookTab = "scripts" | "guidance" | "coaching";
-
-const TABS: TabItem[] = [
-  { key: "scripts", label: "Scripts" },
-  { key: "guidance", label: "Response Cards" },
-  { key: "coaching", label: "Live Coaching" },
-];
+/**
+ * Which of the three lists is showing. Named `PlaybookView` rather than `Tab`
+ * since the nav — not a tab bar — now decides it.
+ */
+export type PlaybookView = "scripts" | "guidance" | "coaching";
 
 /**
- * The list under the tabs changes completely from tab to tab, so the page header
- * names what is actually on screen instead of describing the section as a whole.
+ * Each view is its own nav destination, so the page header names the list on
+ * screen instead of describing a section that spans all three.
  */
-const TAB_COPY: Record<PlaybookTab, { title: string; description: string }> = {
+const VIEW_COPY: Record<PlaybookView, { title: string; description: string }> = {
   scripts: {
     title: "Call Scripts",
     description:
@@ -167,7 +170,7 @@ const TAB_COPY: Record<PlaybookTab, { title: string; description: string }> = {
       "Surface the right response when it matters.",
   },
   coaching: {
-    title: "Live Coaching",
+    title: "Behavioral Coaching",
     description:
       "Coach agents on how the conversation is going — talk balance, delivery, and customer signals.",
   },
@@ -427,6 +430,8 @@ function AgentAssistEmptyState({
 }
 
 export interface AgentAssistPlaybooksPageProps {
+  /** Which list to show — owned by the side nav. */
+  view: PlaybookView;
   guidanceItems: GuidanceItem[];
   onGuidanceItemsChange: (next: GuidanceItem[]) => void;
   coachingRules: CoachingRule[];
@@ -436,6 +441,7 @@ export interface AgentAssistPlaybooksPageProps {
 }
 
 export function AgentAssistPlaybooksPage({
+  view: tab,
   guidanceItems,
   onGuidanceItemsChange,
   coachingRules,
@@ -443,7 +449,6 @@ export function AgentAssistPlaybooksPage({
   knowledgeSources,
   onOpenKnowledge,
 }: AgentAssistPlaybooksPageProps) {
-  const [tab, setTab] = React.useState<PlaybookTab>("scripts");
   const [search, setSearch] = React.useState("");
   const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [memberFilter, setMemberFilter] = React.useState<string[]>([]);
@@ -483,6 +488,18 @@ export function AgentAssistPlaybooksPage({
   const isScripts = tab === "scripts";
   const isGuidance = tab === "guidance";
   const isCoaching = tab === "coaching";
+
+  // Search, filters, selection, and page are all about the list you were just
+  // looking at, so leaving for another one clears them — same reset the tab bar
+  // used to do on switch. Drafts and newly created rows survive: the three lists
+  // share this component, so a nav switch is a re-render, not a remount.
+  React.useEffect(() => {
+    setSearch("");
+    setMemberFilter([]);
+    setGroupFilter([]);
+    setSelected([]);
+    setPage(1);
+  }, [tab]);
 
   const query = search.trim().toLowerCase();
   const activeFilterCount = memberFilter.length + groupFilter.length;
@@ -765,19 +782,19 @@ export function AgentAssistPlaybooksPage({
     );
   }
 
-  // One primary creation CTA per view (§4): the active tab decides what it
+  // One primary creation CTA per view (§4): the active view decides what it
   // creates, and the empty state owns the call to action when it is showing.
   const createCta = isScripts
     ? { label: "New script", onClick: openScriptTemplates }
     : isGuidance
       ? { label: "New response card", onClick: openGuidanceTemplates }
-      : { label: "New live coaching", onClick: () => setCoachingTemplatesOpen(true) };
+      : { label: "New coaching", onClick: () => setCoachingTemplatesOpen(true) };
 
   return (
     <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <AdminPageHeader
-        title={TAB_COPY[tab].title}
-        description={TAB_COPY[tab].description}
+        title={VIEW_COPY[tab].title}
+        description={VIEW_COPY[tab].description}
         actions={
           isEmpty ? null : (
             <Button size="sm" onClick={createCta.onClick}>
@@ -786,25 +803,6 @@ export function AgentAssistPlaybooksPage({
           )
         }
       />
-
-      {/* The tab rule stops where the content column stops — it lines up with
-          the page padding instead of bleeding to the edges of the shell. */}
-      <div className="px-6">
-        <div className="border-b border-line">
-          <Tabs
-            items={TABS}
-            value={tab}
-            onValueChange={(key) => {
-              setTab(key as PlaybookTab);
-              setSearch("");
-              setMemberFilter([]);
-              setGroupFilter([]);
-              setSelected([]);
-              setPage(1);
-            }}
-          />
-        </div>
-      </div>
 
       {isEmpty ? (
         isScripts ? (
@@ -820,9 +818,9 @@ export function AgentAssistPlaybooksPage({
           <AgentAssistEmptyState
             illustrationSrc={faqsEmptyIllustration}
             illustrationAlt=""
-            title="No live coaching yet"
+            title="No behavioral coaching yet"
             description="Start from a coaching concept — talk balance, delivery, or customer signals — then set when it should fire."
-            actionLabel="Create live coaching"
+            actionLabel="Create coaching"
             onAction={() => setCoachingTemplatesOpen(true)}
           />
         ) : (
@@ -845,7 +843,7 @@ export function AgentAssistPlaybooksPage({
                     ? "Search scripts"
                     : isGuidance
                       ? "Search response cards"
-                      : "Search live coaching"
+                      : "Search behavioral coaching"
                 }
                 leadingIcon={<IconSearch size={16} />}
                 value={search}
@@ -1485,9 +1483,9 @@ function GuidanceTable({
 }
 
 /**
- * Live Coaching reads differently from a response card: the coaching concept
- * and when it fires are the important columns. Preview still exists — it shows
- * the mid-call banner rather than a card.
+ * Behavioral Coaching reads differently from a response card: the coaching
+ * concept and when it fires are the important columns. Preview still exists — it
+ * shows the mid-call banner rather than a card.
  */
 function CoachingTable({
   rows,
@@ -1516,9 +1514,9 @@ function CoachingTable({
             allSelected={selection.allSelected}
             someSelected={selection.someSelected}
             onToggleAll={selection.onToggleAll}
-            label="Select all live coaching"
+            label="Select all behavioral coaching"
           />
-          <TableHead className="sticky top-0 z-10 w-[240px]">Live coaching</TableHead>
+          <TableHead className="sticky top-0 z-10 w-[240px]">Coaching</TableHead>
           <TableHead className="sticky top-0 z-10">Detect</TableHead>
           <TableHead className="sticky top-0 z-10 w-[140px]">Assigned to</TableHead>
           <TableHead className="sticky top-0 z-10 w-[100px]">Status</TableHead>
@@ -1605,7 +1603,7 @@ function CoachingTable({
   );
 }
 
-/** Live Coaching reuses the response card assignment vocabulary. */
+/** Behavioral Coaching reuses the response card assignment vocabulary. */
 function coachingAssignees(rule: CoachingRule): AssignmentPerson[] {
   return guidanceAssignees({
     ...createEmptyGuidance(),

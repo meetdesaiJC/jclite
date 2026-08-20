@@ -4,11 +4,9 @@ import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
 import { Checkbox } from "@/components/Checkbox";
 import { Dropdown, useDropdownPresence } from "@/components/Dropdown";
-import { InputField } from "@/components/InputField";
+import { InputField, TextArea } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
-import { Radio } from "@/components/Radio";
 import { Tag } from "@/components/Tag";
-import { Toggle } from "@/components/Toggle";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import {
   IconClose,
@@ -18,6 +16,7 @@ import {
   IconFilter,
   IconPencil,
   IconSearch,
+  IconTeamManagement,
 } from "@/components/Icon";
 import {
   Table,
@@ -35,30 +34,41 @@ import { AdminPageHeader } from "./AgentAssistAdmin";
 import { useAgentAssistTakeover } from "./agentAssistTakeover";
 import { AssignmentAvatarStack } from "./AssignmentAvatarStack";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
+import { HeaderEditableTitle } from "./HeaderEditableTitle";
 import {
-  KNOWLEDGE_ENTITLEMENTS,
+  createEmptyKnowledgeSource,
+  formatKnowledgeFileSize,
+  KNOWLEDGE_CONTENT_LIMITS,
   KNOWLEDGE_TEAMS,
-  KNOWLEDGE_USED_BY_OPTIONS,
   KNOWLEDGE_USERS,
+  KNOWLEDGE_VOICE_AGENTS,
   knowledgeAssignees,
   knowledgeAudienceLabel,
-  knowledgeKindMeta,
-  knowledgeUsedByLabel,
+  knowledgeContentItemCount,
+  knowledgeFileTypeLabel,
+  knowledgeIntegrationLabel,
+  knowledgeIntegrationMeta,
+  knowledgeKindFromContent,
+  knowledgeOriginFromContent,
+  knowledgeVoiceAgentLabel,
+  newKnowledgeContentId,
   newKnowledgeSourceId,
+  normalizeKnowledgeUrl,
   sampleEntriesForSource,
-  usedByAgentAssist,
-  usedByVoiceAgent,
-  voiceAgentKbLimitReached,
-  type KnowledgeAudience,
+  type KnowledgeContentTab,
+  type KnowledgeIntegrationRef,
+  type KnowledgeQaPair,
   type KnowledgeSourceRecord,
 } from "./knowledgeData";
+import { ConnectSourceModal } from "./ConnectSourceModal";
+import { SourceLogo } from "./icons/IntegrationLogos";
 
 /**
- * Knowledge admin — one JustCall knowledge base, shared. Each KB says which
- * products may read it, so switching Agent Assist on is an availability change
- * on the existing record rather than a second copy to maintain. There is no
- * trigger to write and no question to enumerate: retrieval finds the answer
- * when a customer asks for it.
+ * Knowledge admin — one JustCall knowledge base, shared. A KB is assigned the
+ * same way a Guidance item is: user groups, individual agents, and voice agents
+ * stack up rather than being an either/or choice. There is no trigger to write
+ * and no question to enumerate: retrieval finds the answer when a customer asks
+ * for it.
  */
 
 export interface KnowledgePageProps {
@@ -107,14 +117,17 @@ export function KnowledgePage({
       (statusFilter.includes("success") && source.status === "live") ||
       (statusFilter.includes("failed") && source.status === "failed") ||
       (statusFilter.includes("draft") && source.status === "draft");
+    // Nobody assigned means everyone, which no assignment filter excludes.
     const matchesAudience =
-      source.audience === "everyone" ||
+      (source.audienceUsers.length === 0 && source.audienceTeams.length === 0) ||
       matchesAssignment(source.audienceUsers, source.audienceTeams);
     return matchesQuery && matchesStatus && matchesAudience;
   });
   const isEmpty = sources.length === 0;
   const activeFilterCount =
-    statusFilter.length + agentFilter.length + groupFilter.length;
+    statusFilter.length +
+    agentFilter.length +
+    groupFilter.length;
   const hasFilters = activeFilterCount > 0;
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -194,6 +207,11 @@ export function KnowledgePage({
     }, steps.length * 280);
   };
 
+  /** A new KB starts empty — content decides its type, not a picker up front. */
+  const createSource = () => {
+    setEditing({ source: createEmptyKnowledgeSource(), mode: "create" });
+  };
+
   const removeSources = (ids: string[]) => {
     onSourcesChange(sources.filter((source) => !ids.includes(source.id)));
     setSelected((current) => current.filter((id) => !ids.includes(id)));
@@ -204,7 +222,6 @@ export function KnowledgePage({
     return (
       <KnowledgeSourcePage
         source={editing.source}
-        sources={sources}
         mode={editing.mode}
         onCancel={() => setEditing(null)}
         onSave={saveSource}
@@ -215,11 +232,13 @@ export function KnowledgePage({
   return (
     <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <AdminPageHeader
-        title="Knowledge"
-        description="Add knowledge to help agents answer customer questions during calls."
+        title="Knowledge Base"
+        description="Create and manage knowledge that powers answers across calls, messaging, email, and voice agents."
         actions={
           isEmpty ? null : (
-            <Button size="sm">Create knowledge base</Button>
+            <Button size="sm" onClick={createSource}>
+              Create knowledge base
+            </Button>
           )
         }
       />
@@ -244,7 +263,9 @@ export function KnowledgePage({
                 questions on its own — for Voice Agent, Agent Assist, or both.
               </p>
             </div>
-            <Button size="md">Create knowledge base</Button>
+            <Button size="md" onClick={createSource}>
+              Create knowledge base
+            </Button>
           </div>
         </div>
       ) : (
@@ -380,11 +401,11 @@ export function KnowledgePage({
                         />
                       </TableHead>
                       <TableHead className="sticky top-0 z-10">Knowledge Base</TableHead>
-                      <TableHead className="sticky top-0 z-10 w-[132px]">Status</TableHead>
-                      <TableHead className="sticky top-0 z-10 w-[160px]">
+                      <TableHead className="sticky top-0 z-10 w-[124px]">Status</TableHead>
+                      <TableHead className="sticky top-0 z-10 w-[148px]">
                         Assigned to
                       </TableHead>
-                      <TableHead className="sticky top-0 z-10 w-[150px]">
+                      <TableHead className="sticky top-0 z-10 w-[132px]">
                         Last Updated
                       </TableHead>
                       <TableHead className="sticky top-0 z-10 w-[142px] text-center">
@@ -647,15 +668,15 @@ function RowActions({
       <TooltipTrigger
         placement="bottom"
         className="-mr-px"
-        content={<Tooltip theme="dark" arrow="top-center" title="Assign Agents" />}
+        content={<Tooltip theme="dark" arrow="top-center" title="Edit" />}
       >
         <button
           type="button"
-          aria-label={`Assign agents to ${source.name}`}
-          onClick={onAssign}
+          aria-label={`Edit ${source.name}`}
+          onClick={onEdit}
           className="flex size-9 items-center justify-center rounded-l-[4px] border border-line bg-white text-foreground hover:bg-secondary-bg focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
         >
-          <IconUserPlus />
+          <IconPencil size={20} />
         </button>
       </TooltipTrigger>
       <TooltipTrigger
@@ -683,10 +704,10 @@ function RowActions({
             onSelect: onDuplicate,
           },
           {
-            key: "edit",
-            label: "Edit",
-            icon: <IconPencil size={16} />,
-            onSelect: onEdit,
+            key: "assign",
+            label: "Assign",
+            icon: <IconTeamManagement size={16} />,
+            onSelect: onAssign,
           },
           {
             key: "delete",
@@ -712,18 +733,14 @@ function AssignAgentsModal({
 }) {
   const [members, setMembers] = React.useState(source.audienceUsers);
   const [groups, setGroups] = React.useState(source.audienceTeams);
+  const [voiceAgents, setVoiceAgents] = React.useState(source.audienceVoiceAgents);
 
-  const save = () => {
-    if (members.length === 0 && groups.length === 0) {
-      onSave({ audience: "everyone", audienceTeams: [], audienceUsers: [] });
-      return;
-    }
-    if (members.length > 0) {
-      onSave({ audience: "users", audienceUsers: members, audienceTeams: groups });
-      return;
-    }
-    onSave({ audience: "teams", audienceTeams: groups, audienceUsers: [] });
-  };
+  const save = () =>
+    onSave({
+      audienceUsers: members,
+      audienceTeams: groups,
+      audienceVoiceAgents: voiceAgents,
+    });
 
   return (
     <Modal
@@ -733,7 +750,6 @@ function AssignAgentsModal({
       className="overflow-visible"
       bodyClassName="overflow-visible"
       title="Assign Agents"
-      description="Only assigned agents can be helped by this knowledge base on a call."
       footer={
         <>
           <Button variant="grey-outline" size="sm" onClick={onClose}>
@@ -758,6 +774,9 @@ function AssignAgentsModal({
           selectedGroups={groups}
           onMembersChange={setMembers}
           onGroupsChange={setGroups}
+          voiceAgents={KNOWLEDGE_VOICE_AGENTS}
+          selectedVoiceAgents={voiceAgents}
+          onVoiceAgentsChange={setVoiceAgents}
         />
       </dl>
     </Modal>
@@ -890,47 +909,6 @@ function ActionMenu({ label, items }: { label: string; items: ActionMenuItem[] }
   );
 }
 
-function IconUserPlus() {
-  return (
-    <svg
-      width={20}
-      height={20}
-      viewBox="0 0 20 20"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M6.667 5.833a3.333 3.333 0 1 0 6.666 0 3.333 3.333 0 0 0-6.666 0"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M13.333 15.833h5"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M15.833 13.333v5"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M5 17.5v-1.667a3.333 3.333 0 0 1 3.333-3.333h3.334"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function IconRefresh({ className }: { className?: string }) {
   return (
     <svg
@@ -979,60 +957,135 @@ function IconTrash({ size = 16 }: { size?: number }) {
   );
 }
 
-const AUDIENCE_OPTIONS: { value: KnowledgeAudience; label: string; hint: string }[] = [
-  { value: "everyone", label: "Everyone", hint: "Every agent on the account." },
-  { value: "teams", label: "Specific teams", hint: "Pick the teams that need it." },
-  { value: "users", label: "Specific users", hint: "Pick individual agents." },
+/**
+ * The five things a knowledge base can be made of. One KB holds any mix of
+ * them, so the setup page tabs between them instead of asking the admin to
+ * commit to a source type up front. The blurbs say how the content gets used,
+ * not who reads it — a KB serves whoever it is assigned to.
+ */
+const CONTENT_TABS: {
+  key: KnowledgeContentTab;
+  label: string;
+  /** Heading over the tab body, and the label on its card. */
+  addTitle: string;
+  limitLabel: string;
+  blurb: string;
+  emptyTitle: string;
+  emptyBody: string;
+  icon: (props: { size?: number }) => React.ReactElement;
+}[] = [
+  {
+    key: "web",
+    label: "Web Pages",
+    addTitle: "Add Web Pages",
+    limitLabel: `${KNOWLEDGE_CONTENT_LIMITS.webPages} web pages max`,
+    blurb: "Pages are crawled and re-read, so answers follow what is published.",
+    emptyTitle: "Add Web Pages to create Knowledge Base",
+    emptyBody:
+      "Add Web Pages containing information that can be used on live conversations",
+    icon: IconGlobe,
+  },
+  {
+    key: "text",
+    label: "Text",
+    addTitle: "Add Text",
+    limitLabel: `${KNOWLEDGE_CONTENT_LIMITS.textChars.toLocaleString()} characters max`,
+    blurb: "Paste policies, positioning, or anything else worth answering from.",
+    emptyTitle: "Add Text to create Knowledge Base",
+    emptyBody: "Paste information that can be used on live conversations",
+    icon: IconTextSize,
+  },
+  {
+    key: "qa",
+    label: "Q&A",
+    addTitle: "Add Q&A",
+    limitLabel: `${KNOWLEDGE_CONTENT_LIMITS.qaPairs} Q&As max`,
+    blurb: "Written answers come back as you wrote them when a question matches.",
+    emptyTitle: "Add Q&A to create Knowledge Base",
+    emptyBody:
+      "Add question and answer pairs that can be used on live conversations",
+    icon: IconQa,
+  },
+  {
+    key: "files",
+    label: "Files",
+    addTitle: "Add Files",
+    limitLabel: `${KNOWLEDGE_CONTENT_LIMITS.files} files max`,
+    blurb: "PDFs, documents, and spreadsheets are read once and answered from.",
+    emptyTitle: "Add Files to create Knowledge Base",
+    emptyBody: "Upload files containing information that can be used on live conversations",
+    icon: IconFileUp,
+  },
+  {
+    key: "integrations",
+    label: "Sources",
+    addTitle: "Connected sources",
+    limitLabel: `${KNOWLEDGE_CONTENT_LIMITS.integrations} connections max`,
+    blurb:
+      "Connect each app once for the account. Knowledge can feed this knowledge base; customer context is shared for the person on the call.",
+    emptyTitle: "Connect a source to create Knowledge Base",
+    emptyBody:
+      "Connect your tools so AI can use company knowledge and customer context on live conversations",
+    icon: IconPlug,
+  },
 ];
 
+type ContentTabMeta = (typeof CONTENT_TABS)[number];
+
 /**
- * Knowledge base setup — name it, say which products use it, say who it serves,
- * and decide whether the agent gets to see where an answer came from.
+ * Knowledge base setup — content on the right, everything about who it serves
+ * on the left. A KB is a bucket of web pages, text, Q&A, files, and connected
+ * sources rather than one import, so the right pane tabs between them and the left
+ * rail keeps the name and the availability settings in view while the admin
+ * fills it.
  */
 function KnowledgeSourcePage({
   source,
-  sources,
   mode,
   onCancel,
   onSave,
 }: {
   source: KnowledgeSourceRecord;
-  /** Needed to price the Voice Agent slot before it is claimed. */
-  sources: KnowledgeSourceRecord[];
   mode: "create" | "edit";
   onCancel: () => void;
   onSave: (next: KnowledgeSourceRecord) => void;
 }) {
   useAgentAssistTakeover();
   const [draft, setDraft] = React.useState<KnowledgeSourceRecord>(source);
+  // Open on whatever this knowledge base is actually made of.
+  const [tab, setTab] = React.useState<KnowledgeContentTab>(() => {
+    if (source.webPages.length > 0) return "web";
+    if (source.text.trim()) return "text";
+    if (source.qaPairs.length > 0) return "qa";
+    if (source.files.length > 0) return "files";
+    if (source.integrations.length > 0) return "integrations";
+    return "web";
+  });
   const [publishOpen, setPublishOpen] = React.useState(false);
-  const meta = knowledgeKindMeta(draft.kind);
-  const fileRef = React.useRef<HTMLInputElement>(null);
 
   const patch = (partial: Partial<KnowledgeSourceRecord>) =>
     setDraft((current) => ({ ...current, ...partial }));
 
-  const needsOrigin = meta.input !== "none";
-  const audienceChosen =
-    draft.audience === "everyone" ||
-    (draft.audience === "teams" && draft.audienceTeams.length > 0) ||
-    (draft.audience === "users" && draft.audienceUsers.length > 0);
-  const canPublish =
-    draft.name.trim().length > 0 && (!needsOrigin || draft.origin.trim().length > 0) &&
-    audienceChosen;
+  const contentCount = knowledgeContentItemCount(draft);
+  // Assignment has no invalid state — nobody picked simply means everyone.
+  const canSave = draft.name.trim().length > 0 && contentCount > 0;
 
-  const publish = () => {
-    // Ingestion stands in for parsing: a published source arrives with the
-    // answers AI can retrieve from it.
-    const entries =
-      draft.entries.length > 0
-        ? draft.entries
-        : sampleEntriesForSource(`${draft.name} ${draft.origin}`, draft.kind);
+  const save = () => {
+    const origin = knowledgeOriginFromContent(draft);
+    // Typed Q&A is already retrievable on its own. `entries` is what ingestion
+    // pulled out of the pages, text, and files — stood in for here so a crawled
+    // or uploaded source has something to find on a live call.
+    const needsIngestion =
+      draft.entries.length === 0 &&
+      (draft.webPages.length > 0 || draft.files.length > 0 || draft.text.trim().length > 0);
     onSave({
       ...draft,
       name: draft.name.trim(),
-      origin: draft.origin.trim(),
-      entries,
+      kind: knowledgeKindFromContent(draft),
+      origin,
+      entries: needsIngestion
+        ? sampleEntriesForSource(`${draft.name} ${origin}`, draft.kind)
+        : draft.entries,
       status: "live",
       updated: "Just now",
     });
@@ -1051,216 +1104,58 @@ function KnowledgeSourcePage({
             <IconClose size={20} />
           </button>
           <h1 className="truncate text-heading-lg text-foreground">
-            {mode === "edit" ? draft.name || "Knowledge base" : `Add ${meta.label}`}
+            {mode === "edit" ? "Edit Knowledge Base" : "Create Knowledge Base"}
           </h1>
         </div>
-        <Button size="sm" disabled={!canPublish} onClick={() => setPublishOpen(true)}>
-          {mode === "edit" ? "Save" : "Publish"}
+        <Button size="sm" disabled={!canSave} onClick={() => setPublishOpen(true)}>
+          {mode === "edit" ? "Save Changes" : "Publish"}
         </Button>
       </header>
 
-      <div className="flex min-h-0 flex-1 justify-center overflow-auto px-6 py-8">
-        <div className="flex w-full max-w-[680px] flex-col gap-4">
-          <SectionCard title="Knowledge base">
-            <InputField
-              label="Name"
-              placeholder="e.g. Sales competitive knowledge"
+      <div className="flex min-h-0 flex-1 gap-6 overflow-hidden px-6 py-6">
+        <aside className="flex w-[320px] shrink-0 flex-col gap-4 overflow-y-auto pb-2">
+          <section className="flex flex-col gap-4 rounded-lg border border-line bg-white p-4">
+            <HeaderEditableTitle
               value={draft.name}
-              onChange={(event) => patch({ name: event.target.value })}
-              helpText="An internal name so your team can tell knowledge bases apart."
-              helpIcon
-              clearable={false}
+              onChange={(name) => patch({ name })}
+              placeholder="Untitled knowledge base"
+              nameLabel="Knowledge base name"
+              size="compact"
+              pencil="always"
+              autoEdit={mode === "create" && !draft.name.trim()}
             />
+            <TextArea
+              aria-label="Reference note"
+              placeholder="Add a quick reference note for this knowledge base."
+              value={draft.note}
+              onChange={(event) => patch({ note: event.target.value })}
+              className="h-24 text-paragraph-md"
+            />
+          </section>
 
-            {meta.input === "url" ? (
-              <InputField
-                label="Link"
-                placeholder={meta.originPlaceholder}
-                value={draft.origin}
-                onChange={(event) => patch({ origin: event.target.value })}
-                clearable={false}
-              />
-            ) : null}
-
-            {meta.input === "file" ? (
-              <div className="flex flex-col gap-2">
-                <span className="text-label-md text-foreground">File</span>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      patch({
-                        origin: file.name,
-                        name: draft.name.trim() ? draft.name : stemOf(file.name),
-                      });
-                    }
-                    event.target.value = "";
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    const file = event.dataTransfer.files[0];
-                    if (file) {
-                      patch({
-                        origin: file.name,
-                        name: draft.name.trim() ? draft.name : stemOf(file.name),
-                      });
-                    }
-                  }}
-                  className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-brand/40 bg-brand-subtle/20 px-6 py-8 text-center transition-colors hover:border-brand hover:bg-brand-subtle/40"
-                >
-                  <span className="flex size-10 items-center justify-center rounded-[8px] bg-white text-brand shadow-[0_0_0_1px_rgba(0,76,230,0.12)]">
-                    <IconFile size={20} />
-                  </span>
-                  <span className="text-label-md-semi text-foreground">
-                    {draft.origin || `Upload ${meta.label}`}
-                  </span>
-                  <span className="text-paragraph-sm text-muted-foreground">
-                    Drop a file or click to browse.
-                  </span>
-                </button>
-              </div>
-            ) : null}
-
-            {meta.input === "none" ? (
-              <p className="text-pretty text-paragraph-sm text-muted-foreground">
-                {draft.kind === "justcall-kb"
-                  ? "Everything already published in your JustCall knowledge base is included — no upload needed."
-                  : "You'll add question and answer pairs after this knowledge base is created."}
-              </p>
-            ) : null}
-          </SectionCard>
-
-          <SectionCard
-            title="Used by"
-            description="The same knowledge base can serve both products. Switching one on never creates a duplicate."
-          >
-            <div className="flex flex-col gap-2">
-              {KNOWLEDGE_USED_BY_OPTIONS.map((option) => {
-                const claimsVoiceSlot =
-                  option.value !== "agent-assist" && !usedByVoiceAgent(source);
-                const blocked = claimsVoiceSlot && voiceAgentKbLimitReached(sources);
-                return (
-                  <Radio
-                    key={option.value}
-                    name="knowledge-used-by"
-                    label={option.label}
-                    description={
-                      blocked
-                        ? `${KNOWLEDGE_ENTITLEMENTS.voiceAgentTier} includes ${KNOWLEDGE_ENTITLEMENTS.voiceAgentKbLimit} knowledge bases — upgrade the add-on to add another.`
-                        : option.hint
-                    }
-                    disabled={blocked}
-                    checked={draft.usedBy === option.value}
-                    onCheckedChange={() => patch({ usedBy: option.value })}
-                  />
-                );
-              })}
-            </div>
-            <p className="text-pretty text-paragraph-sm text-muted-foreground">
-              Voice Agent knowledge base limits follow your{" "}
-              {KNOWLEDGE_ENTITLEMENTS.voiceAgentTier}. Agent Assist is included
-              with {KNOWLEDGE_ENTITLEMENTS.agentAssistPlan} and doesn't consume a
-              Voice Agent slot.
-            </p>
-          </SectionCard>
-
-          <SectionCard
-            title="Available to"
-            description="Only assigned agents can be helped by this knowledge base on a call."
-          >
-            <div className="flex flex-col gap-2">
-              {AUDIENCE_OPTIONS.map((option) => (
-                <Radio
-                  key={option.value}
-                  name="knowledge-audience"
-                  label={option.label}
-                  description={option.hint}
-                  checked={draft.audience === option.value}
-                  onCheckedChange={() => patch({ audience: option.value })}
-                />
-              ))}
-            </div>
-
-            {draft.audience === "teams" ? (
-              <Dropdown
-                label="Teams"
-                placeholder="Select teams"
-                searchPlaceholder="Search teams"
-                appliedField="Teams"
-                options={KNOWLEDGE_TEAMS}
-                multiple
-                searchable
-                value={draft.audienceTeams}
-                onValueChange={(value) =>
-                  patch({ audienceTeams: Array.isArray(value) ? value : [value] })
-                }
-              />
-            ) : null}
-
-            {draft.audience === "users" ? (
-              <Dropdown
-                label="Users"
-                placeholder="Select users"
-                searchPlaceholder="Search users"
-                appliedField="Users"
-                options={KNOWLEDGE_USERS}
-                multiple
-                searchable
-                value={draft.audienceUsers}
-                onValueChange={(value) =>
-                  patch({ audienceUsers: Array.isArray(value) ? value : [value] })
-                }
-              />
-            ) : null}
-          </SectionCard>
-
-          <SectionCard
-            title="How Agent Assist uses this"
-            description={
-              usedByAgentAssist(draft)
-                ? "AI searches this knowledge base while the agent is on a call and surfaces the answer."
-                : "Add Agent Assist under Used by to surface these answers on live agent calls."
-            }
-          >
-            <Toggle
-              controlPosition="end"
-              label="Show source to agents"
-              description="Agents see which knowledge base an answer came from and can open the original."
-              checked={draft.showSourceToAgents}
-              disabled={!usedByAgentAssist(draft)}
-              onCheckedChange={(showSourceToAgents) => patch({ showSourceToAgents })}
-              wrapperClassName="justify-between"
+          {/* Assignment reads like a Guidance item's: three lists that add up,
+              rather than one exclusive choice. Empty means everyone. */}
+          <SectionCard title="Available to">
+            <AssignTeamAndGroups
+              variant="bare"
+              members={KNOWLEDGE_USERS}
+              groups={KNOWLEDGE_TEAMS}
+              selectedMembers={draft.audienceUsers}
+              selectedGroups={draft.audienceTeams}
+              onMembersChange={(audienceUsers) => patch({ audienceUsers })}
+              onGroupsChange={(audienceTeams) => patch({ audienceTeams })}
+              voiceAgents={KNOWLEDGE_VOICE_AGENTS}
+              selectedVoiceAgents={draft.audienceVoiceAgents}
+              onVoiceAgentsChange={(audienceVoiceAgents) =>
+                patch({ audienceVoiceAgents })
+              }
             />
           </SectionCard>
+        </aside>
 
-          {draft.entries.length > 0 ? (
-            <SectionCard
-              title="What AI found here"
-              description={`${draft.entries.length} answers are retrievable from this knowledge base.`}
-            >
-              <ul className="flex flex-col gap-2">
-                {draft.entries.map((entry) => (
-                  <li
-                    key={entry.id}
-                    className="flex flex-col gap-1 rounded-lg border border-line px-3 py-2.5"
-                  >
-                    <p className="text-label-md-semi text-foreground">{entry.title}</p>
-                    <p className="text-pretty text-paragraph-sm text-muted-foreground">
-                      {entry.answer}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </SectionCard>
-          ) : null}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto pb-2">
+          <ContentTabsBar value={tab} onValueChange={setTab} />
+          <ContentPanel draft={draft} tab={tab} patch={patch} />
         </div>
       </div>
 
@@ -1275,7 +1170,7 @@ function KnowledgeSourcePage({
             <Button variant="grey-outline" size="sm" onClick={() => setPublishOpen(false)}>
               Cancel
             </Button>
-            <Button size="sm" onClick={publish}>
+            <Button size="sm" onClick={save}>
               {mode === "edit" ? "Save" : "Publish"}
             </Button>
           </>
@@ -1283,19 +1178,847 @@ function KnowledgeSourcePage({
       >
         <dl className="flex flex-col gap-3">
           <SummaryRow label="Knowledge base" value={draft.name || "Untitled knowledge base"} />
-          <SummaryRow label="Type" value={meta.label} />
-          <SummaryRow
-            label="Used by"
-            value={
-              draft.usedBy === "both"
-                ? "Voice Agent and Agent Assist"
-                : knowledgeUsedByLabel(draft.usedBy)
-            }
-          />
+          <SummaryRow label="Content" value={contentSummary(draft)} />
           <SummaryRow label="Available to" value={knowledgeAudienceLabel(draft)} />
+          <SummaryRow
+            label="Voice agents"
+            value={knowledgeVoiceAgentLabel(draft)}
+          />
         </dl>
       </Modal>
     </main>
+  );
+}
+
+/** What is in the knowledge base, in words, for the confirmation modal. */
+function contentSummary(source: KnowledgeSourceRecord): string {
+  const parts: string[] = [];
+  if (source.webPages.length) {
+    parts.push(
+      `${source.webPages.length} web ${source.webPages.length === 1 ? "page" : "pages"}`
+    );
+  }
+  if (source.text.trim()) {
+    parts.push(`${source.text.trim().length.toLocaleString()} characters of text`);
+  }
+  if (source.qaPairs.length) {
+    parts.push(`${source.qaPairs.length} Q&A`);
+  }
+  if (source.files.length) {
+    parts.push(`${source.files.length} ${source.files.length === 1 ? "file" : "files"}`);
+  }
+  if (source.integrations.length) {
+    parts.push(
+      `${source.integrations.length} connected ${
+        source.integrations.length === 1 ? "source" : "sources"
+      }`
+    );
+  }
+  return parts.join(", ") || "Nothing added yet";
+}
+
+/**
+ * Segmented control over the content kinds. The dividers sit between
+ * unselected neighbours only, so the white pill never grows a seam.
+ */
+function ContentTabsBar({
+  value,
+  onValueChange,
+}: {
+  value: KnowledgeContentTab;
+  onValueChange: (next: KnowledgeContentTab) => void;
+}) {
+  const activeIndex = CONTENT_TABS.findIndex((item) => item.key === value);
+  return (
+    <div
+      role="tablist"
+      aria-label="Knowledge base content"
+      className="grid shrink-0 grid-cols-5 rounded-lg border border-line bg-secondary-bg p-1"
+    >
+      {CONTENT_TABS.map((item, index) => {
+        const selected = index === activeIndex;
+        const Glyph = item.icon;
+        const showDivider =
+          index > 0 && index !== activeIndex && index - 1 !== activeIndex;
+        return (
+          <div key={item.key} className="relative flex items-center">
+            {showDivider ? (
+              <span
+                aria-hidden="true"
+                className="absolute left-0 h-5 w-px bg-line"
+              />
+            ) : null}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => onValueChange(item.key)}
+              className={cn(
+                "flex h-10 w-full items-center justify-center gap-2 rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+                selected
+                  ? "bg-white text-foreground shadow-100"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Glyph size={16} />
+              <span
+                className={cn(
+                  "truncate",
+                  selected ? "text-label-md" : "text-paragraph-md"
+                )}
+              >
+                {item.label}
+              </span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ContentPanel({
+  draft,
+  tab,
+  patch,
+}: {
+  draft: KnowledgeSourceRecord;
+  tab: KnowledgeContentTab;
+  patch: (partial: Partial<KnowledgeSourceRecord>) => void;
+}) {
+  const meta = CONTENT_TABS.find((item) => item.key === tab)!;
+  const Glyph = meta.icon;
+
+  return (
+    <section className="flex flex-col gap-5">
+      <div className="flex items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary-bg text-foreground">
+          <Glyph size={20} />
+        </span>
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-heading-lg text-foreground">{meta.addTitle}</h2>
+            <Tag size="sm" color="grey" outline>
+              {meta.limitLabel}
+            </Tag>
+          </div>
+          <p className="text-pretty text-paragraph-md text-muted-foreground">
+            {meta.blurb}
+          </p>
+        </div>
+      </div>
+
+      {tab === "web" ? <WebPagesTab draft={draft} patch={patch} meta={meta} /> : null}
+      {tab === "text" ? <TextTab draft={draft} patch={patch} meta={meta} /> : null}
+      {tab === "qa" ? <QaTab draft={draft} patch={patch} meta={meta} /> : null}
+      {tab === "files" ? <FilesTab draft={draft} patch={patch} meta={meta} /> : null}
+      {tab === "integrations" ? (
+        <IntegrationsTab draft={draft} patch={patch} meta={meta} />
+      ) : null}
+    </section>
+  );
+}
+
+/** The bordered box every tab body lives in. */
+function ContentCard({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col rounded-lg border border-line bg-white">
+      <div className="flex min-h-[52px] items-center justify-between gap-3 border-b border-line px-4 py-2.5">
+        <p className="text-label-md-semi text-foreground">{title}</p>
+        {action}
+      </div>
+      <div className="flex flex-col p-4">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * The nothing-here state: a stack of blank cards behind the tab's own glyph,
+ * with the add affordance repeated as the primary button.
+ */
+function ContentEmptyState({
+  glyph,
+  title,
+  body,
+  actionLabel,
+  onAction,
+}: {
+  glyph: React.ReactNode;
+  title: string;
+  body: string;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-6 px-6 py-14 text-center">
+      <div className="relative flex size-[132px] items-center justify-center rounded-full bg-secondary-bg">
+        <span className="absolute bottom-[34px] left-2 size-12 -rotate-[16deg] rounded-[10px] border border-line bg-white" />
+        <span className="absolute bottom-[34px] right-2 size-12 rotate-[16deg] rounded-[10px] border border-line bg-white" />
+        <span className="absolute bottom-[30px] flex h-[72px] w-[76px] items-center justify-center rounded-[10px] border border-line bg-white text-muted-foreground shadow-100">
+          {glyph}
+        </span>
+        <span className="absolute bottom-[18px] flex size-8 items-center justify-center rounded-full border-2 border-white bg-brand text-white">
+          <IconPlus size={16} />
+        </span>
+      </div>
+      <div className="flex max-w-[420px] flex-col gap-1">
+        <p className="text-heading-lg text-foreground">{title}</p>
+        <p className="text-pretty text-paragraph-md text-muted-foreground">{body}</p>
+      </div>
+      <Button size="md" onClick={onAction}>
+        {actionLabel}
+      </Button>
+    </div>
+  );
+}
+
+/** One item row inside a tab body — page, Q&A, or file. */
+function ContentRow({
+  icon,
+  title,
+  meta,
+  onRemove,
+  removeLabel,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  meta?: string;
+  onRemove: () => void;
+  removeLabel: string;
+}) {
+  return (
+    <li className="flex items-center gap-3 rounded-lg border border-line bg-white px-3 py-2.5">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-[6px] bg-secondary-bg text-muted-foreground">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-label-md text-foreground">{title}</span>
+        {meta ? (
+          <span className="block truncate text-paragraph-sm text-muted-foreground">
+            {meta}
+          </span>
+        ) : null}
+      </span>
+      <button
+        type="button"
+        aria-label={removeLabel}
+        onClick={onRemove}
+        className="flex size-8 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+      >
+        <IconClose size={16} />
+      </button>
+    </li>
+  );
+}
+
+function WebPagesTab({
+  draft,
+  patch,
+  meta,
+}: {
+  draft: KnowledgeSourceRecord;
+  patch: (partial: Partial<KnowledgeSourceRecord>) => void;
+  meta: ContentTabMeta;
+}) {
+  const [adding, setAdding] = React.useState(false);
+  const [url, setUrl] = React.useState("");
+  const [error, setError] = React.useState("");
+  const full = draft.webPages.length >= KNOWLEDGE_CONTENT_LIMITS.webPages;
+
+  const commit = () => {
+    const href = normalizeKnowledgeUrl(url);
+    if (!href) {
+      setError("Enter a full webpage link, like https://help.example.com/billing.");
+      return;
+    }
+    if (draft.webPages.some((page) => page.url === href)) {
+      setError("That page is already in this knowledge base.");
+      return;
+    }
+    patch({
+      webPages: [
+        ...draft.webPages,
+        { id: newKnowledgeContentId("kw"), url: href },
+      ],
+    });
+    setUrl("");
+    setError("");
+    setAdding(false);
+  };
+
+  const empty = draft.webPages.length === 0 && !adding;
+
+  return (
+    <ContentCard
+      title={meta.addTitle}
+      action={
+        empty ? null : (
+          <Button
+            variant="grey-outline"
+            size="sm"
+            disabled={full || adding}
+            onClick={() => setAdding(true)}
+          >
+            Add Source
+          </Button>
+        )
+      }
+    >
+      {empty ? (
+        <ContentEmptyState
+          glyph={<IconGlobe size={20} />}
+          title={meta.emptyTitle}
+          body={meta.emptyBody}
+          actionLabel="Add Source"
+          onAction={() => setAdding(true)}
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {draft.webPages.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {draft.webPages.map((page) => (
+                <ContentRow
+                  key={page.id}
+                  icon={<IconGlobe size={16} />}
+                  title={page.url}
+                  onRemove={() =>
+                    patch({
+                      webPages: draft.webPages.filter((item) => item.id !== page.id),
+                    })
+                  }
+                  removeLabel={`Remove ${page.url}`}
+                />
+              ))}
+            </ul>
+          ) : null}
+
+          {adding ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-start gap-2">
+                <InputField
+                  aria-label="Webpage link"
+                  placeholder="https://help.yourcompany.com/billing"
+                  value={url}
+                  autoFocus
+                  onChange={(event) => {
+                    setUrl(event.target.value);
+                    setError("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      commit();
+                    }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setAdding(false);
+                      setUrl("");
+                      setError("");
+                    }
+                  }}
+                  error={Boolean(error)}
+                  helpText={error || undefined}
+                  clearable={false}
+                  wrapperClassName="flex-1"
+                />
+                <Button size="md" onClick={commit} disabled={!url.trim()}>
+                  Add
+                </Button>
+                <Button
+                  variant="grey-outline"
+                  size="md"
+                  onClick={() => {
+                    setAdding(false);
+                    setUrl("");
+                    setError("");
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {full ? (
+            <p className="text-paragraph-sm text-muted-foreground">
+              This knowledge base is at its {KNOWLEDGE_CONTENT_LIMITS.webPages}-page
+              limit.
+            </p>
+          ) : null}
+        </div>
+      )}
+    </ContentCard>
+  );
+}
+
+function TextTab({
+  draft,
+  patch,
+  meta,
+}: {
+  draft: KnowledgeSourceRecord;
+  patch: (partial: Partial<KnowledgeSourceRecord>) => void;
+  meta: ContentTabMeta;
+}) {
+  const limit = KNOWLEDGE_CONTENT_LIMITS.textChars;
+  return (
+    <ContentCard title={meta.addTitle}>
+      <div className="flex flex-col gap-2">
+        <TextArea
+          aria-label="Knowledge base text"
+          placeholder="Paste the policy, positioning, or process you want answers to come from."
+          value={draft.text}
+          onChange={(event) => patch({ text: event.target.value.slice(0, limit) })}
+          className="h-[320px]"
+        />
+        <p className="self-end text-paragraph-sm tabular-nums text-muted-foreground">
+          {draft.text.length.toLocaleString()}/{limit.toLocaleString()}
+        </p>
+      </div>
+    </ContentCard>
+  );
+}
+
+function QaTab({
+  draft,
+  patch,
+  meta,
+}: {
+  draft: KnowledgeSourceRecord;
+  patch: (partial: Partial<KnowledgeSourceRecord>) => void;
+  meta: ContentTabMeta;
+}) {
+  const full = draft.qaPairs.length >= KNOWLEDGE_CONTENT_LIMITS.qaPairs;
+
+  const add = () =>
+    patch({
+      qaPairs: [
+        ...draft.qaPairs,
+        { id: newKnowledgeContentId("kq"), question: "", answer: "" },
+      ],
+    });
+
+  const update = (id: string, partial: Partial<KnowledgeQaPair>) =>
+    patch({
+      qaPairs: draft.qaPairs.map((pair) =>
+        pair.id === id ? { ...pair, ...partial } : pair
+      ),
+    });
+
+  return (
+    <ContentCard
+      title={meta.addTitle}
+      action={
+        draft.qaPairs.length === 0 ? null : (
+          <Button variant="grey-outline" size="sm" disabled={full} onClick={add}>
+            Add Q&amp;A
+          </Button>
+        )
+      }
+    >
+      {draft.qaPairs.length === 0 ? (
+        <ContentEmptyState
+          glyph={<IconQa size={20} />}
+          title={meta.emptyTitle}
+          body={meta.emptyBody}
+          actionLabel="Add Q&A"
+          onAction={add}
+        />
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {draft.qaPairs.map((pair, index) => (
+            <li
+              key={pair.id}
+              className="flex flex-col gap-3 rounded-lg border border-line p-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-label-sm text-muted-foreground">
+                  Q&amp;A {index + 1}
+                </p>
+                <button
+                  type="button"
+                  aria-label={`Remove Q&A ${index + 1}`}
+                  onClick={() =>
+                    patch({
+                      qaPairs: draft.qaPairs.filter((item) => item.id !== pair.id),
+                    })
+                  }
+                  className="flex size-7 items-center justify-center rounded-[4px] text-muted-foreground hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+                >
+                  <IconClose size={16} />
+                </button>
+              </div>
+              <InputField
+                label="Question"
+                placeholder="What does the customer ask?"
+                value={pair.question}
+                onChange={(event) => update(pair.id, { question: event.target.value })}
+                clearable={false}
+              />
+              <TextArea
+                label="Answer"
+                placeholder="The answer you want the agent to give."
+                value={pair.answer}
+                onChange={(event) => update(pair.id, { answer: event.target.value })}
+                className="h-24"
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </ContentCard>
+  );
+}
+
+function FilesTab({
+  draft,
+  patch,
+  meta,
+}: {
+  draft: KnowledgeSourceRecord;
+  patch: (partial: Partial<KnowledgeSourceRecord>) => void;
+  meta: ContentTabMeta;
+}) {
+  const fileRef = React.useRef<HTMLInputElement>(null);
+  const limit = KNOWLEDGE_CONTENT_LIMITS.files;
+  const full = draft.files.length >= limit;
+  const [notice, setNotice] = React.useState("");
+
+  const addFiles = (incoming: FileList | File[]) => {
+    const list = Array.from(incoming);
+    if (!list.length) return;
+    const room = limit - draft.files.length;
+    const accepted = list.slice(0, Math.max(0, room)).map((file) => ({
+      id: newKnowledgeContentId("kf"),
+      name: file.name,
+      typeLabel: knowledgeFileTypeLabel(file.name),
+      sizeLabel: formatKnowledgeFileSize(file.size),
+    }));
+    patch({ files: [...draft.files, ...accepted] });
+    setNotice(
+      list.length > accepted.length
+        ? `Only ${limit} files fit in one knowledge base — ${
+            list.length - accepted.length
+          } skipped.`
+        : ""
+    );
+  };
+
+  return (
+    <ContentCard
+      title={meta.addTitle}
+      action={
+        draft.files.length === 0 ? null : (
+          <Button
+            variant="grey-outline"
+            size="sm"
+            disabled={full}
+            onClick={() => fileRef.current?.click()}
+          >
+            Add Source
+          </Button>
+        )
+      }
+    >
+      <input
+        ref={fileRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(event) => {
+          if (event.target.files?.length) addFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
+      {draft.files.length === 0 ? (
+        <div
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            if (event.dataTransfer.files.length) addFiles(event.dataTransfer.files);
+          }}
+        >
+          <ContentEmptyState
+            glyph={<IconFileUp size={20} />}
+            title={meta.emptyTitle}
+            body={meta.emptyBody}
+            actionLabel="Add Source"
+            onAction={() => fileRef.current?.click()}
+          />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <ul className="flex flex-col gap-2">
+            {draft.files.map((file) => (
+              <ContentRow
+                key={file.id}
+                icon={<IconFile size={16} />}
+                title={file.name}
+                meta={[file.typeLabel, file.sizeLabel].filter(Boolean).join(" · ")}
+                onRemove={() => {
+                  patch({
+                    files: draft.files.filter((item) => item.id !== file.id),
+                  });
+                  setNotice("");
+                }}
+                removeLabel={`Remove ${file.name}`}
+              />
+            ))}
+          </ul>
+          {notice ? (
+            <p className="text-paragraph-sm text-muted-foreground">{notice}</p>
+          ) : null}
+        </div>
+      )}
+    </ContentCard>
+  );
+}
+
+/**
+ * Connected sources. Unlike the other tabs this is not content the admin types —
+ * it is a standing account-level link to a system that can power knowledge and,
+ * for CRMs, customer context on the live call.
+ */
+function IntegrationsTab({
+  draft,
+  patch,
+  meta,
+}: {
+  draft: KnowledgeSourceRecord;
+  patch: (partial: Partial<KnowledgeSourceRecord>) => void;
+  meta: ContentTabMeta;
+}) {
+  const [picking, setPicking] = React.useState(false);
+  const limit = KNOWLEDGE_CONTENT_LIMITS.integrations;
+  const full = draft.integrations.length >= limit;
+  const connectedProviders = draft.integrations.map((item) => item.provider);
+
+  const connect = (next: Omit<KnowledgeIntegrationRef, "id">) => {
+    patch({
+      integrations: [
+        ...draft.integrations,
+        { id: newKnowledgeContentId("ki"), ...next },
+      ],
+    });
+  };
+
+  return (
+    <>
+      <ContentCard
+        title={meta.addTitle}
+        action={
+          draft.integrations.length === 0 ? null : (
+            <Button
+              variant="grey-outline"
+              size="sm"
+              disabled={full}
+              onClick={() => setPicking(true)}
+            >
+              Connect source
+            </Button>
+          )
+        }
+      >
+        {draft.integrations.length === 0 ? (
+          <ContentEmptyState
+            glyph={<IconPlug size={20} />}
+            title={meta.emptyTitle}
+            body={meta.emptyBody}
+            actionLabel="Connect source"
+            onAction={() => setPicking(true)}
+          />
+        ) : (
+          <div className="flex flex-col gap-3">
+            <ul className="flex flex-col gap-2">
+              {draft.integrations.map((item) => {
+                const app = knowledgeIntegrationMeta(item.provider);
+                const label = knowledgeIntegrationLabel(item);
+                return (
+                  <ContentRow
+                    key={item.id}
+                    icon={
+                      <SourceLogo
+                        provider={item.provider}
+                        label={label}
+                        size={16}
+                      />
+                    }
+                    title={label}
+                    meta={connectionCapabilityLabel(item, app?.knowledgeLabel)}
+                    onRemove={() =>
+                      patch({
+                        integrations: draft.integrations.filter(
+                          (entry) => entry.id !== item.id
+                        ),
+                      })
+                    }
+                    removeLabel={`Disconnect ${label}`}
+                  />
+                );
+              })}
+            </ul>
+            {full ? (
+              <p className="text-paragraph-sm text-muted-foreground">
+                This knowledge base is at its {limit}-connection limit.
+              </p>
+            ) : null}
+          </div>
+        )}
+      </ContentCard>
+
+      <ConnectSourceModal
+        open={picking}
+        onClose={() => setPicking(false)}
+        connectedProviders={connectedProviders}
+        limitReached={full}
+        onConnect={connect}
+      />
+    </>
+  );
+}
+
+function connectionCapabilityLabel(
+  item: KnowledgeIntegrationRef,
+  knowledgeLabel?: string
+): string {
+  const parts: string[] = [];
+  if (item.usesKnowledge) parts.push(knowledgeLabel ?? "Knowledge");
+  if (item.usesCustomerContext) parts.push("Customer context");
+  return parts.join(" · ") || item.scope;
+}
+
+function IconPlus({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M10 4.167v11.666M4.167 10h11.666"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconGlobe({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle cx="10" cy="10" r="7.083" stroke="currentColor" strokeWidth="1.2" />
+      <path
+        d="M2.917 10h14.166"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M10 2.917c1.806 1.944 2.708 4.305 2.708 7.083S11.806 15.14 10 17.083C8.194 15.14 7.292 12.778 7.292 10S8.194 4.861 10 2.917Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** The "Tt" glyph JustCall uses for pasted text. */
+function IconTextSize({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M2.5 5h8.333M6.667 5v10"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12.5 9.167h5M15 9.167V15"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconQa({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M16.667 3.333H6.667a1.667 1.667 0 0 0-1.667 1.667v5a1.667 1.667 0 0 0 1.667 1.667h1.666v2.5l3.334-2.5h5A1.667 1.667 0 0 0 18.333 10V5a1.667 1.667 0 0 0-1.666-1.667Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 14.167H3.333A1.667 1.667 0 0 1 1.667 12.5V8.333"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IconFileUp({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M11.667 2.5H5.833A1.667 1.667 0 0 0 4.167 4.167v11.666A1.667 1.667 0 0 0 5.833 17.5h8.334a1.667 1.667 0 0 0 1.666-1.667V6.667L11.667 2.5Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M11.667 2.5v4.167h4.166"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10 14.167V9.583M8.125 11.25 10 9.375l1.875 1.875"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Two blocks wired together — connected sources rather than uploaded content. */
+function IconPlug({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M8.333 2.5v3.333M13.333 2.5v3.333"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M5.833 5.833h9.584v2.5a4.792 4.792 0 0 1-4.792 4.792A4.792 4.792 0 0 1 5.833 8.333v-2.5Z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10.625 13.125V17.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
@@ -1318,14 +2041,16 @@ function SectionCard({
       )}
     >
       {title ? (
-        <div className="flex flex-col gap-1">
-          <h2 className="text-label-md-semi text-foreground">{title}</h2>
-          {description ? (
+        description ? (
+          <div className="flex flex-col gap-1">
+            <h2 className="text-label-md-semi text-foreground">{title}</h2>
             <p className="text-pretty text-paragraph-sm text-muted-foreground">
               {description}
             </p>
-          ) : null}
-        </div>
+          </div>
+        ) : (
+          <h2 className="text-label-md-semi text-foreground">{title}</h2>
+        )
       ) : null}
       {children}
     </section>
@@ -1339,12 +2064,6 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
       <dd className="text-paragraph-md text-foreground">{value}</dd>
     </div>
   );
-}
-
-function stemOf(fileName: string): string {
-  const stem = fileName.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim();
-  if (!stem) return "";
-  return stem.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export { SectionCard as KnowledgeSectionCard };

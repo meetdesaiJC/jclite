@@ -3,12 +3,15 @@ import * as React from "react";
 /**
  * Section takeover for Agent Assist.
  *
- * Editors like "Edit script" or "Add knowledge" are full pages, not panels
+ * Editors like "Edit script" or "Create action" are full pages, not panels
  * inside a section: they own the header, the close button, and the publish
- * action. While one is open the Knowledge / Conversation Guidance nav is not a
- * place to go — leaving it beside the editor implies an escape route that
- * would silently drop the draft. So an editor declares a takeover and the
- * section nav steps aside for the whole content area.
+ * action. While one is open the Scripts / Response Cards / Behavioral Coaching /
+ * In-call Actions nav is not a place to go — leaving it beside the editor implies
+ * an escape route that would silently drop the draft. So an editor declares a
+ * takeover and the section nav steps aside for the whole content area.
+ *
+ * Knowledge editors declare one too, harmlessly: Knowledge is a JustCall AI page
+ * now, with no section nav to step aside, so the hook finds no host and no-ops.
  *
  * Counted rather than boolean so nested takeovers (an editor that opens
  * another) don't restore the nav when the inner one closes.

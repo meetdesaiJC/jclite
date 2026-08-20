@@ -434,8 +434,7 @@
   animation: transcript-live-dot 1.8s ease-in-out infinite;
 }
 
-/* Notes hugs its field; the transcript takes the leftover column. */
-.notes-transcript-stage {
+.call-aside-stage {
   position: relative;
   height: 100%;
   width: 100%;
@@ -443,43 +442,24 @@
   min-width: 0;
 }
 
-.notes-slot,
-.transcript-slot {
-  position: absolute;
-  left: 0;
-  right: 0;
-  min-width: 0;
-}
-
-.notes-slot {
-  top: 0;
-  height: 0;
-}
-
-.transcript-slot {
-  top: 0;
-  height: 100%;
-}
-
-.notes-inner {
-  opacity: 0;
-  transform: translateY(4px);
-  pointer-events: none;
-}
-
-.notes-inner.is-ready {
-  pointer-events: auto;
-}
-
-button.call-bar-notes {
+/* Call-bar controls — icon only, so the circle is what carries state: a
+   quiet tint at rest, a brighter fill plus a rim for the two that toggle a
+   panel on. */
+button.call-bar-control {
+  background-color: rgb(255 255 255 / 0.1);
   transition-property: background-color, box-shadow;
   transition-duration: 120ms;
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
-button.call-bar-notes[aria-pressed="true"] {
-  transition-duration: 150ms;
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16);
+button.call-bar-control:hover {
+  background-color: rgb(255 255 255 / 0.18);
+}
+
+button.call-bar-control[aria-pressed="true"] {
+  transition-duration: 120ms;
+  background-color: rgb(255 255 255 / 0.28);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.38);
 }
 
 /* The call bar takes its width as the stage turns horizontal. Only used when
@@ -584,14 +564,14 @@ button.call-bar-notes[aria-pressed="true"] {
 
 .call-workspace-panes {
   --call-pane-script-min: 280px;
-  --call-pane-script-default: 0.35;
-  --call-pane-script-max: 0.5;
+  --call-pane-script-default: 0.42;
+  --call-pane-script-max: 0.62;
   --call-pane-suggestions-min: 300px;
-  --call-pane-suggestions-default: 0.28;
-  --call-pane-suggestions-max: 0.5;
+  --call-pane-suggestions-default: 0.33;
+  --call-pane-suggestions-max: 0.55;
   --call-pane-transcript-min: 320px;
-  --call-pane-transcript-default: 0.37;
-  --call-pane-transcript-max: 0.55;
+  --call-pane-transcript-default: 0.25;
+  --call-pane-transcript-max: 0.4;
   --call-pane-divider: 12px;
   --call-pane-hit: 16px;
   --call-pane-line: 2px;
@@ -603,6 +583,86 @@ button.call-bar-notes[aria-pressed="true"] {
 
 .call-stage-pane.is-settling {
   transition: flex-basis var(--call-pane-settle-ms, 120ms) ease-out;
+}
+
+/* ── Notes / transcript / Live Assist aside ─────────────────────────
+   One right-side shell. Open/close slides the column while Script and
+   Guidance compress or restore; switching views never re-opens the shell.
+   Keep these durations in step with DialerPanel.tsx. */
+.call-workspace-row {
+  --call-aside-open-ms: 280ms;
+  --call-aside-close-ms: 240ms;
+  --call-aside-switch-ms: 150ms;
+  --call-aside-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.call-workspace-row.is-shifting-open .call-stage-pane,
+.call-workspace-row.is-shifting-open .call-pane-resize {
+  transition:
+    flex-basis var(--call-aside-open-ms) var(--call-aside-ease),
+    width var(--call-aside-open-ms) var(--call-aside-ease);
+}
+
+.call-workspace-row.is-shifting-close .call-stage-pane,
+.call-workspace-row.is-shifting-close .call-pane-resize {
+  transition:
+    flex-basis var(--call-aside-close-ms) var(--call-aside-ease),
+    width var(--call-aside-close-ms) var(--call-aside-ease);
+}
+
+.call-pane-scroll {
+  overflow-anchor: none;
+}
+
+/* The column clips from its right edge, and the cards inside sit at the width
+   it settles at — so they hold still while the column opens around them
+   instead of reflowing through every width on the way. */
+.call-aside-pane {
+  position: relative;
+  overflow: hidden;
+}
+
+.call-aside-pane > .call-aside-stage {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+}
+
+.call-aside-view {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.call-aside-view.is-active {
+  z-index: 1;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.call-aside-stage.is-switching > .call-aside-view {
+  transition:
+    opacity var(--call-aside-switch-ms) var(--call-aside-ease),
+    visibility 0s linear var(--call-aside-switch-ms);
+}
+
+.call-aside-stage.is-switching > .call-aside-view.is-active {
+  transition:
+    opacity var(--call-aside-switch-ms) var(--call-aside-ease),
+    visibility 0s linear 0s;
+}
+
+.call-pane-resize.is-collapsing {
+  flex-basis: 0;
+  width: 0;
+  pointer-events: none;
 }
 
 .call-pane-resize {
@@ -885,11 +945,39 @@ html.call-workspace-resizing * {
 @keyframes recap-item-in {
   from {
     opacity: 0;
-    transform: translateY(5px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes recap-action-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.recap-action-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0.7;
+  animation: recap-action-spin 700ms linear infinite;
+}
+
+@keyframes recap-caret {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 1;
   }
 }
 
@@ -1000,6 +1088,26 @@ html.call-workspace-resizing * {
   animation: recap-item-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
+.recap-summary-body {
+  /* Status line + three shimmer bars — holds while the first phrases land. */
+  min-height: 5.25rem;
+}
+
+.recap-chunk-in {
+  animation: transcript-chunk-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.recap-caret {
+  display: inline-block;
+  width: 1.5px;
+  height: 0.85em;
+  margin-left: 3px;
+  vertical-align: -0.08em;
+  border-radius: 1px;
+  background-color: var(--color-ai);
+  animation: recap-caret 1.05s ease-in-out infinite;
+}
+
 /* Scripts / Guidance list — filter row expands under the search bar.
    Open: height + fade + 4px settle together. Close: fade first, then collapse
    so the table slides without the controls hanging around.
@@ -1043,8 +1151,85 @@ html.call-workspace-resizing * {
     transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
+/* ── Live Assist ─────────────────────────────────────────────────────────
+   Lives in the utility panel, so messages arrive the way guidance cards
+   do — up and in, once. The typing dots are the only thing here that
+   loops, and only while someone is actually typing. */
+@keyframes live-assist-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.live-assist-msg-in {
+  animation: live-assist-msg-in 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes live-assist-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+.live-assist-dot {
+  animation: live-assist-dot 1.1s ease-in-out var(--dot-delay, 0ms) infinite;
+}
+
+@keyframes help-wait-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(247 144 9 / 0.45);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 8px rgb(247 144 9 / 0);
+  }
+}
+
+button.call-bar-control[data-help="waiting"] {
+  background-color: rgb(247 144 9 / 0.28);
+  box-shadow: inset 0 0 0 1px rgb(247 144 9 / 0.45);
+  animation: help-wait-pulse 1.8s cubic-bezier(0.23, 1, 0.32, 1) infinite;
+}
+
+button.call-bar-control[data-help="active"] {
+  background-color: rgb(0 76 230 / 0.55);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.35);
+}
+
+@keyframes help-wait-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.help-wait-dot {
+  animation: help-wait-dot 1.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .assist-faq-card {
+    animation: none !important;
+  }
+
+  .live-assist-msg-in,
+  .live-assist-dot,
+  .help-wait-dot {
     animation: none !important;
   }
 
@@ -1087,19 +1272,21 @@ html.call-workspace-resizing * {
   .assist-card-body,
   .aa-filter-row,
   .aa-filter-row-inner,
-  button.call-bar-notes,
+  button.call-bar-control,
   .call-pane-resize-line,
-  .call-stage-pane.is-settling {
+  .call-stage-pane.is-settling,
+  .call-workspace-row.is-shifting-open .call-stage-pane,
+  .call-workspace-row.is-shifting-close .call-stage-pane,
+  .call-workspace-row.is-shifting-open .call-pane-resize,
+  .call-workspace-row.is-shifting-close .call-pane-resize,
+  .call-aside-stage.is-switching > .call-aside-view {
     transition: none !important;
   }
 
-  button.call-bar-notes {
+  button.call-bar-control[aria-pressed="true"],
+  button.call-bar-control[data-help="waiting"] {
     box-shadow: none;
-  }
-
-  .notes-inner {
-    transform: none;
-    pointer-events: auto;
+    animation: none !important;
   }
 
   .aa-filter-row-inner {
@@ -1146,7 +1333,10 @@ html.call-workspace-resizing * {
   .recap-skeleton-in,
   .recap-skeleton-line::after,
   .recap-summary-reveal,
-  .recap-item-in {
+  .recap-item-in,
+  .recap-chunk-in,
+  .recap-caret,
+  .recap-action-spinner {
     animation: none !important;
   }
 

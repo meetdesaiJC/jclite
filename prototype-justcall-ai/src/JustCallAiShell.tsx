@@ -4,12 +4,18 @@ import { GlobalHeader } from "@/components/GlobalHeader";
 import { ProfileMenu } from "../../prototype-add-ons-flow/src/ProfileMenu";
 import { AgentAssistAdmin } from "./AgentAssistAdmin";
 import { DialerPanel } from "./DialerPanel";
+import { KnowledgePage } from "./KnowledgePage";
+import {
+  SEED_KNOWLEDGE_SOURCES,
+  type KnowledgeSourceRecord,
+} from "./knowledgeData";
 import {
   IconJcaiHome,
   IconJcaiAnalytics,
   IconJcaiTopics,
   IconJcaiIntegrations,
   IconJcaiAgentAssist,
+  IconJcaiKnowledge,
   IconJcaiScorecards,
   IconJcaiSettings,
 } from "./icons/JustCallAiNavIcons";
@@ -17,6 +23,12 @@ import {
 /**
  * JustCall AI content column — Agent Assist landing plus JC AI page chrome.
  * Sidenav lives in App so the logo stays fixed across the nav swap animation.
+ *
+ * Knowledge Base is a JustCall AI page rather than an Agent Assist one because
+ * more than one product reads it: Voice Agent and Agent Assist answer from the
+ * same knowledge bases. Its state lives here, one level above both consumers,
+ * so there is a single source of truth for what knowledge exists and who has
+ * access to it.
  */
 
 export type JustCallAiPageKey =
@@ -25,6 +37,7 @@ export type JustCallAiPageKey =
   | "topics"
   | "integrations"
   | "agent-assist"
+  | "knowledge"
   | "scorecards"
   | "settings";
 
@@ -32,9 +45,11 @@ export const JUSTCALL_AI_ITEMS: SidenavItem[] = [
   { key: "dashboard", label: "Dashboard", icon: <IconJcaiHome /> },
   { key: "analytics", label: "Analytics", icon: <IconJcaiAnalytics /> },
   { key: "topics", label: "Topics", icon: <IconJcaiTopics /> },
-  { key: "integrations", label: "Integrations", icon: <IconJcaiIntegrations /> },
+  // Shared corpus — grouped with Topics, not nested under Agent Assist.
+  { key: "knowledge", label: "Knowledge Base", icon: <IconJcaiKnowledge /> },
   { key: "agent-assist", label: "Agent Assist", icon: <IconJcaiAgentAssist /> },
   { key: "scorecards", label: "Scorecards", icon: <IconJcaiScorecards /> },
+  { key: "integrations", label: "Integrations", icon: <IconJcaiIntegrations /> },
   { key: "settings", label: "Settings", icon: <IconJcaiSettings /> },
 ];
 
@@ -42,6 +57,7 @@ export const JUSTCALL_AI_PAGE_TITLES: Record<JustCallAiPageKey, string> = {
   dashboard: "Dashboard",
   analytics: "Analytics",
   topics: "Topics",
+  knowledge: "Knowledge Base",
   integrations: "Integrations",
   "agent-assist": "Agent Assist",
   scorecards: "Scorecards",
@@ -55,15 +71,26 @@ export function isJustCallAiPageKey(key: string): key is JustCallAiPageKey {
 export interface JustCallAiShellProps {
   /** Which JC AI page is active. Defaults to Agent Assist. */
   activeKey?: JustCallAiPageKey;
+  /** Lets a page hand off to another one — Agent Assist → Knowledge. */
+  onNavigate?: (key: JustCallAiPageKey) => void;
   profileName?: string;
 }
 
 export function JustCallAiShell({
   activeKey = "agent-assist",
+  onNavigate,
   profileName = "Sarah Johnson",
 }: JustCallAiShellProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);
+  const [knowledgeSources, setKnowledgeSources] = useState<
+    KnowledgeSourceRecord[]
+  >(SEED_KNOWLEDGE_SOURCES);
+  // Agent Assist's own switch: whether agents may receive knowledge answers
+  // mid-call. Which knowledge bases they draw on is not asked here — that is
+  // assigned in Knowledge.
+  const [knowledgeSuggestionsEnabled, setKnowledgeSuggestionsEnabled] =
+    useState(false);
 
   useEffect(() => {
     setDialerOpen(false);
@@ -95,7 +122,19 @@ export function JustCallAiShell({
       {dialerOpen ? (
         <DialerPanel onClose={() => setDialerOpen(false)} />
       ) : activeKey === "agent-assist" ? (
-        <AgentAssistAdmin />
+        <AgentAssistAdmin
+          knowledgeSources={knowledgeSources}
+          onOpenKnowledge={() => onNavigate?.("knowledge")}
+          knowledgeSuggestionsEnabled={knowledgeSuggestionsEnabled}
+          onKnowledgeSuggestionsEnabledChange={setKnowledgeSuggestionsEnabled}
+        />
+      ) : activeKey === "knowledge" ? (
+        <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-white">
+          <KnowledgePage
+            sources={knowledgeSources}
+            onSourcesChange={setKnowledgeSources}
+          />
+        </div>
       ) : (
         <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-white" />
       )}

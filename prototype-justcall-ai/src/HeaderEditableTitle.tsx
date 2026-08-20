@@ -9,6 +9,7 @@ export function HeaderEditableTitle({
   nameLabel = "Script name",
   size = "heading",
   autoEdit = false,
+  pencil = "hover",
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -16,6 +17,11 @@ export function HeaderEditableTitle({
   nameLabel?: string;
   size?: "heading" | "compact";
   autoEdit?: boolean;
+  /**
+   * "always" keeps the pencil visible — for a title that sits in a panel of
+   * its own, where nothing else advertises that the name is editable.
+   */
+  pencil?: "hover" | "always";
 }) {
   const [editing, setEditing] = React.useState(autoEdit);
   const [draft, setDraft] = React.useState(value);
@@ -156,7 +162,12 @@ export function HeaderEditableTitle({
       >
         {value.trim() || placeholder}
       </span>
-      <span className="ml-1.5 hidden group-hover/title:inline-flex group-focus-visible/title:inline-flex">
+      <span
+        className={cn(
+          "ml-1.5 group-hover/title:inline-flex group-focus-visible/title:inline-flex",
+          pencil === "always" ? "inline-flex" : "hidden"
+        )}
+      >
         <IconPencil size={16} className="text-brand" />
       </span>
     </button>

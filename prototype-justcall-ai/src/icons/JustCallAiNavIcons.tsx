@@ -113,6 +113,25 @@ export function IconJcaiAgentAssist(props: IconProps) {
   );
 }
 
+/**
+ * Knowledge — the open-book glyph Agent Assist's own nav used while Knowledge
+ * lived inside it, redrawn on the 20-unit JustCall AI grid now that Knowledge
+ * is a JustCall AI destination in its own right.
+ */
+export function IconJcaiKnowledge(props: IconProps) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M10 4.99896C11.1402 4.34069 12.4335 4.00415 13.75 4.00415C15.0665 4.00415 16.3598 4.34069 17.5 4.99896V15.8323C16.3598 15.174 15.0665 14.8375 13.75 14.8375C12.4335 14.8375 11.1402 15.174 10 15.8323C8.85985 15.174 7.56653 14.8375 6.25 14.8375C4.93347 14.8375 3.64015 15.174 2.5 15.8323V4.99896C3.64015 4.34069 4.93347 4.00415 6.25 4.00415C7.56653 4.00415 8.85985 4.34069 10 4.99896ZM10 15.8323V4.99896"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function IconJcaiScorecards(props: IconProps) {
   return (
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" {...props}>

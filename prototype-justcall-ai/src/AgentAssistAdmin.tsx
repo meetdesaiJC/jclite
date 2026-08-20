@@ -5,48 +5,67 @@ import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import { cn } from "@/lib/utils";
 import { AgentAssistPlaybooksPage } from "./AgentAssistPage";
 import { ActionsPage } from "./ActionsPage";
-import { KnowledgePage } from "./KnowledgePage";
 import { AgentAssistNav, type AgentAssistArea } from "./AgentAssistNav";
+import { KnowledgeSuggestionsModal } from "./KnowledgeSuggestionsModal";
 import {
   AgentAssistTakeoverContext,
   useAgentAssistTakeoverHost,
 } from "./agentAssistTakeover";
-import {
-  SEED_KNOWLEDGE_SOURCES,
-  type KnowledgeSourceRecord,
-} from "./knowledgeData";
+import { type KnowledgeSourceRecord } from "./knowledgeData";
 import { SEED_INTEGRATIONS, SEED_ACTIONS, type AgentAction, type Integration } from "./actionsData";
 import { SEED_GUIDANCE, type GuidanceItem } from "./guidanceData";
 import { SEED_COACHING_RULES, type CoachingRule } from "./coachingData";
 
 /**
- * Agent Assist admin — three things to set up, in the order they matter
- * during a call: know, respond, act.
+ * Agent Assist admin — four things to set up, each a different kind of help
+ * during the same call:
  *
- *   Knowledge              what AI may read
- *   Conversation Guidance  how agents should handle the conversation
- *                          (scripts, response cards, live coaching)
- *   In-call Actions        what agents can do in a connected app
+ *   Scripts              what to follow
+ *   Response Cards       what to say
+ *   Behavioral Coaching  how to adjust
+ *   In-call Actions      what to do in a connected app
  *
- * Actions were a fourth tab inside Conversation Guidance. They earn their own
- * destination: they surface on their own during a call, they are configured
- * against integrations rather than talk tracks, and Response Cards no longer
- * attach or configure them.
+ * Knowledge used to be a fifth item here, and Scripts / Response Cards /
+ * Behavioral Coaching sat one level down as tabs under "Conversation Guidance".
+ * Both are gone: the tabs became destinations, and Knowledge moved up to the
+ * JustCall AI nav because it is shared — Voice Agent reads the same knowledge
+ * bases, and duplicating knowledge base, source, and assignment controls inside
+ * Agent Assist would mean two places to look and two to keep in sync.
+ *
+ * What stays here is the one Knowledge decision that belongs to Agent Assist:
+ * whether agents may receive knowledge answers on a live call. Agent Assist owns
+ * *whether* Knowledge is used during calls; the global Knowledge experience owns
+ * *what* Knowledge exists and who has access to it.
  *
  * Full-page editors are the one exception to the nav: they take over the whole
  * content area, nav included (see agentAssistTakeover).
  */
 
-export function AgentAssistAdmin() {
-  const [area, setArea] = React.useState<AgentAssistArea>("knowledge");
+export interface AgentAssistAdminProps {
+  /** Read by response-card coverage hints; owned by JustCallAiShell. */
+  knowledgeSources: KnowledgeSourceRecord[];
+  /** Leaves Agent Assist for the global Knowledge page. */
+  onOpenKnowledge: () => void;
+  knowledgeSuggestionsEnabled: boolean;
+  onKnowledgeSuggestionsEnabledChange: (enabled: boolean) => void;
+}
+
+export function AgentAssistAdmin({
+  knowledgeSources,
+  onOpenKnowledge,
+  knowledgeSuggestionsEnabled,
+  onKnowledgeSuggestionsEnabledChange,
+}: AgentAssistAdminProps) {
+  const [area, setArea] = React.useState<AgentAssistArea>("scripts");
+  // "Learn more" on the nav card — the explanation of what agents see on a
+  // live call, and the second place the capability can be turned on.
+  const [knowledgeSuggestionsLearnMore, setKnowledgeSuggestionsLearnMore] =
+    React.useState(false);
   const { active: takeover, register: registerTakeover } =
     useAgentAssistTakeoverHost();
 
   // One source of truth for the whole product: what the admin publishes here
   // is what a live call reads.
-  const [knowledgeSources, setKnowledgeSources] = React.useState<
-    KnowledgeSourceRecord[]
-  >(SEED_KNOWLEDGE_SOURCES);
   const [integrations, setIntegrations] = React.useState<Integration[]>(
     SEED_INTEGRATIONS
   );
@@ -59,14 +78,28 @@ export function AgentAssistAdmin() {
   return (
     <AgentAssistTakeoverContext.Provider value={registerTakeover}>
       <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-white">
-        {takeover ? null : <AgentAssistNav activeKey={area} onSelect={setArea} />}
-
-        {area === "knowledge" ? (
-          <KnowledgePage
-            sources={knowledgeSources}
-            onSourcesChange={setKnowledgeSources}
+        {takeover ? null : (
+          <AgentAssistNav
+            activeKey={area}
+            onSelect={setArea}
+            knowledgeSuggestionsEnabled={knowledgeSuggestionsEnabled}
+            onEnableKnowledgeSuggestions={() =>
+              onKnowledgeSuggestionsEnabledChange(true)
+            }
+            onLearnAboutKnowledgeSuggestions={() =>
+              setKnowledgeSuggestionsLearnMore(true)
+            }
+            onManageKnowledge={onOpenKnowledge}
           />
-        ) : area === "actions" ? (
+        )}
+
+        <KnowledgeSuggestionsModal
+          open={knowledgeSuggestionsLearnMore}
+          onClose={() => setKnowledgeSuggestionsLearnMore(false)}
+          onEnable={() => onKnowledgeSuggestionsEnabledChange(true)}
+        />
+
+        {area === "actions" ? (
           <ActionsPage
             actions={actions}
             onActionsChange={setActions}
@@ -75,12 +108,13 @@ export function AgentAssistAdmin() {
           />
         ) : (
           <AgentAssistPlaybooksPage
+            view={area === "response-cards" ? "guidance" : area}
             guidanceItems={guidanceItems}
             onGuidanceItemsChange={setGuidanceItems}
             coachingRules={coachingRules}
             onCoachingRulesChange={setCoachingRules}
             knowledgeSources={knowledgeSources}
-            onOpenKnowledge={() => setArea("knowledge")}
+            onOpenKnowledge={onOpenKnowledge}
           />
         )}
       </div>

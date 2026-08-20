@@ -11,27 +11,38 @@ import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/Avatar";
 import { Dropdown } from "@/components/Dropdown";
 import {
+  IconAlertTriangleFilled,
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
   IconCopy,
+  IconCreateAction,
   IconFile,
   IconMessages,
+  IconPencil,
   IconScheduler,
   IconSparkles,
 } from "@/components/Icon";
+import { Modal } from "@/components/Modal";
 import { IconJcaiAgentAssist } from "./icons/JustCallAiNavIcons";
 import {
   CALL_SCENARIOS,
+  callActionProgressLabel,
+  postCallSectionTitle,
+  resolvePostCallActionItems,
   simulationAt,
-  type CallActionItem,
+  type CallActionKind,
+  type CallActionResult,
+  type CallActionStatus,
   type CallScenario,
   type GuidanceSuggestion,
+  type ResolvedCallActionItem,
   type ScriptStep,
   type SimulationSnapshot,
   type TranscriptSpeaker,
   type TranscriptTurn,
 } from "./callSimulation";
+import type { ActionState } from "./actionsData";
 import {
   SEED_GUIDANCE,
   type GuidanceItem,
@@ -115,6 +126,8 @@ export interface AgentAssistCallSheetProps {
    * no cards inserted between the steps.
    */
   guidanceDetached?: boolean;
+  /** Actions already run on this call — the recap must not re-offer them. */
+  actionStates?: Record<string, ActionState>;
   className?: string;
 }
 
@@ -130,23 +143,31 @@ export function AgentAssistCallSheet({
   onTranscriptOpenChange,
   transcriptDetached = false,
   guidanceDetached = false,
+  actionStates,
   className,
 }: AgentAssistCallSheetProps) {
   const [view, setView] = useState<"assist" | "transcript">("assist");
-  // The recap is written once. Reading the transcript and coming back shows it
-  // as it stands — it is not generated a second time.
-  const [recapRevealed, setRecapRevealed] = useState(false);
   const [viewingResource, setViewingResource] = useState<GuidanceResource | null>(
     null
   );
   const snapshot = simulationAt(scenario, elapsedMs, guidanceItems);
   const reduced = prefersReducedMotion();
+  // Generation lives here so opening the transcript doesn't restart it —
+  // coming back shows whatever has already been written, or picks up mid-stream.
+  const recap = usePostCallGeneration({
+    summary: scenario.wrapUp.summary,
+    itemCount: scenario.wrapUp.actionItems.length,
+    reduced,
+    active: ended,
+  });
   const [preparing, setPreparing] = useState(() => !reduced && !ended && active);
   const latestCard = snapshot.suggestions[snapshot.suggestions.length - 1] ?? null;
   const lastChecked =
     snapshot.scriptIndex > 0 ? scenario.steps[snapshot.scriptIndex - 1] : null;
   const liveAnnouncement = ended
-    ? "Generating call recap."
+    ? recap.complete
+      ? "Recap ready. Call summary and action items are ready."
+      : recap.statusCopy
     : snapshot.wrapped
       ? "Script complete."
       : latestCard
@@ -255,23 +276,25 @@ export function AgentAssistCallSheet({
 
       {ended ? (
         transcriptOpen ? (
-          <TranscriptPane
-            turns={snapshot.transcript}
-            contactName={scenario.contactName}
-            reduced={reduced}
-          />
+          <>
+            <TranscriptPane
+              turns={snapshot.transcript}
+              contactName={scenario.contactName}
+              reduced={reduced}
+            />
+            {recap.complete ? null : (
+              <p className="sr-only" aria-live="polite">
+                {recap.statusCopy}
+              </p>
+            )}
+          </>
         ) : (
           <PostCallAssist
-            key={scenario.id}
             scenario={scenario}
+            snapshot={snapshot}
+            actionStates={actionStates}
             reduced={reduced}
-            instant={recapRevealed}
-            onRevealed={() => setRecapRevealed(true)}
-            onViewTranscript={
-              onTranscriptOpenChange
-                ? () => onTranscriptOpenChange(true)
-                : undefined
-            }
+            recap={recap}
           />
         )
       ) : preparing ? (
@@ -362,7 +385,7 @@ function AssistStream({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3",
+        "call-pane-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3",
         !reduced && collapsing && "assist-stream-out"
       )}
       {...stream.scrollHandlers}
@@ -386,73 +409,176 @@ function AssistStream({
   );
 }
 
-type RecapPhase = "generating" | "skeleton" | "summary" | "items" | "complete";
-type RecapStatus = "generating" | "ready" | "leaving" | "gone";
+type RecapStage = "understanding" | "summarizing" | "next-steps" | "complete";
+
+interface PostCallGeneration {
+  stage: RecapStage;
+  statusCopy: string;
+  summaryText: string;
+  summaryComplete: boolean;
+  visibleItems: number;
+  complete: boolean;
+}
 
 const RECAP_MOTION = {
-  generatingMs: 820,
-  skeletonMs: 980,
-  summaryRevealMs: 220,
-  itemStaggerMs: 150,
-  completeBeatMs: 180,
-  readyHoldMs: 1600,
-  statusOutMs: 200,
+  /** First beat — Call summary is on screen with a skeleton. */
+  understandMs: 1300,
+  /** Status flips to "Creating summary..." before the first phrase lands. */
+  creatingMs: 640,
+  /** Phrase cadence: 3–8 words every 100–200ms, not per character. */
+  chunkDelaysMs: [140, 180, 120, 160, 200, 110, 170, 150] as const,
+  /** Pause after the last summary phrase so Copy can enable cleanly. */
+  summarySettleMs: 180,
+  /** Action items heading appears, then a think beat before the first row. */
+  itemsThinkMs: 720,
+  itemGapMs: 380,
+  completeBeatMs: 160,
+  /** Slow-path copy if the first tokens haven't arrived yet. */
+  stillWorkingMs: 9000,
 } as const;
 
-function usePostCallReveal(itemCount: number, reduced: boolean) {
-  const [phase, setPhase] = useState<RecapPhase>(reduced ? "complete" : "generating");
-  const [status, setStatus] = useState<RecapStatus>(reduced ? "gone" : "generating");
+/**
+ * Split a summary into spoken phrases. 3–8 words, snapping to punctuation
+ * when it falls in range so the stream reads like sentences, not a ticker.
+ */
+function phraseChunks(text: string): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  const sizes = [5, 7, 4, 6, 8, 3, 5, 4];
+  let i = 0;
+  let s = 0;
+  while (i < words.length) {
+    const remaining = words.length - i;
+    let n = Math.min(sizes[s++ % sizes.length], remaining);
+    if (remaining <= 8) {
+      n = remaining;
+    } else {
+      for (let look = Math.min(8, remaining); look >= 3; look -= 1) {
+        if (/[.,;:!?]$/.test(words[i + look - 1] ?? "")) {
+          n = look;
+          break;
+        }
+      }
+      n = Math.max(3, Math.min(n, remaining));
+      if (remaining - n > 0 && remaining - n < 3) {
+        n = Math.min(8, remaining);
+      }
+    }
+    chunks.push(words.slice(i, i + n).join(" "));
+    i += n;
+  }
+  return chunks;
+}
+
+function recapStatusCopy(
+  stage: RecapStage,
+  summaryText: string,
+  takingLong: boolean
+): string {
+  const waitingOnFirstTokens =
+    stage === "understanding" || (stage === "summarizing" && summaryText.length === 0);
+  if (takingLong && waitingOnFirstTokens) {
+    return "Still working on the call insights...";
+  }
+  if (stage === "understanding") return "Understanding conversation...";
+  if (stage === "summarizing") return "Creating summary...";
+  if (stage === "next-steps") return "Finding next steps...";
+  return "Recap ready";
+}
+
+function usePostCallGeneration({
+  summary,
+  itemCount,
+  reduced,
+  active,
+}: {
+  summary: string;
+  itemCount: number;
+  reduced: boolean;
+  active: boolean;
+}): PostCallGeneration {
+  const [stage, setStage] = useState<RecapStage>(reduced ? "complete" : "understanding");
+  const [summaryText, setSummaryText] = useState(reduced ? summary : "");
   const [visibleItems, setVisibleItems] = useState(reduced ? itemCount : 0);
+  const [takingLong, setTakingLong] = useState(false);
 
   useEffect(() => {
+    if (!active) return;
+
     if (reduced) {
-      setPhase("complete");
-      setStatus("gone");
+      setStage("complete");
+      setSummaryText(summary);
       setVisibleItems(itemCount);
+      setTakingLong(false);
       return;
     }
 
-    setPhase("generating");
-    setStatus("generating");
+    setStage("understanding");
+    setSummaryText("");
     setVisibleItems(0);
+    setTakingLong(false);
 
+    let cancelled = false;
     const timers: number[] = [];
-    const skeletonAt = RECAP_MOTION.generatingMs;
-    const summaryAt = skeletonAt + RECAP_MOTION.skeletonMs;
-    const itemsAt = summaryAt + RECAP_MOTION.summaryRevealMs;
-    const completeAt =
-      itemsAt + itemCount * RECAP_MOTION.itemStaggerMs + RECAP_MOTION.completeBeatMs;
-    const leaveAt = completeAt + RECAP_MOTION.readyHoldMs;
+    const later = (fn: () => void, ms: number) => {
+      const id = window.setTimeout(() => {
+        if (!cancelled) fn();
+      }, ms);
+      timers.push(id);
+    };
 
-    timers.push(window.setTimeout(() => setPhase("skeleton"), skeletonAt));
-    timers.push(window.setTimeout(() => setPhase("summary"), summaryAt));
-    timers.push(window.setTimeout(() => setPhase("items"), itemsAt));
+    later(() => setTakingLong(true), RECAP_MOTION.stillWorkingMs);
 
-    for (let index = 0; index < itemCount; index += 1) {
-      timers.push(
-        window.setTimeout(() => {
-          setVisibleItems(index + 1);
-        }, itemsAt + index * RECAP_MOTION.itemStaggerMs)
+    later(() => setStage("summarizing"), RECAP_MOTION.understandMs);
+
+    const chunks = phraseChunks(summary);
+    const streamStart = RECAP_MOTION.understandMs + RECAP_MOTION.creatingMs;
+
+    const delays = RECAP_MOTION.chunkDelaysMs;
+    let elapsed = streamStart;
+    chunks.forEach((chunk, index) => {
+      later(() => {
+        setSummaryText((current) => (current ? `${current} ${chunk}` : chunk));
+      }, elapsed);
+      if (index < chunks.length - 1) {
+        elapsed += delays[index % delays.length] ?? 150;
+      }
+    });
+
+    const summaryDoneAt = elapsed + RECAP_MOTION.summarySettleMs;
+    later(() => {
+      setSummaryText(summary);
+      setStage(itemCount === 0 ? "complete" : "next-steps");
+    }, summaryDoneAt);
+
+    if (itemCount > 0) {
+      const firstItemAt = summaryDoneAt + RECAP_MOTION.itemsThinkMs;
+      for (let index = 0; index < itemCount; index += 1) {
+        later(() => setVisibleItems(index + 1), firstItemAt + index * RECAP_MOTION.itemGapMs);
+      }
+      later(
+        () => setStage("complete"),
+        firstItemAt + (itemCount - 1) * RECAP_MOTION.itemGapMs + RECAP_MOTION.completeBeatMs
       );
     }
 
-    timers.push(
-      window.setTimeout(() => {
-        setPhase("complete");
-        setStatus("ready");
-      }, completeAt)
-    );
-    timers.push(window.setTimeout(() => setStatus("leaving"), leaveAt));
-    timers.push(
-      window.setTimeout(() => setStatus("gone"), leaveAt + RECAP_MOTION.statusOutMs)
-    );
-
     return () => {
+      cancelled = true;
       timers.forEach((timer) => window.clearTimeout(timer));
     };
-  }, [itemCount, reduced]);
+  }, [active, reduced, summary, itemCount]);
 
-  return { phase, status, visibleItems };
+  const complete = stage === "complete";
+  const summaryComplete = complete || stage === "next-steps";
+
+  return {
+    stage,
+    statusCopy: recapStatusCopy(stage, summaryText, takingLong),
+    summaryText: complete || summaryComplete ? summary : summaryText,
+    summaryComplete,
+    visibleItems: complete ? itemCount : visibleItems,
+    complete,
+  };
 }
 
 function RecapSparkleCheck({ ready }: { ready: boolean }) {
@@ -490,191 +616,273 @@ function RecapSparkleCheck({ ready }: { ready: boolean }) {
   );
 }
 
-function RecapStatusRow({
-  status,
+function RecapSkeleton({
+  copy,
   reduced,
 }: {
-  status: RecapStatus;
+  copy: string;
   reduced: boolean;
 }) {
-  if (status === "gone") return null;
-
-  const ready = status === "ready" || status === "leaving";
-
   return (
-    <div className={cn("recap-status-slot", status === "leaving" && "is-leaving")}>
-      <div className="overflow-hidden">
-        <div
-          className={cn(
-            "flex items-center gap-1.5",
-            !reduced && status === "generating" && "recap-status-in"
-          )}
-          aria-live="polite"
-        >
-          <RecapSparkleCheck ready={ready} />
-          <p className="text-label-sm text-muted-foreground">
-            {ready ? "Recap ready" : "Generating call recap..."}
-          </p>
-        </div>
-      </div>
+    <div
+      className={cn("recap-summary-body flex flex-col gap-2", !reduced && "recap-skeleton-in")}
+    >
+      <p
+        key={copy}
+        className={cn(
+          "text-label-sm text-muted-foreground",
+          !reduced && "recap-status-in"
+        )}
+      >
+        {copy}
+      </p>
+      <span className="recap-skeleton-line w-full" aria-hidden="true" />
+      <span className="recap-skeleton-line w-[90%]" aria-hidden="true" />
+      <span className="recap-skeleton-line w-[72%]" aria-hidden="true" />
     </div>
   );
 }
 
-function RecapSkeleton({ reduced }: { reduced: boolean }) {
+function RecapItemSkeleton({
+  copy,
+  reduced,
+}: {
+  copy: string;
+  reduced: boolean;
+}) {
   return (
     <div
-      className={cn("flex flex-col gap-2", !reduced && "recap-skeleton-in")}
-      aria-hidden="true"
+      className={cn(
+        "flex min-h-[50px] items-center rounded-lg border border-line bg-white px-3 py-2",
+        !reduced && "recap-skeleton-in"
+      )}
     >
-      <span className="recap-skeleton-line w-full" />
-      <span className="recap-skeleton-line w-[90%]" />
-      <span className="recap-skeleton-line w-[72%]" />
+      <p
+        className={cn(
+          "text-label-sm text-muted-foreground",
+          !reduced && "recap-status-in"
+        )}
+      >
+        {copy}
+      </p>
     </div>
   );
 }
 
 /**
+ * Phrase-chunk stream. Prior text stays fully readable; only the new phrase
+ * fades in. The caret marks the generation point until this section settles.
+ */
+function RecapSummaryStream({
+  text,
+  streaming,
+  reduced,
+}: {
+  text: string;
+  streaming: boolean;
+  reduced: boolean;
+}) {
+  const committedRef = useRef(text);
+  const suffix =
+    !reduced && text.startsWith(committedRef.current)
+      ? text.slice(committedRef.current.length)
+      : "";
+  const settled = suffix ? committedRef.current : text;
+
+  useEffect(() => {
+    committedRef.current = text;
+  }, [text]);
+
+  return (
+    <p className="recap-summary-body text-pretty text-paragraph-md text-foreground">
+      <span>{settled}</span>
+      {suffix ? <span className="recap-chunk-in">{suffix}</span> : null}
+      {streaming && !reduced ? <span className="recap-caret" aria-hidden="true" /> : null}
+    </p>
+  );
+}
+
+const ACTION_CONFIRM_MS = 750;
+
+/**
  * Post-call — the recap the agent reads and works from: what was said, then
- * what to do about it. Summary and action items are one continuous pane, not
- * two tabs, so nothing about the call is a click away. Disposition, notes and
- * rating live in Wrap up beside this; this pane only reports and hands off.
+ * what to do about it. Summary streams first; action items and their CTAs
+ * become usable as each one lands. Disposition, notes and rating live in
+ * Wrap up beside this; this pane only reports and hands off.
  */
 
 function PostCallAssist({
   scenario,
+  snapshot,
+  actionStates,
   reduced,
-  instant,
-  onRevealed,
-  onViewTranscript,
+  recap,
 }: {
   scenario: CallScenario;
+  snapshot: SimulationSnapshot;
+  actionStates?: Record<string, ActionState>;
   reduced: boolean;
-  /** Coming back from the transcript — the recap is already written. */
-  instant: boolean;
-  onRevealed: () => void;
-  onViewTranscript?: () => void;
+  recap: PostCallGeneration;
 }) {
-  const items = scenario.wrapUp.actionItems;
-  const { phase, status, visibleItems } = usePostCallReveal(
-    items.length,
-    reduced || instant
+  const resolved = useMemo(
+    () =>
+      resolvePostCallActionItems(
+        scenario.wrapUp.actionItems,
+        snapshot,
+        actionStates
+      ),
+    [scenario.wrapUp.actionItems, snapshot, actionStates]
   );
-  const showSummary = phase !== "generating";
-  const showText = phase === "summary" || phase === "items" || phase === "complete";
-  const showItems = phase === "items" || phase === "complete";
-  const complete = phase === "complete";
+  const [overrides, setOverrides] = useState<
+    Record<string, { status: CallActionStatus; markedManually?: boolean }>
+  >({});
+  const [viewing, setViewing] = useState<ResolvedCallActionItem | null>(null);
+  const runTimers = useRef<number[]>([]);
 
   useEffect(() => {
-    if (complete) onRevealed();
-  }, [complete, onRevealed]);
+    setOverrides({});
+    setViewing(null);
+  }, [scenario.id]);
+
+  useEffect(
+    () => () => runTimers.current.forEach((timer) => window.clearTimeout(timer)),
+    []
+  );
+
+  const items = useMemo(
+    () =>
+      resolved.map((item) => {
+        const override = overrides[item.id];
+        if (!override) return item;
+        return {
+          ...item,
+          status: override.status,
+          result: override.markedManually ? undefined : item.result,
+        };
+      }),
+    [resolved, overrides]
+  );
+  const sectionTitle = postCallSectionTitle(items);
+
+  const patchItem = (
+    id: string,
+    patch: { status: CallActionStatus; markedManually?: boolean }
+  ) => {
+    setOverrides((current) => ({ ...current, [id]: patch }));
+  };
+
+  const runItem = (item: ResolvedCallActionItem) => {
+    patchItem(item.id, { status: "in_progress" });
+    const timer = window.setTimeout(
+      () => patchItem(item.id, { status: "completed" }),
+      reduced ? 0 : ACTION_CONFIRM_MS
+    );
+    runTimers.current.push(timer);
+  };
+
+  const { stage, statusCopy, summaryText, summaryComplete, visibleItems, complete } =
+    recap;
+  const streamingSummary = stage === "summarizing" && summaryText.length > 0;
+  const showItems = stage === "next-steps" || stage === "complete";
+  const [itemsAtMount] = useState(visibleItems);
+  const [hadSummaryOnMount] = useState(summaryText.length > 0);
 
   return (
     <div
       className={cn(
         "flex min-h-0 flex-1 flex-col",
         !reduced &&
+          !hadSummaryOnMount &&
           "animate-[assist-wrap-in_220ms_cubic-bezier(0.23,1,0.32,1)_both]"
       )}
     >
       <div
         className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4"
-        aria-busy={status === "generating"}
+        aria-busy={!complete}
       >
-        <RecapStatusRow status={status} reduced={reduced} />
-
-        {showSummary ? (
-          <section
-            aria-labelledby="call-summary-heading"
-            className={cn(
-              "flex flex-col gap-2",
-              !reduced && phase === "skeleton" && "recap-section-in"
-            )}
-          >
-            <div className="flex min-h-7 items-center justify-between gap-2">
-              <h2
-                id="call-summary-heading"
-                className="flex items-center gap-1.5 text-label-md-semi text-foreground"
-              >
-                <IconSparkles
-                  size={16}
-                  aria-hidden="true"
-                  className="size-4 shrink-0 text-ai"
-                />
-                Call summary
-              </h2>
-              {/* The summary is the agent's raw material for notes — it can go
-                  straight to the clipboard without being retyped. */}
-              {showText ? <CopyButton text={scenario.wrapUp.summary} /> : null}
-            </div>
-            {showText ? (
-              <p
-                className={cn(
-                  "text-pretty text-paragraph-md text-foreground",
-                  !reduced && "recap-summary-reveal"
-                )}
-              >
-                {scenario.wrapUp.summary}
-              </p>
-            ) : (
-              <RecapSkeleton reduced={reduced} />
-            )}
-          </section>
-        ) : null}
+        <section
+          aria-labelledby="call-summary-heading"
+          className={cn(
+            "flex flex-col gap-2",
+            !reduced && !hadSummaryOnMount && "recap-section-in"
+          )}
+        >
+          <div className="flex min-h-7 items-center justify-between gap-2">
+            <h2
+              id="call-summary-heading"
+              className="flex items-center gap-1.5 text-label-md-semi text-foreground"
+            >
+              <RecapSparkleCheck ready={summaryComplete} />
+              Call summary
+            </h2>
+            <CopyButton text={scenario.wrapUp.summary} disabled={!summaryComplete} />
+          </div>
+          {summaryText ? (
+            <RecapSummaryStream
+              text={summaryText}
+              streaming={streamingSummary}
+              reduced={reduced}
+            />
+          ) : (
+            <RecapSkeleton copy={statusCopy} reduced={reduced} />
+          )}
+        </section>
 
         {showItems ? (
           <section
             aria-labelledby="action-items-heading"
-            className={cn("flex flex-col gap-2", !reduced && "recap-section-in")}
+            className={cn(
+              "flex flex-col gap-2",
+              !reduced && itemsAtMount === 0 && "recap-section-in"
+            )}
           >
-            <div className="flex items-center gap-1.5">
-              <h2
-                id="action-items-heading"
-                className="text-label-md-semi text-foreground"
-              >
-                Action items
-              </h2>
-            </div>
-            <ol className="flex flex-col gap-2">
-              {items.slice(0, visibleItems).map((item) => (
-                <ActionItemRow key={item.id} item={item} reduced={reduced} />
-              ))}
-            </ol>
+            <h2
+              id="action-items-heading"
+              className="flex min-h-7 items-center gap-1.5 text-label-md-semi text-foreground"
+            >
+              <RecapSparkleCheck ready={complete} />
+              {sectionTitle}
+            </h2>
+            {visibleItems === 0 ? (
+              <RecapItemSkeleton copy={statusCopy} reduced={reduced} />
+            ) : (
+              <ol className="flex flex-col gap-2">
+                {items.slice(0, visibleItems).map((item, index) => (
+                  <ActionItemRow
+                    key={item.id}
+                    item={item}
+                    reduced={reduced}
+                    animate={index >= itemsAtMount}
+                    onRun={() => runItem(item)}
+                    onRetry={() => runItem(item)}
+                    onMarkDone={() =>
+                      patchItem(item.id, {
+                        status: "completed",
+                        markedManually: true,
+                      })
+                    }
+                    onView={() => setViewing(item)}
+                  />
+                ))}
+              </ol>
+            )}
           </section>
         ) : null}
       </div>
 
-      {/* The recap is the summary of the call; the transcript is the record of
-          it. One click apart, on the pane's own edge. */}
-      {complete && onViewTranscript ? (
-        <div
-          className={cn(
-            "flex shrink-0 items-center justify-center border-t border-line px-4 py-3",
-            !reduced && "recap-section-in"
-          )}
-        >
-          <button
-            type="button"
-            onClick={onViewTranscript}
-            className="inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-[4px] border border-line px-3 text-label-md text-foreground outline-none transition-colors hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-brand/24"
-          >
-            <IconFile size={16} className="size-4 shrink-0 text-muted-foreground" />
-            View full transcript
-          </button>
-        </div>
-      ) : null}
+      <ActionResultModal item={viewing} onClose={() => setViewing(null)} />
 
       <p className="sr-only" aria-live="polite">
-        {status === "ready" || status === "leaving" || status === "gone"
-          ? "Recap ready. Call summary and action items are ready."
-          : "Generating call recap."}
+        {complete
+          ? `Recap ready. Call summary and ${sectionTitle.toLowerCase()} are ready.`
+          : statusCopy}
       </p>
     </div>
   );
 }
 
 /** Copy to clipboard, with the confirmation on the button itself. */
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, disabled = false }: { text: string; disabled?: boolean }) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -686,11 +894,20 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       type="button"
+      disabled={disabled}
+      aria-label={
+        disabled
+          ? "Copy summary, available when generation finishes"
+          : copied
+            ? "Copied"
+            : "Copy summary"
+      }
       onClick={() => {
+        if (disabled) return;
         navigator.clipboard?.writeText(text).catch(() => {});
         setCopied(true);
       }}
-      className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] px-1.5 text-label-sm text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+      className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] px-1.5 text-label-sm text-muted-foreground outline-none transition-[color,background-color,opacity] duration-200 hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
     >
       {copied ? (
         <IconCheck size={16} className="size-4 shrink-0 text-success" />
@@ -702,48 +919,202 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-const ACTION_CTA = {
+const ACTION_CTA: Record<
+  CallActionKind,
+  { label: string; icon: typeof IconScheduler }
+> = {
   schedule: { label: "Schedule", icon: IconScheduler },
   message: { label: "Send message", icon: IconMessages },
-} as const;
+  prepare: { label: "Prepare", icon: IconFile },
+  ticket: { label: "Create ticket", icon: IconCreateAction },
+  update: { label: "Update", icon: IconPencil },
+  create: { label: "Create", icon: IconCreateAction },
+};
+
+function IconRetry(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M13.5 8a5.5 5.5 0 1 1-1.9-4.16M13.5 2.5V6H10"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+const ACTION_CTA_CLASS =
+  "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] px-2 text-label-sm font-medium text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24";
 
 /**
- * One item, one next step. The CTA is the product surface that item belongs
- * to; rows without one keep the same height so the list reads as one stack.
+ * One item, one next step. Completed work is a receipt; pending work keeps
+ * the blue CTA. The two sit in the same list so the agent never has to
+ * remember what already happened on the call.
  */
 function ActionItemRow({
   item,
   reduced,
+  animate,
+  onRun,
+  onRetry,
+  onMarkDone,
+  onView,
 }: {
-  item: CallActionItem;
+  item: ResolvedCallActionItem;
   reduced: boolean;
+  animate: boolean;
+  onRun: () => void;
+  onRetry: () => void;
+  onMarkDone: () => void;
+  onView: () => void;
 }) {
+  const pending = item.status === "pending";
+  const completed = item.status === "completed";
+  const failed = item.status === "failed";
+  const busy = item.status === "in_progress";
   const cta = item.action ? ACTION_CTA[item.action] : null;
   const CtaIcon = cta?.icon;
+  const viewable = completed && Boolean(item.result);
+  const showMarkDone = pending && item.allowMarkDone;
+  const needsAttention = pending || failed || busy;
 
   return (
     <li
       className={cn(
-        // 50px = the CTA button's own height plus padding and border, so a row
-        // without a CTA sits at exactly the same height as one with it.
         "flex min-h-[50px] items-center gap-2.5 rounded-lg border border-line bg-white py-2 pr-2 pl-3",
-        !reduced && "recap-item-in"
+        !reduced && animate && "recap-item-in"
       )}
     >
-      <p className="min-w-0 flex-1 text-pretty text-label-md text-foreground">
+      <p
+        className={cn(
+          "min-w-0 flex-1 text-pretty text-label-md",
+          needsAttention ? "font-medium text-foreground" : "text-muted-foreground"
+        )}
+      >
         {item.title}
       </p>
-      {cta && CtaIcon ? (
-        <button
-          type="button"
-          className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] px-2 text-label-sm text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24"
-        >
-          <CtaIcon size={16} className="size-4 shrink-0" />
-          {cta.label}
-          <IconChevronRight size={16} className="size-4 shrink-0 opacity-70" />
-        </button>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+        {busy ? (
+          <span
+            className="inline-flex h-8 items-center gap-1.5 px-2 text-label-sm text-muted-foreground"
+            role="status"
+          >
+            <span className="recap-action-spinner" aria-hidden="true" />
+            {callActionProgressLabel(item.action)}
+          </span>
+        ) : null}
+
+        {completed ? (
+          <span className="inline-flex h-8 items-center gap-3 px-1.5">
+            <span
+              className="inline-flex items-center gap-1.5"
+              role="status"
+            >
+              <IconCheck
+                size={16}
+                aria-hidden="true"
+                className="size-4 shrink-0 text-success"
+              />
+              {item.outcome ? (
+                <span className="text-label-sm text-muted-foreground">
+                  {item.outcome}
+                </span>
+              ) : null}
+            </span>
+            {viewable ? (
+              <button
+                type="button"
+                onClick={onView}
+                aria-label={`View ${item.outcome ? item.outcome.toLowerCase() : "completed"} result`}
+                className="text-label-sm text-brand outline-none transition-colors hover:text-brand-hover hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-brand/24"
+              >
+                View
+              </button>
+            ) : null}
+          </span>
+        ) : null}
+
+        {failed ? (
+          <span
+            className="inline-flex h-8 items-center gap-1.5 px-1.5"
+            role="status"
+          >
+            <IconAlertTriangleFilled
+              size={16}
+              aria-hidden="true"
+              className="size-4 shrink-0 text-warning"
+            />
+            <span className="text-label-sm text-muted-foreground">Not completed</span>
+          </span>
+        ) : null}
+
+        {showMarkDone ? (
+          <button
+            type="button"
+            onClick={onMarkDone}
+            className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[4px] px-2 text-label-sm text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+          >
+            Mark as done
+          </button>
+        ) : null}
+
+        {pending && cta && CtaIcon ? (
+          <button type="button" onClick={onRun} className={ACTION_CTA_CLASS}>
+            <CtaIcon size={16} className="size-4 shrink-0" />
+            {cta.label}
+            <IconChevronRight size={16} className="size-4 shrink-0 opacity-70" />
+          </button>
+        ) : null}
+
+        {failed ? (
+          <button type="button" onClick={onRetry} className={ACTION_CTA_CLASS}>
+            <IconRetry className="size-4 shrink-0" />
+            Retry
+            <IconChevronRight size={16} className="size-4 shrink-0 opacity-70" />
+          </button>
+        ) : null}
+      </div>
     </li>
+  );
+}
+
+function ActionResultModal({
+  item,
+  onClose,
+}: {
+  item: ResolvedCallActionItem | null;
+  onClose: () => void;
+}) {
+  const result: CallActionResult | undefined = item?.result;
+  return (
+    <Modal
+      open={Boolean(item && result)}
+      onClose={onClose}
+      size="sm"
+      title={result?.title ?? item?.outcome ?? "Result"}
+      footer={
+        result?.href ? (
+          <a
+            href={result.href}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-8 items-center rounded-[4px] px-2 text-label-sm font-medium text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24"
+          >
+            {result.hrefLabel ?? "Open result"}
+          </a>
+        ) : undefined
+      }
+    >
+      {result?.detail ? (
+        <p className="text-pretty text-paragraph-md text-foreground">{result.detail}</p>
+      ) : (
+        <p className="text-pretty text-paragraph-sm text-muted-foreground">
+          Completed during this call.
+        </p>
+      )}
+    </Modal>
   );
 }
 
@@ -867,9 +1238,12 @@ export interface LiveTranscriptPanelProps {
   guidanceItems?: GuidanceItem[];
   /** Hangup — the live stream lets go before the phone changes state. */
   exiting?: boolean;
-  /** When set, the parent owns collapse so notes can take the freed height. */
-  expanded?: boolean;
-  onExpandedChange?: (expanded: boolean) => void;
+  /**
+   * The agent turns the transcript on from the call bar, so the panel is only
+   * ever whole or gone — off, it stops streaming rather than sitting collapsed.
+   */
+  active?: boolean;
+  onClose?: () => void;
   className?: string;
 }
 
@@ -878,81 +1252,62 @@ export function LiveTranscriptPanel({
   scenario,
   guidanceItems = SEED_GUIDANCE,
   exiting = false,
-  expanded: expandedProp,
-  onExpandedChange,
+  active = true,
+  onClose,
   className,
 }: LiveTranscriptPanelProps) {
   const snapshot = simulationAt(scenario, elapsedMs, guidanceItems);
   const reduced = prefersReducedMotion();
   const bodyId = useId();
-  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(true);
-  const expanded = expandedProp ?? uncontrolledExpanded;
-
-  const setExpanded = (next: boolean) => {
-    onExpandedChange?.(next);
-    if (expandedProp === undefined) setUncontrolledExpanded(next);
-  };
 
   return (
     <section
       aria-label="Live transcript"
       className={cn(
-        "flex min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white",
-        expanded ? "h-full" : "h-11",
+        "flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden bg-white",
         className
       )}
     >
       <header
         className={cn(
-          "flex h-11 shrink-0 items-center border-line",
-          expanded && "border-b",
+          "flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-4",
           !reduced && "assist-head-in"
         )}
       >
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={bodyId}
-          aria-label={expanded ? "Collapse live transcript" : "Expand live transcript"}
-          onClick={() => setExpanded(!expanded)}
-          className="group flex h-full min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 px-4 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24"
-        >
-          <div className="flex min-w-0 items-center gap-1.5">
-            <IconWaveform className="size-4 shrink-0 text-muted-foreground" />
-            <span className="text-label-md-semi text-foreground">Live transcript</span>
-          </div>
-          <span
-            className="flex size-6 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground transition-colors duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:bg-surface-hover group-hover:text-foreground group-active:scale-[0.97]"
-            aria-hidden="true"
+        <div className="flex min-w-0 items-center gap-1.5">
+          <IconWaveform className="size-4 shrink-0 text-muted-foreground" />
+          <span className="text-label-md-semi text-foreground">Live transcript</span>
+        </div>
+        {onClose ? (
+          <button
+            type="button"
+            aria-label="Close live transcript"
+            aria-controls={bodyId}
+            onClick={onClose}
+            className="flex size-6 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground outline-none transition-colors duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24 active:scale-[0.97]"
           >
-            {expanded ? <IconMinus className="size-4" /> : <IconPlus className="size-4" />}
-          </span>
-        </button>
+            <IconPanelClose className="size-4" />
+          </button>
+        ) : null}
       </header>
 
       <div
         id={bodyId}
         role="region"
         aria-label="Call transcript"
-        aria-hidden={!expanded}
-        inert={!expanded || undefined}
-        hidden={!expanded}
         className={cn(
-          "min-h-0 overflow-hidden",
-          expanded && "flex-1",
-          !reduced && expanded && "assist-card-body assist-card-body-open"
+          "min-h-0 flex-1 overflow-hidden",
+          !reduced && "assist-card-body assist-card-body-open"
         )}
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
-          {expanded && (
-            <TranscriptPane
-              turns={snapshot.transcript}
-              contactName={scenario.contactName}
-              reduced={reduced}
-              exiting={exiting}
-              active={expanded}
-            />
-          )}
+          <TranscriptPane
+            turns={snapshot.transcript}
+            contactName={scenario.contactName}
+            reduced={reduced}
+            exiting={exiting}
+            active={active}
+          />
         </div>
       </div>
     </section>
@@ -972,24 +1327,12 @@ function IconWaveform(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function IconPlus(props: SVGProps<SVGSVGElement>) {
+/** Close — an X, the same dismissal the Notes pane next door offers. */
+function IconPanelClose(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
       <path
-        d="M8 3.333v9.334M3.333 8h9.334"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function IconMinus(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M3.333 8h9.334"
+        d="M4 4l8 8M12 4l-8 8"
         stroke="currentColor"
         strokeWidth="1.5"
         strokeLinecap="round"
@@ -1157,30 +1500,27 @@ function TranscriptPane({
   contactName: string;
   reduced: boolean;
   exiting?: boolean;
-  /** Collapsed — don't pull ancestor scroll while the pane is hidden. */
+  /** Hidden — don't auto-scroll a pane the agent isn't looking at. */
   active?: boolean;
 }) {
   const progressive = useProgressiveTranscript(turns);
   const groups = useMemo(() => groupProgressiveTurns(progressive), [progressive]);
 
   const scrollRef = useRef<HTMLOListElement | null>(null);
-  const endRef = useRef<HTMLDivElement | null>(null);
   const autoScrollActive = useRef(true);
   const [showJump, setShowJump] = useState(false);
   const lastFingerprint = useRef("");
 
-  // Auto-scroll when new content appears, but only when near bottom.
+  // Auto-scroll when new content appears, but only when already near the bottom.
   useEffect(() => {
     if (!active) return;
     const fingerprint = progressive.map((t) => t.visibleText).join("|");
     if (fingerprint === lastFingerprint.current) return;
     lastFingerprint.current = fingerprint;
-    if (!autoScrollActive.current || !endRef.current) return;
-    endRef.current.scrollIntoView({
-      behavior: reduced ? "auto" : "smooth",
-      block: "end",
-    });
-  }, [progressive, reduced, active]);
+    const el = scrollRef.current;
+    if (!autoScrollActive.current || !el) return;
+    el.scrollTop = el.scrollHeight - el.clientHeight;
+  }, [progressive, active]);
 
   // Detect manual upward scroll to disable auto-scroll.
   useEffect(() => {
@@ -1200,6 +1540,21 @@ function TranscriptPane({
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Coming back from Notes / Live Assist: stay on live if they were following,
+  // otherwise keep the scroll they left and offer Jump to live.
+  useEffect(() => {
+    if (!active) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    if (autoScrollActive.current) {
+      el.scrollTop = el.scrollHeight - el.clientHeight;
+      setShowJump(false);
+      return;
+    }
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowJump(dist > SCROLL_THRESHOLD);
+  }, [active]);
+
   // Notes open/close resizes this pane. Stay pinned to latest if the agent
   // already was; otherwise keep the same top anchor and reveal more below.
   useEffect(() => {
@@ -1214,7 +1569,8 @@ function TranscriptPane({
   }, []);
 
   const jumpToLatest = () => {
-    endRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "end" });
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight - el.clientHeight;
     autoScrollActive.current = true;
     setShowJump(false);
   };
@@ -1235,7 +1591,7 @@ function TranscriptPane({
       <ol
         ref={scrollRef}
         className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 [overflow-anchor:none]",
+          "call-pane-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 [overflow-anchor:none]",
           !reduced && !exiting && "animate-[assist-now-in_180ms_cubic-bezier(0.23,1,0.32,1)_both]",
           !reduced && exiting && "assist-stream-out"
         )}
@@ -1273,17 +1629,17 @@ function TranscriptPane({
             </li>
           );
         })}
-        <div ref={endRef} aria-hidden="true" />
       </ol>
 
       {showJump && (
         <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
           <button
+            type="button"
             onClick={jumpToLatest}
             className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1.5 text-label-xs text-foreground shadow-sm transition-colors duration-100 hover:bg-surface-1"
           >
             <span aria-hidden="true">&#x2193;</span>
-            <span>Jump to latest</span>
+            <span>Jump to live</span>
           </button>
         </div>
       )}
