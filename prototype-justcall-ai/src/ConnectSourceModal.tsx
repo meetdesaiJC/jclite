@@ -154,7 +154,7 @@ export function ConnectSourceModal({
 
   const description =
     step === "use" && app
-      ? `${app.label} is connected for this account. Knowledge can feed this knowledge base. Customer context stays shared for the person on the call.`
+      ? `${app.label} is connected for this account. Knowledge can feed every knowledge base. Customer context stays shared for the person on the call.`
       : step === "fields"
         ? "Control which CRM properties Agent Assist can read for the customer currently in the conversation."
         : "Connect your tools to give AI access to company knowledge and customer context.";
@@ -290,7 +290,7 @@ export function ConnectSourceModal({
               <div className="min-w-0">
                 <p className="text-label-md-semi text-foreground">Company knowledge</p>
                 <p className="mt-0.5 text-pretty text-paragraph-sm text-muted-foreground">
-                  Sync {app.knowledgeLabel.toLowerCase()} so this knowledge base can
+                  Sync {app.knowledgeLabel.toLowerCase()} so knowledge bases can
                   answer from what your team publishes.
                 </p>
               </div>
@@ -310,7 +310,7 @@ export function ConnectSourceModal({
                 <p className="mt-0.5 text-pretty text-paragraph-sm text-muted-foreground">
                   Contacts, companies, deals, tickets, and properties for the
                   customer on the call. Shared across Agent Assist — not stored
-                  in this knowledge base.
+                  in a knowledge base.
                 </p>
               </div>
               <Toggle

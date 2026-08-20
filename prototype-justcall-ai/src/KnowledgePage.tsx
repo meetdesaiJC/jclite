@@ -30,7 +30,6 @@ import {
 } from "@/components/Table";
 import { cn } from "@/lib/utils";
 import faqsEmptyIllustration from "./assets/faqs-empty.png";
-import { AdminPageHeader } from "./AgentAssistAdmin";
 import { useAgentAssistTakeover } from "./agentAssistTakeover";
 import { AssignmentAvatarStack } from "./AssignmentAvatarStack";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
@@ -46,8 +45,6 @@ import {
   knowledgeAudienceLabel,
   knowledgeContentItemCount,
   knowledgeFileTypeLabel,
-  knowledgeIntegrationLabel,
-  knowledgeIntegrationMeta,
   knowledgeKindFromContent,
   knowledgeOriginFromContent,
   knowledgeVoiceAgentLabel,
@@ -56,12 +53,9 @@ import {
   normalizeKnowledgeUrl,
   sampleEntriesForSource,
   type KnowledgeContentTab,
-  type KnowledgeIntegrationRef,
   type KnowledgeQaPair,
   type KnowledgeSourceRecord,
 } from "./knowledgeData";
-import { ConnectSourceModal } from "./ConnectSourceModal";
-import { SourceLogo } from "./icons/IntegrationLogos";
 
 /**
  * Knowledge admin — one JustCall knowledge base, shared. A KB is assigned the
@@ -231,18 +225,6 @@ export function KnowledgePage({
 
   return (
     <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
-      <AdminPageHeader
-        title="Knowledge Base"
-        description="Create and manage knowledge that powers answers across calls, messaging, email, and voice agents."
-        actions={
-          isEmpty ? null : (
-            <Button size="sm" onClick={createSource}>
-              Create knowledge base
-            </Button>
-          )
-        }
-      />
-
       {isEmpty ? (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-6 pb-14">
           <div className="flex max-w-[460px] flex-col items-center gap-6 text-center">
@@ -270,7 +252,7 @@ export function KnowledgePage({
         </div>
       ) : (
         <>
-          <div className="flex items-center px-6 py-3">
+          <div className="flex items-center justify-between gap-4 px-6 py-3">
             <div className="flex h-9 items-center gap-3">
               <InputField
                 placeholder="Search Knowledge Base"
@@ -314,6 +296,9 @@ export function KnowledgePage({
                 ) : null}
               </Button>
             </div>
+            <Button size="sm" onClick={createSource}>
+              Create knowledge base
+            </Button>
           </div>
 
           <div
@@ -958,10 +943,11 @@ function IconTrash({ size = 16 }: { size?: number }) {
 }
 
 /**
- * The five things a knowledge base can be made of. One KB holds any mix of
+ * The four things a knowledge base can be made of. One KB holds any mix of
  * them, so the setup page tabs between them instead of asking the admin to
  * commit to a source type up front. The blurbs say how the content gets used,
- * not who reads it — a KB serves whoever it is assigned to.
+ * not who reads it — a KB serves whoever it is assigned to. Connected apps
+ * live on Integrations, not as a fifth tab.
  */
 const CONTENT_TABS: {
   key: KnowledgeContentTab;
@@ -1016,28 +1002,16 @@ const CONTENT_TABS: {
     emptyBody: "Upload files containing information that can be used on live conversations",
     icon: IconFileUp,
   },
-  {
-    key: "integrations",
-    label: "Sources",
-    addTitle: "Connected sources",
-    limitLabel: `${KNOWLEDGE_CONTENT_LIMITS.integrations} connections max`,
-    blurb:
-      "Connect each app once for the account. Knowledge can feed this knowledge base; customer context is shared for the person on the call.",
-    emptyTitle: "Connect a source to create Knowledge Base",
-    emptyBody:
-      "Connect your tools so AI can use company knowledge and customer context on live conversations",
-    icon: IconPlug,
-  },
 ];
 
 type ContentTabMeta = (typeof CONTENT_TABS)[number];
 
 /**
  * Knowledge base setup — content on the right, everything about who it serves
- * on the left. A KB is a bucket of web pages, text, Q&A, files, and connected
- * sources rather than one import, so the right pane tabs between them and the left
- * rail keeps the name and the availability settings in view while the admin
- * fills it.
+ * on the left. A KB is a bucket of web pages, text, Q&A, and files rather than
+ * one import, so the right pane tabs between them and the left rail keeps the
+ * name and the availability settings in view while the admin fills it.
+ * Connected apps are account-wide (Integrations), not a tab here.
  */
 function KnowledgeSourcePage({
   source,
@@ -1058,7 +1032,6 @@ function KnowledgeSourcePage({
     if (source.text.trim()) return "text";
     if (source.qaPairs.length > 0) return "qa";
     if (source.files.length > 0) return "files";
-    if (source.integrations.length > 0) return "integrations";
     return "web";
   });
   const [publishOpen, setPublishOpen] = React.useState(false);
@@ -1207,13 +1180,6 @@ function contentSummary(source: KnowledgeSourceRecord): string {
   if (source.files.length) {
     parts.push(`${source.files.length} ${source.files.length === 1 ? "file" : "files"}`);
   }
-  if (source.integrations.length) {
-    parts.push(
-      `${source.integrations.length} connected ${
-        source.integrations.length === 1 ? "source" : "sources"
-      }`
-    );
-  }
   return parts.join(", ") || "Nothing added yet";
 }
 
@@ -1233,7 +1199,7 @@ function ContentTabsBar({
     <div
       role="tablist"
       aria-label="Knowledge base content"
-      className="grid shrink-0 grid-cols-5 rounded-lg border border-line bg-secondary-bg p-1"
+      className="grid shrink-0 grid-cols-4 rounded-lg border border-line bg-secondary-bg p-1"
     >
       {CONTENT_TABS.map((item, index) => {
         const selected = index === activeIndex;
@@ -1312,9 +1278,6 @@ function ContentPanel({
       {tab === "text" ? <TextTab draft={draft} patch={patch} meta={meta} /> : null}
       {tab === "qa" ? <QaTab draft={draft} patch={patch} meta={meta} /> : null}
       {tab === "files" ? <FilesTab draft={draft} patch={patch} meta={meta} /> : null}
-      {tab === "integrations" ? (
-        <IntegrationsTab draft={draft} patch={patch} meta={meta} />
-      ) : null}
     </section>
   );
 }
@@ -1782,119 +1745,6 @@ function FilesTab({
   );
 }
 
-/**
- * Connected sources. Unlike the other tabs this is not content the admin types —
- * it is a standing account-level link to a system that can power knowledge and,
- * for CRMs, customer context on the live call.
- */
-function IntegrationsTab({
-  draft,
-  patch,
-  meta,
-}: {
-  draft: KnowledgeSourceRecord;
-  patch: (partial: Partial<KnowledgeSourceRecord>) => void;
-  meta: ContentTabMeta;
-}) {
-  const [picking, setPicking] = React.useState(false);
-  const limit = KNOWLEDGE_CONTENT_LIMITS.integrations;
-  const full = draft.integrations.length >= limit;
-  const connectedProviders = draft.integrations.map((item) => item.provider);
-
-  const connect = (next: Omit<KnowledgeIntegrationRef, "id">) => {
-    patch({
-      integrations: [
-        ...draft.integrations,
-        { id: newKnowledgeContentId("ki"), ...next },
-      ],
-    });
-  };
-
-  return (
-    <>
-      <ContentCard
-        title={meta.addTitle}
-        action={
-          draft.integrations.length === 0 ? null : (
-            <Button
-              variant="grey-outline"
-              size="sm"
-              disabled={full}
-              onClick={() => setPicking(true)}
-            >
-              Connect source
-            </Button>
-          )
-        }
-      >
-        {draft.integrations.length === 0 ? (
-          <ContentEmptyState
-            glyph={<IconPlug size={20} />}
-            title={meta.emptyTitle}
-            body={meta.emptyBody}
-            actionLabel="Connect source"
-            onAction={() => setPicking(true)}
-          />
-        ) : (
-          <div className="flex flex-col gap-3">
-            <ul className="flex flex-col gap-2">
-              {draft.integrations.map((item) => {
-                const app = knowledgeIntegrationMeta(item.provider);
-                const label = knowledgeIntegrationLabel(item);
-                return (
-                  <ContentRow
-                    key={item.id}
-                    icon={
-                      <SourceLogo
-                        provider={item.provider}
-                        label={label}
-                        size={16}
-                      />
-                    }
-                    title={label}
-                    meta={connectionCapabilityLabel(item, app?.knowledgeLabel)}
-                    onRemove={() =>
-                      patch({
-                        integrations: draft.integrations.filter(
-                          (entry) => entry.id !== item.id
-                        ),
-                      })
-                    }
-                    removeLabel={`Disconnect ${label}`}
-                  />
-                );
-              })}
-            </ul>
-            {full ? (
-              <p className="text-paragraph-sm text-muted-foreground">
-                This knowledge base is at its {limit}-connection limit.
-              </p>
-            ) : null}
-          </div>
-        )}
-      </ContentCard>
-
-      <ConnectSourceModal
-        open={picking}
-        onClose={() => setPicking(false)}
-        connectedProviders={connectedProviders}
-        limitReached={full}
-        onConnect={connect}
-      />
-    </>
-  );
-}
-
-function connectionCapabilityLabel(
-  item: KnowledgeIntegrationRef,
-  knowledgeLabel?: string
-): string {
-  const parts: string[] = [];
-  if (item.usesKnowledge) parts.push(knowledgeLabel ?? "Knowledge");
-  if (item.usesCustomerContext) parts.push("Customer context");
-  return parts.join(" · ") || item.scope;
-}
-
 function IconPlus({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
@@ -1991,32 +1841,6 @@ function IconFileUp({ size = 16 }: { size?: number }) {
         strokeWidth="1.2"
         strokeLinecap="round"
         strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/** Two blocks wired together — connected sources rather than uploaded content. */
-function IconPlug({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path
-        d="M8.333 2.5v3.333M13.333 2.5v3.333"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M5.833 5.833h9.584v2.5a4.792 4.792 0 0 1-4.792 4.792A4.792 4.792 0 0 1 5.833 8.333v-2.5Z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M10.625 13.125V17.5"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
       />
     </svg>
   );

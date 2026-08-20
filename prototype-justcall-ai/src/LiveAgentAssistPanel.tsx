@@ -452,6 +452,8 @@ interface ActionRuntime {
   filled: Record<string, string>;
   /** True once a first attempt has failed, so a retry can succeed. */
   attempted: boolean;
+  /** The agent opened the review form, so sending stays inside it. */
+  reviewed?: boolean;
 }
 
 function resolvedFields(action: SuggestedAction, runtime: ActionRuntime) {
@@ -502,6 +504,15 @@ function SuggestedActionRow({
 
   const name = integrationName(action, integrations);
   const writeLabel = integrationWriteLabel(action, integrations);
+  const busy = runtime.state === "executing";
+  const reviewing = runtime.state === "reviewing";
+  // An email the agent opened stays in its review form while it sends and if
+  // it fails — the recipient, copy, and attachment they checked are still
+  // there to retry from. Auto-sent emails never had a form to keep.
+  const emailFormOpen =
+    Boolean(action.email) &&
+    (reviewing ||
+      (Boolean(runtime.reviewed) && (busy || runtime.state === "failed")));
 
   if (runtime.state === "done") {
     return (
@@ -540,6 +551,28 @@ function SuggestedActionRow({
           Dismiss
         </button>
       </div>
+    );
+  }
+
+  if (action.email && emailFormOpen) {
+    return (
+      <InCallEmailReviewCard
+        title={action.title}
+        toName={action.email.to}
+        toEmail={runtime.filled["To email"] ?? action.email.toEmail}
+        subject={runtime.filled.Subject ?? action.email.subject}
+        message={runtime.filled.Message ?? action.email.body}
+        attachments={action.email.attachments}
+        sendState={
+          busy ? "sending" : runtime.state === "failed" ? "failed" : "idle"
+        }
+        onToEmailChange={(value) => onFieldChange("To email", value)}
+        onSubjectChange={(value) => onFieldChange("Subject", value)}
+        onMessageChange={(value) => onFieldChange("Message", value)}
+        onCancel={onCancelReview}
+        onConfirm={runtime.state === "failed" ? onRetry : onConfirm}
+        className={cn(!reduced && "assist-card-enter")}
+      />
     );
   }
 
@@ -583,8 +616,6 @@ function SuggestedActionRow({
     );
   }
 
-  const busy = runtime.state === "executing";
-  const reviewing = runtime.state === "reviewing";
   const fields = resolvedFields(action, runtime);
   const blocked = fields.some((field) => field.missing);
   const proposed = proposedValue(action, runtime);
@@ -603,6 +634,7 @@ function SuggestedActionRow({
       <InCallEmailSuggestionCard
         title={action.title}
         to={action.email.to}
+        toEmail={runtime.filled["To email"] ?? action.email.toEmail}
         subject={action.email.subject}
         body={action.email.body}
         attachments={action.email.attachments}
@@ -628,25 +660,6 @@ function SuggestedActionRow({
         recordValue={action.recordValue}
         busy={busy}
         onReview={onReview}
-        className={cn(!reduced && "assist-card-enter")}
-      />
-    );
-  }
-
-  if (action.email) {
-    return (
-      <InCallEmailReviewCard
-        title={action.title}
-        to={runtime.filled.To ?? action.email.to}
-        subject={runtime.filled.Subject ?? action.email.subject}
-        message={runtime.filled.Message ?? action.email.body}
-        attachments={action.email.attachments}
-        busy={busy}
-        onToChange={(value) => onFieldChange("To", value)}
-        onSubjectChange={(value) => onFieldChange("Subject", value)}
-        onMessageChange={(value) => onFieldChange("Message", value)}
-        onCancel={onCancelReview}
-        onConfirm={onConfirm}
         className={cn(!reduced && "assist-card-enter")}
       />
     );
@@ -808,7 +821,8 @@ export function LiveAgentAssistPanel({
     const runtime = runtimeFor(action.id);
     const filled = { ...runtime.filled };
     if (action.email) {
-      if (filled.To === undefined) filled.To = action.email.to;
+      if (filled["To email"] === undefined)
+        filled["To email"] = action.email.toEmail;
       if (filled.Subject === undefined) filled.Subject = action.email.subject;
       if (filled.Message === undefined) filled.Message = action.email.body;
     } else {
@@ -816,7 +830,7 @@ export function LiveAgentAssistPanel({
         if (field.missing && filled[field.label] === undefined) filled[field.label] = "";
       });
     }
-    patchRuntime(action.id, { state: "reviewing", filled });
+    patchRuntime(action.id, { state: "reviewing", filled, reviewed: true });
   };
 
   const executeAction = (action: SuggestedAction) => {

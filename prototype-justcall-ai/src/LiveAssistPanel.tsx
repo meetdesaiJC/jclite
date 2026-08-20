@@ -12,11 +12,11 @@ import { Alert } from "@/components/Alert";
 import { Avatar, type AvatarColor } from "@/components/Avatar";
 import { Button } from "@/components/Button";
 import { InputField } from "@/components/InputField";
-import { IconChevronDown, IconClose, IconSparkles } from "@/components/Icon";
+import { IconChevronDown, IconClose } from "@/components/Icon";
 import { useDropdownPresence } from "@/components/Dropdown/useDropdownPresence";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import { IconCallHelp } from "./icons/CallControlIcons";
-import type { CallScenario, TranscriptTurn } from "./callSimulation";
+import type { CallScenario } from "./callSimulation";
 
 /**
  * Live Assist — a private supervisor chat in the right-side utility panel.
@@ -99,36 +99,6 @@ function replyFor(text: string): string {
     return "Yes — calls log to the contact and company in Salesforce automatically. You can say that with confidence.";
   }
   return "Got it. I'll stay on until you wrap. The customer can't hear this.";
-}
-
-export function suggestAssistRequest(
-  scenario: CallScenario,
-  transcript: TranscriptTurn[]
-): string | null {
-  const customerTurns = transcript.filter((turn) => turn.speaker === "customer");
-  if (customerTurns.length === 0) return null;
-
-  const hay = customerTurns.map((turn) => turn.quote).join(" ").toLowerCase();
-
-  if (/\b(discount|% off|percent)\b/.test(hay)) {
-    return "Customer is requesting a discount beyond the standard 10% limit and has been with us for 5 years.";
-  }
-  if (/\b(cheaper|expensive|price|pricing|aircall)\b/.test(hay)) {
-    return `${scenario.contactName} is comparing us to a cheaper competitor and isn't sure they can sell a higher price internally.`;
-  }
-  if (/\b(salesforce|crm)\b/.test(hay)) {
-    return `${scenario.contactName} needs confirmation that calls will log to Salesforce for their ops lead.`;
-  }
-  if (/\b(missed leads|after-hours|voicemail)\b/.test(hay)) {
-    return `${scenario.contactName} is losing about twenty leads a week after hours, with no owner on those calls.`;
-  }
-  if (customerTurns.length >= 2) {
-    const latest = customerTurns[customerTurns.length - 1]?.quote ?? "";
-    if (latest.length > 24) {
-      return `Need a second set of eyes — customer just said: “${latest}”`;
-    }
-  }
-  return null;
 }
 
 function prefersReducedMotion(): boolean {
@@ -478,7 +448,6 @@ export function LiveAssistControl({
 export interface LiveAssistPanelProps {
   thread: LiveAssistThread;
   scenario: CallScenario;
-  transcript: TranscriptTurn[];
   active?: boolean;
   onClose: () => void;
   className?: string;
@@ -487,14 +456,12 @@ export interface LiveAssistPanelProps {
 export function LiveAssistPanel({
   thread,
   scenario,
-  transcript,
   active = true,
   onClose,
   className,
 }: LiveAssistPanelProps) {
   const reduced = prefersReducedMotion();
   const [draft, setDraft] = useState("");
-  const [suggestionDismissed, setSuggestionDismissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const stickToBottom = useRef(true);
@@ -508,16 +475,7 @@ export function LiveAssistPanel({
     pendingSupervisorId,
   } = thread;
 
-  const suggestion =
-    !suggestionDismissed &&
-    phase === "idle" &&
-    messages.length === 0 &&
-    !draft.trim()
-      ? suggestAssistRequest(scenario, transcript)
-      : null;
-
   useEffect(() => {
-    setSuggestionDismissed(false);
     setDraft("");
   }, [scenario.id]);
 
@@ -539,7 +497,6 @@ export function LiveAssistPanel({
     if (supervisor.status !== "available") return;
     sendMessage(body);
     setDraft("");
-    setSuggestionDismissed(true);
     stickToBottom.current = true;
   };
 
@@ -583,9 +540,6 @@ export function LiveAssistPanel({
           active={active}
           onChange={thread.selectSupervisor}
         />
-        <p className="text-label-sm text-pretty text-muted-foreground">
-          Call context shared · Live transcript on
-        </p>
       </div>
 
       {pending ? (
@@ -649,19 +603,6 @@ export function LiveAssistPanel({
           <TypingRow supervisor={supervisor} reduced={reduced} />
         ) : null}
       </div>
-
-      {suggestion ? (
-        <SuggestedRequest
-          text={suggestion}
-          onDismiss={() => setSuggestionDismissed(true)}
-          onEdit={() => {
-            setDraft(suggestion);
-            setSuggestionDismissed(true);
-            inputRef.current?.focus({ preventScroll: true });
-          }}
-          onSend={() => submit(suggestion)}
-        />
-      ) : null}
 
       <form
         onSubmit={(event) => {
@@ -923,52 +864,6 @@ function SupervisorSwitchConfirm({
         >
           Start new
         </Button>
-      </div>
-    </div>
-  );
-}
-
-function SuggestedRequest({
-  text,
-  onDismiss,
-  onEdit,
-  onSend,
-}: {
-  text: string;
-  onDismiss: () => void;
-  onEdit: () => void;
-  onSend: () => void;
-}) {
-  return (
-    <div className="shrink-0 border-t border-line px-4 py-3">
-      <div className="flex items-start gap-2 rounded-[8px] bg-secondary-bg px-3 py-2.5">
-        <IconSparkles size={16} className="mt-0.5 shrink-0 text-brand" />
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="flex flex-col gap-0.5">
-            <p className="text-label-sm text-muted-foreground">
-              Suggested request
-            </p>
-            <p className="text-pretty text-paragraph-sm text-foreground">
-              {text}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" size="xs" variant="grey-outline" onClick={onEdit}>
-              Edit
-            </Button>
-            <Button type="button" size="xs" variant="primary" onClick={onSend}>
-              Send
-            </Button>
-          </div>
-        </div>
-        <button
-          type="button"
-          aria-label="Dismiss suggestion"
-          onClick={onDismiss}
-          className="-mr-1 flex size-6 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground outline-none hover:bg-white hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
-        >
-          <IconClose size={16} />
-        </button>
       </div>
     </div>
   );
