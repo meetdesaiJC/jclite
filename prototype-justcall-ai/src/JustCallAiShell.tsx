@@ -5,8 +5,11 @@ import { ProfileMenu } from "../../prototype-add-ons-flow/src/ProfileMenu";
 import { AgentAssistAdmin } from "./AgentAssistAdmin";
 import { DialerPanel } from "./DialerPanel";
 import { KnowledgePage } from "./KnowledgePage";
+import { IntegrationsPage } from "./IntegrationsPage";
 import {
+  SEED_CONNECTED_SOURCES,
   SEED_KNOWLEDGE_SOURCES,
+  type KnowledgeIntegrationRef,
   type KnowledgeSourceRecord,
 } from "./knowledgeData";
 import {
@@ -28,7 +31,8 @@ import {
  * more than one product reads it: Voice Agent and Agent Assist answer from the
  * same knowledge bases. Its state lives here, one level above both consumers,
  * so there is a single source of truth for what knowledge exists and who has
- * access to it.
+ * access to it. Connected apps live beside it on Integrations — they can feed
+ * knowledge, but they are not a setup step inside each knowledge base.
  */
 
 export type JustCallAiPageKey =
@@ -86,6 +90,9 @@ export function JustCallAiShell({
   const [knowledgeSources, setKnowledgeSources] = useState<
     KnowledgeSourceRecord[]
   >(SEED_KNOWLEDGE_SOURCES);
+  const [connectedSources, setConnectedSources] = useState<
+    KnowledgeIntegrationRef[]
+  >(SEED_CONNECTED_SOURCES);
   // Agent Assist's own switch: whether agents may receive knowledge answers
   // mid-call. Which knowledge bases they draw on is not asked here — that is
   // assigned in Knowledge.
@@ -133,6 +140,13 @@ export function JustCallAiShell({
           <KnowledgePage
             sources={knowledgeSources}
             onSourcesChange={setKnowledgeSources}
+          />
+        </div>
+      ) : activeKey === "integrations" ? (
+        <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-white">
+          <IntegrationsPage
+            connections={connectedSources}
+            onConnectionsChange={setConnectedSources}
           />
         </div>
       ) : (

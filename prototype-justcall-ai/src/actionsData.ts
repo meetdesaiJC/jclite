@@ -280,12 +280,32 @@ export interface EmailAttachment {
   name: string;
   kind: EmailAttachmentKind;
   href?: string;
+  /** File weight for the in-call attachment row. Files only. */
+  sizeLabel?: string;
 }
 
 export const EMAIL_ATTACHMENT_PRESETS: EmailAttachment[] = [
-  { id: "att-aircall-pdf", name: "JustCall vs Aircall", kind: "pdf" },
-  { id: "att-dialpad-pdf", name: "JustCall vs Dialpad", kind: "pdf" },
-  { id: "att-workflow", name: "Missed-call workflow one-pager", kind: "document" },
+  {
+    id: "att-aircall-pdf",
+    name: "JustCall vs Aircall",
+    kind: "pdf",
+    sizeLabel: "1.1 MB",
+    href: "https://help.justcall.io/attachments/justcall-vs-aircall.pdf",
+  },
+  {
+    id: "att-dialpad-pdf",
+    name: "JustCall vs Dialpad",
+    kind: "pdf",
+    sizeLabel: "1.2 MB",
+    href: "https://help.justcall.io/attachments/justcall-vs-dialpad.pdf",
+  },
+  {
+    id: "att-workflow",
+    name: "Missed-call workflow one-pager",
+    kind: "document",
+    sizeLabel: "320 KB",
+    href: "https://help.justcall.io/attachments/missed-call-workflow.docx",
+  },
   {
     id: "att-help-compare",
     name: "How JustCall compares",
@@ -293,6 +313,62 @@ export const EMAIL_ATTACHMENT_PRESETS: EmailAttachment[] = [
     href: "https://help.justcall.io/comparisons",
   },
 ];
+
+/** Attachments configured on an action reference the preset, never a copy. */
+export function emailAttachmentPreset(id: string): EmailAttachment {
+  const found = EMAIL_ATTACHMENT_PRESETS.find((item) => item.id === id);
+  if (!found) throw new Error(`Unknown email attachment preset: ${id}`);
+  return found;
+}
+
+const ATTACHMENT_EXTENSION: Partial<Record<EmailAttachmentKind, string>> = {
+  pdf: ".pdf",
+  document: ".docx",
+};
+
+const ATTACHMENT_TYPE_LABEL: Record<EmailAttachmentKind, string> = {
+  pdf: "PDF",
+  document: "DOC",
+  article: "Article",
+  url: "Link",
+};
+
+function hostFrom(href?: string): string | undefined {
+  if (!href) return undefined;
+  try {
+    return new URL(href).host.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Filename and "PDF · 1.2 MB" meta for an attachment row, so the agent can see
+ * what file is going out before they send.
+ */
+export function emailAttachmentDisplay(attachment: EmailAttachment): {
+  fileName: string;
+  meta: string;
+  href?: string;
+} {
+  const extension = ATTACHMENT_EXTENSION[attachment.kind] ?? "";
+  const hasExtension =
+    Boolean(extension) &&
+    attachment.name.toLowerCase().endsWith(extension.toLowerCase());
+  const detail = attachment.sizeLabel ?? hostFrom(attachment.href);
+  return {
+    fileName: hasExtension ? attachment.name : `${attachment.name}${extension}`,
+    meta: [ATTACHMENT_TYPE_LABEL[attachment.kind], detail]
+      .filter(Boolean)
+      .join(" · "),
+    href: attachment.href,
+  };
+}
+
+/** Loose enough for a prototype, strict enough to catch a half-typed address. */
+export function isValidEmailAddress(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
+}
 
 export interface EmailActionConfig {
   recipient: EmailRecipientKind;
@@ -757,13 +833,7 @@ export const SEED_ACTIONS: AgentAction[] = [
       message: DEFAULT_EMAIL_MESSAGE,
       personalize: true,
       includeInstructions: DEFAULT_EMAIL_INCLUDE,
-      attachments: [
-        {
-          id: "att-dialpad-pdf",
-          name: "JustCall vs Dialpad",
-          kind: "pdf",
-        },
-      ],
+      attachments: [emailAttachmentPreset("att-dialpad-pdf")],
     },
     trigger: "ai_recommended",
     detectWhen: "Customer mentions a competitor they use or are evaluating",

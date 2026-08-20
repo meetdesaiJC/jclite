@@ -1292,7 +1292,6 @@ function LiveCallStage({
     elapsedMs,
     panelOpen: asidePanel === "assist",
   });
-  const liveTranscript = simulationAt(scenario, elapsedMs).transcript;
 
   useEffect(() => {
     setAsidePanel(null);
@@ -1593,7 +1592,6 @@ function LiveCallStage({
                 <LiveAssistPanel
                   thread={liveAssist}
                   scenario={scenario}
-                  transcript={liveTranscript}
                   active={shownAssist && aside.entered && !aside.leaving}
                   onClose={closeAside}
                   className="h-full"
@@ -2218,18 +2216,13 @@ function EndedCallBar({
         className
       )}
     >
-      <div className="flex min-w-0 items-center gap-2.5">
-        <span className="relative flex size-9 shrink-0 items-center justify-center overflow-clip rounded-full bg-[#344054]">
-          <img src={userIcon} alt="" className="size-5 object-contain" />
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-[14px] leading-5 font-medium text-white">
-            {contactName}
-          </p>
-          <p className="truncate text-[11px] leading-4 text-white/60">
-            {contactMeta} · Ended {endedAt}
-          </p>
-        </div>
+      <div className="min-w-0">
+        <p className="truncate text-[14px] leading-5 font-medium text-white">
+          {contactName}
+        </p>
+        <p className="truncate text-[11px] leading-4 text-white/60">
+          {contactMeta} · Ended {endedAt}
+        </p>
       </div>
 
       <div className="flex shrink-0 flex-col justify-center pl-2">

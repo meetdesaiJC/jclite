@@ -23,7 +23,6 @@ import {
   IconScheduler,
   IconSparkles,
 } from "@/components/Icon";
-import { Modal } from "@/components/Modal";
 import { IconJcaiAgentAssist } from "./icons/JustCallAiNavIcons";
 import {
   CALL_SCENARIOS,
@@ -736,12 +735,10 @@ function PostCallAssist({
   const [overrides, setOverrides] = useState<
     Record<string, { status: CallActionStatus; markedManually?: boolean }>
   >({});
-  const [viewing, setViewing] = useState<ResolvedCallActionItem | null>(null);
   const runTimers = useRef<number[]>([]);
 
   useEffect(() => {
     setOverrides({});
-    setViewing(null);
   }, [scenario.id]);
 
   useEffect(
@@ -861,7 +858,6 @@ function PostCallAssist({
                         markedManually: true,
                       })
                     }
-                    onView={() => setViewing(item)}
                   />
                 ))}
               </ol>
@@ -869,8 +865,6 @@ function PostCallAssist({
           </section>
         ) : null}
       </div>
-
-      <ActionResultModal item={viewing} onClose={() => setViewing(null)} />
 
       <p className="sr-only" aria-live="polite">
         {complete
@@ -948,6 +942,17 @@ function IconRetry(props: SVGProps<SVGSVGElement>) {
 const ACTION_CTA_CLASS =
   "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] px-2 text-label-sm font-medium text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24";
 
+const ACTION_VIEW_CLASS =
+  "text-label-sm text-brand outline-none transition-colors hover:text-brand-hover hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-brand/24";
+
+function actionResultLink(result: CallActionResult | undefined): {
+  href: string;
+  label: string;
+} | null {
+  if (!result?.href) return null;
+  return { href: result.href, label: result.hrefLabel ?? "View" };
+}
+
 /**
  * One item, one next step. Completed work is a receipt; pending work keeps
  * the blue CTA. The two sit in the same list so the agent never has to
@@ -960,7 +965,6 @@ function ActionItemRow({
   onRun,
   onRetry,
   onMarkDone,
-  onView,
 }: {
   item: ResolvedCallActionItem;
   reduced: boolean;
@@ -968,7 +972,6 @@ function ActionItemRow({
   onRun: () => void;
   onRetry: () => void;
   onMarkDone: () => void;
-  onView: () => void;
 }) {
   const pending = item.status === "pending";
   const completed = item.status === "completed";
@@ -976,7 +979,7 @@ function ActionItemRow({
   const busy = item.status === "in_progress";
   const cta = item.action ? ACTION_CTA[item.action] : null;
   const CtaIcon = cta?.icon;
-  const viewable = completed && Boolean(item.result);
+  const viewLink = completed ? actionResultLink(item.result) : null;
   const showMarkDone = pending && item.allowMarkDone;
   const needsAttention = pending || failed || busy;
 
@@ -1023,15 +1026,15 @@ function ActionItemRow({
                 </span>
               ) : null}
             </span>
-            {viewable ? (
-              <button
-                type="button"
-                onClick={onView}
-                aria-label={`View ${item.outcome ? item.outcome.toLowerCase() : "completed"} result`}
-                className="text-label-sm text-brand outline-none transition-colors hover:text-brand-hover hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-brand/24"
+            {viewLink ? (
+              <a
+                href={viewLink.href}
+                target="_blank"
+                rel="noreferrer"
+                className={ACTION_VIEW_CLASS}
               >
-                View
-              </button>
+                {viewLink.label}
+              </a>
             ) : null}
           </span>
         ) : null}
@@ -1077,44 +1080,6 @@ function ActionItemRow({
         ) : null}
       </div>
     </li>
-  );
-}
-
-function ActionResultModal({
-  item,
-  onClose,
-}: {
-  item: ResolvedCallActionItem | null;
-  onClose: () => void;
-}) {
-  const result: CallActionResult | undefined = item?.result;
-  return (
-    <Modal
-      open={Boolean(item && result)}
-      onClose={onClose}
-      size="sm"
-      title={result?.title ?? item?.outcome ?? "Result"}
-      footer={
-        result?.href ? (
-          <a
-            href={result.href}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-8 items-center rounded-[4px] px-2 text-label-sm font-medium text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24"
-          >
-            {result.hrefLabel ?? "Open result"}
-          </a>
-        ) : undefined
-      }
-    >
-      {result?.detail ? (
-        <p className="text-pretty text-paragraph-md text-foreground">{result.detail}</p>
-      ) : (
-        <p className="text-pretty text-paragraph-sm text-muted-foreground">
-          Completed during this call.
-        </p>
-      )}
-    </Modal>
   );
 }
 

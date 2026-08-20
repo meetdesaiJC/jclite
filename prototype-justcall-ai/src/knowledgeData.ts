@@ -148,16 +148,11 @@ export function knowledgeFacts(entry: KnowledgeEntry): {
 
 /**
  * What a knowledge base is made of. One KB is a bucket, not a single import:
- * an admin can point it at web pages, paste text, type Q&A pairs, upload
- * files, and connect the apps that already hold the answers, and AI reads all
- * of it. Each kind carries its own ceiling.
+ * an admin can point it at web pages, paste text, type Q&A pairs, and upload
+ * files, and AI reads all of it. Connected apps live at the account, not
+ * inside a knowledge base. Each kind carries its own ceiling.
  */
-export type KnowledgeContentTab =
-  | "web"
-  | "text"
-  | "qa"
-  | "files"
-  | "integrations";
+export type KnowledgeContentTab = "web" | "text" | "qa" | "files";
 
 export interface KnowledgeWebPage {
   id: string;
@@ -179,10 +174,9 @@ export interface KnowledgeFileRef {
 }
 
 /**
- * A connected source. The app is connected once at the account; a knowledge
- * base may opt into its knowledge. Customer context is shared, and Agent Assist
- * resolves it for the person currently on the call — it is not content inside
- * a specific knowledge base.
+ * A connected source. The app is connected once for the account. Knowledge
+ * from it can feed every knowledge base; customer context is shared, and
+ * Agent Assist resolves it for the person currently on the call.
  */
 export interface KnowledgeIntegrationRef {
   id: string;
@@ -358,6 +352,31 @@ export const KNOWLEDGE_INTEGRATIONS: KnowledgeIntegrationMeta[] = [
   },
 ];
 
+/**
+ * Connected once for the account. Knowledge bases can answer from these
+ * without each one connecting them again.
+ */
+export const SEED_CONNECTED_SOURCES: KnowledgeIntegrationRef[] = [
+  {
+    id: "ki-support-zendesk",
+    provider: "zendesk",
+    scope: "Help center · Contacts, Tickets",
+    usesKnowledge: true,
+    usesCustomerContext: true,
+    customerObjects: ["contacts", "tickets", "customProperties"],
+    customerFields: ALL_CUSTOMER_CONTEXT_FIELD_IDS,
+  },
+  {
+    id: "ki-support-salesforce",
+    provider: "salesforce",
+    scope: "Salesforce knowledge · Contacts, Companies, Deals",
+    usesKnowledge: true,
+    usesCustomerContext: true,
+    customerObjects: ALL_CUSTOMER_CONTEXT_OBJECT_IDS,
+    customerFields: ALL_CUSTOMER_CONTEXT_FIELD_IDS,
+  },
+];
+
 export function knowledgeIntegrationMeta(
   provider: string
 ): KnowledgeIntegrationMeta | undefined {
@@ -391,14 +410,26 @@ export function knowledgeIntegrationScope(input: {
   return parts.join(" · ");
 }
 
+export function knowledgeConnectionCapabilityLabel(
+  item: KnowledgeIntegrationRef
+): string {
+  const app = knowledgeIntegrationMeta(item.provider);
+  const parts: string[] = [];
+  if (item.usesKnowledge) parts.push(app?.knowledgeLabel ?? "Knowledge");
+  if (item.usesCustomerContext) parts.push("Customer context");
+  return parts.join(" · ") || item.scope;
+}
+
 export const KNOWLEDGE_CONTENT_LIMITS = {
   webPages: 500,
   /** Text is budgeted in characters, not sources. */
   textChars: 40000,
   qaPairs: 500,
   files: 10,
-  integrations: 10,
 } as const;
+
+/** Account-wide connected apps, not a per-knowledge-base ceiling. */
+export const CONNECTED_SOURCE_LIMIT = 10;
 
 /** How many things AI has to read here — pasted text counts as one. */
 export function knowledgeContentItemCount(source: KnowledgeSourceRecord): number {
@@ -406,7 +437,6 @@ export function knowledgeContentItemCount(source: KnowledgeSourceRecord): number
     source.webPages.length +
     source.qaPairs.length +
     source.files.length +
-    source.integrations.length +
     (source.text.trim() ? 1 : 0)
   );
 }
@@ -444,9 +474,6 @@ export function knowledgeRetrievableEntries(
 export function knowledgeOriginFromContent(source: KnowledgeSourceRecord): string {
   if (source.webPages.length > 0) return source.webPages[0]!.url;
   if (source.files.length > 0) return source.files[0]!.name;
-  if (source.integrations.length > 0) {
-    return knowledgeIntegrationLabel(source.integrations[0]!);
-  }
   if (source.qaPairs.length > 0) return "Typed Q&A";
   if (source.text.trim()) return "Pasted text";
   return "";
@@ -468,7 +495,6 @@ export function knowledgeKindFromContent(
       ? "help-center"
       : "website";
   }
-  if (source.integrations.length > 0) return "internal";
   if (source.qaPairs.length > 0 || source.text.trim()) return "faq";
   return source.kind;
 }
@@ -488,8 +514,6 @@ export interface KnowledgeSourceRecord {
   /** Answers the team wrote themselves. */
   qaPairs: KnowledgeQaPair[];
   files: KnowledgeFileRef[];
-  /** Account sources this KB uses for knowledge. Customer context is shared. */
-  integrations: KnowledgeIntegrationRef[];
   /**
    * Who this KB serves. The three lists are additive rather than exclusive —
    * a KB can be assigned to a couple of user groups, one extra person, and a
@@ -546,7 +570,6 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
     text: "",
     qaPairs: [],
     files: [],
-    integrations: [],
     audienceTeams: [],
     audienceUsers: [],
     audienceVoiceAgents: ["va-inbound-support", "va-after-hours"],
@@ -727,7 +750,6 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
         sizeLabel: "1.8 MB",
       },
     ],
-    integrations: [],
     audienceTeams: ["sales"],
     audienceUsers: [],
     audienceVoiceAgents: [],
@@ -834,26 +856,6 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
         sizeLabel: "112 KB",
       },
     ],
-    integrations: [
-      {
-        id: "ki-support-zendesk",
-        provider: "zendesk",
-        scope: "Help center · Contacts, Tickets",
-        usesKnowledge: true,
-        usesCustomerContext: true,
-        customerObjects: ["contacts", "tickets", "customProperties"],
-        customerFields: ALL_CUSTOMER_CONTEXT_FIELD_IDS,
-      },
-      {
-        id: "ki-support-salesforce",
-        provider: "salesforce",
-        scope: "Salesforce knowledge · Contacts, Companies, Deals",
-        usesKnowledge: true,
-        usesCustomerContext: true,
-        customerObjects: ALL_CUSTOMER_CONTEXT_OBJECT_IDS,
-        customerFields: ALL_CUSTOMER_CONTEXT_FIELD_IDS,
-      },
-    ],
     audienceTeams: ["support", "billing"],
     audienceUsers: [],
     audienceVoiceAgents: ["va-billing"],
@@ -927,7 +929,6 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
         sizeLabel: "640 KB",
       },
     ],
-    integrations: [],
     audienceTeams: ["sales", "success"],
     audienceUsers: [],
     audienceVoiceAgents: ["va-lead-qualifier"],
@@ -968,7 +969,6 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
     text: "",
     qaPairs: [],
     files: [],
-    integrations: [],
     audienceTeams: ["success"],
     audienceUsers: [],
     audienceVoiceAgents: [],
@@ -1327,7 +1327,6 @@ export function createEmptyKnowledgeSource(
     text: "",
     qaPairs: [],
     files: [],
-    integrations: [],
     audienceTeams: [],
     audienceUsers: [],
     audienceVoiceAgents: [],

@@ -37,6 +37,7 @@ import {
   SEED_ACTIONS,
   SEED_INTEGRATIONS,
   actionMatchesUtterance,
+  emailAttachmentPreset,
   liveActions,
   patchSuggestedValue,
   suggestedActionFromLibrary,
@@ -190,7 +191,7 @@ export type CallActionStatus =
   | "completed"
   | "failed";
 
-/** What View opens — the result of a completed action, not another CTA. */
+/** Where a completed action lives — the recap links out instead of previewing. */
 export interface CallActionResult {
   title: string;
   detail?: string;
@@ -317,13 +318,13 @@ function resultFromLiveAction(action: SuggestedAction): CallActionResult | undef
   const href = action.viewUrl;
   const hrefLabel =
     action.integrationId === "hubspot"
-      ? "Open in HubSpot"
+      ? "View in HubSpot"
       : action.integrationId === "salesforce"
-        ? "Open in Salesforce"
+        ? "View in Salesforce"
         : action.integrationId === "zendesk"
-          ? "Open in Zendesk"
+          ? "View in Zendesk"
           : href
-            ? "Open result"
+            ? "View result"
             : undefined;
   if (action.email) {
     return {
@@ -388,8 +389,8 @@ function statusFromLiveState(
 /**
  * Recap rows reflect the call: a completed live action never gets its CTA
  * again, and a failed one stays retryable instead of looking finished.
- * Authored wrap-up statuses apply once the call has wrapped, so hanging up
- * at the end still shows what happened even if the live cards hadn't flipped.
+ * Authored wrap-up statuses apply on the recap, so hanging up still shows
+ * what the call already did even if the live cards hadn't flipped.
  */
 export function resolvePostCallActionItems(
   items: CallActionItem[],
@@ -397,16 +398,17 @@ export function resolvePostCallActionItems(
   liveStates: Record<string, ActionState> = {}
 ): ResolvedCallActionItem[] {
   return items.map((item) => {
-    const live = snapshot.actions.find(
-      (entry) =>
-        entry.id === item.linkedActionId ||
-        entry.action.actionId === item.linkedActionId
-    )?.action;
+    const linkedId = item.linkedActionId;
+    const live = linkedId
+      ? snapshot.actions.find(
+          (entry) => entry.id === linkedId || entry.action.actionId === linkedId
+        )?.action
+      : undefined;
     const liveStatus = statusFromLiveState(
       liveActionState(item, snapshot, liveStates)
     );
     const status =
-      liveStatus ?? (snapshot.wrapped ? item.status : undefined) ?? "pending";
+      liveStatus ?? item.status ?? "pending";
     const outcome =
       item.outcome ??
       (item.action
@@ -562,9 +564,7 @@ You mentioned evaluating Dialpad. JustCall bundles calling, messaging, and CRM s
 Happy to walk through any of this if it’s useful.
 
 Best,`,
-          attachments: [
-            { id: "att-dialpad-pdf", name: "JustCall vs Dialpad", kind: "pdf" },
-          ],
+          attachments: [emailAttachmentPreset("att-dialpad-pdf")],
         },
       },
       {
@@ -894,7 +894,7 @@ Best,`,
             title: "Working session with Elena",
             detail: "Thursday afternoon · 30 min · Elena Vasquez + ops lead",
             href: "https://login.salesforce.com",
-            hrefLabel: "Open in Salesforce",
+            hrefLabel: "View in Salesforce",
           },
         },
         {
@@ -908,18 +908,12 @@ Best,`,
             title: "Salesforce logging and after-hours coverage",
             detail: "Sent to Elena Vasquez · elena@acmecorp.com",
             href: "https://app.hubspot.com",
-            hrefLabel: "Open in HubSpot",
+            hrefLabel: "View in HubSpot",
           },
         },
         {
           id: "pricing",
-          title: "Prepare a seat-based price comparison versus Aircall",
-          action: "prepare",
-          allowMarkDone: true,
-          result: {
-            title: "Seat-based price comparison versus Aircall",
-            detail: "One-pager ready to share internally.",
-          },
+          title: "Elena's ops lead will join the Thursday working session",
         },
       ],
     },
@@ -1091,7 +1085,7 @@ Best,`,
             title: "Duplicate-charge review",
             detail: "Zendesk ticket · priya.sharma@email.com",
             href: "https://www.zendesk.com",
-            hrefLabel: "Open in Zendesk",
+            hrefLabel: "View in Zendesk",
           },
         },
       ],
@@ -1222,7 +1216,7 @@ Best,`,
             title: "Pending $49 charge",
             detail: "Logged on Marcus Chen · HubSpot",
             href: "https://app.hubspot.com",
-            hrefLabel: "Open in HubSpot",
+            hrefLabel: "View in HubSpot",
           },
         },
         {
