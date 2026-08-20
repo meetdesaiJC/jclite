@@ -142,6 +142,43 @@
   transition-duration: 180ms;
 }
 
+/* Nothing has landed yet — quietly active, not empty. One slow sparkle and
+   one line of copy; the panel says it is listening and then gets out of the
+   way. The line crossfades to "Building context…" when a card is on its way. */
+@keyframes assist-listen-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+.assist-listen-sparkle {
+  animation: assist-listen-pulse 1.6s ease-in-out infinite;
+}
+
+.assist-listen-line {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 200ms ease,
+    visibility 0s linear;
+}
+
+/* Held in the layout so the swap is a crossfade — hidden once it is gone, so
+   the copy underneath can't be selected or read out. */
+.assist-listen-line.is-out {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 200ms ease,
+    visibility 0s linear 200ms;
+}
+
 /* New / Relevant again / Earlier — arrival, stated once. No pulse (§11). */
 @keyframes assist-badge-in {
   from {
@@ -981,56 +1018,8 @@ html.call-workspace-resizing * {
   }
 }
 
-@keyframes recap-sparkle-out {
-  from {
-    opacity: 1;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(0.72);
-  }
-}
-
-@keyframes recap-check-in {
-  from {
-    opacity: 0;
-    transform: scale(0.72);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes recap-check-draw {
-  from {
-    stroke-dashoffset: 16;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
 .recap-sparkle-pulse {
   animation: recap-sparkle-pulse 1.4s cubic-bezier(0.77, 0, 0.175, 1) infinite;
-}
-
-.recap-sparkle-out {
-  animation: recap-sparkle-out 180ms cubic-bezier(0.4, 0, 1, 1) both;
-}
-
-.recap-check-in {
-  animation: recap-check-in 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
-}
-
-.recap-check-mark {
-  stroke-dasharray: 16;
-  stroke-dashoffset: 16;
-}
-
-.recap-check-in .recap-check-mark {
-  animation: recap-check-draw 220ms cubic-bezier(0.23, 1, 0.32, 1) 40ms both;
 }
 
 .recap-status-in {
@@ -1222,6 +1211,99 @@ button.call-bar-control[data-help="active"] {
   animation: help-wait-dot 1.4s ease-in-out infinite;
 }
 
+/* Notes editor — Tailwind's reset flattens headings, lists and links, and
+   the notes box is the one place in the prototype where the agent puts them
+   back. The ramp is the shared type scale, trimmed: this is a 320px column,
+   so H1 tops out where a page's H2 would. */
+.notes-editor > :first-child {
+  margin-top: 0;
+}
+
+.notes-editor h1,
+.notes-editor h2,
+.notes-editor h3 {
+  margin: 12px 0 4px;
+  color: var(--color-foreground);
+  text-wrap: pretty;
+}
+
+.notes-editor h1 {
+  font-size: var(--text-heading-xxl);
+  line-height: var(--text-heading-xxl--line-height);
+  font-weight: 600;
+}
+
+.notes-editor h2 {
+  font-size: var(--text-heading-xl);
+  line-height: var(--text-heading-xl--line-height);
+  font-weight: 600;
+}
+
+.notes-editor h3 {
+  font-size: var(--text-heading-lg);
+  line-height: var(--text-heading-lg--line-height);
+  font-weight: 600;
+}
+
+.notes-editor ul,
+.notes-editor ol {
+  margin: 2px 0;
+  padding-left: 20px;
+}
+
+.notes-editor ul {
+  list-style: disc;
+}
+
+.notes-editor ol {
+  list-style: decimal;
+}
+
+.notes-editor ul ul {
+  list-style: circle;
+}
+
+.notes-editor li {
+  margin: 1px 0;
+}
+
+.notes-editor li::marker {
+  color: var(--color-muted-foreground);
+}
+
+.notes-editor blockquote {
+  margin: 6px 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--color-line);
+  color: var(--color-muted-foreground);
+}
+
+.notes-editor b,
+.notes-editor strong {
+  font-weight: 600;
+}
+
+.notes-editor i,
+.notes-editor em {
+  font-style: italic;
+}
+
+.notes-editor u {
+  text-decoration: underline;
+}
+
+.notes-editor s,
+.notes-editor strike {
+  text-decoration: line-through;
+}
+
+.notes-editor a {
+  color: var(--color-brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: text;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .assist-faq-card {
     animation: none !important;
@@ -1242,8 +1324,14 @@ button.call-bar-control[data-help="active"] {
   .assist-card-enter,
   .assist-card-attention,
   .assist-header-attention,
-  .assist-badge-in {
+  .assist-badge-in,
+  .assist-listen-sparkle {
     animation: none !important;
+  }
+
+  /* Static indicator: the sparkle sits still and the copy swaps outright. */
+  .assist-listen-line {
+    transition: none !important;
   }
 
   .dialer-press,
@@ -1323,9 +1411,6 @@ button.call-bar-control[data-help="active"] {
   }
 
   .recap-sparkle-pulse,
-  .recap-sparkle-out,
-  .recap-check-in,
-  .recap-check-in .recap-check-mark,
   .recap-status-in,
   .recap-status-slot.is-leaving,
   .recap-status-slot.is-leaving > *,
@@ -1338,10 +1423,6 @@ button.call-bar-control[data-help="active"] {
   .recap-caret,
   .recap-action-spinner {
     animation: none !important;
-  }
-
-  .recap-check-mark {
-    stroke-dashoffset: 0;
   }
 }
 

@@ -156,12 +156,12 @@ function KnowledgeSuggestionsCard({
 
         <div className="flex flex-col gap-1">
           <h2 className="text-label-md-semi text-foreground">
-            Knowledge suggestions
+            Knowledge Base suggestions
           </h2>
           <p className="text-pretty text-paragraph-sm text-muted-foreground">
             {enabled
-              ? "Agents receive relevant answers from your Knowledge during calls."
-              : "Surface relevant answers from your Knowledge during calls."}
+              ? "Agents receive relevant answers from your Knowledge Base during calls."
+              : "Surface relevant answers from your Knowledge Base during calls."}
           </p>
         </div>
 
@@ -172,7 +172,7 @@ function KnowledgeSuggestionsCard({
             className="w-fit"
             onClick={onManage}
           >
-            Manage Knowledge
+            Manage Knowledge Base
           </Button>
         ) : (
           <div className="flex items-center gap-1">
@@ -181,7 +181,7 @@ function KnowledgeSuggestionsCard({
             </Button>
             {/* One line cannot show what an answer arriving mid-call looks
                 like, so "Learn more" opens the picture of it rather than
-                sending the admin off to the Knowledge page to guess. */}
+                sending the admin off to the Knowledge Base page to guess. */}
             <Button
               variant="link"
               size="xs"

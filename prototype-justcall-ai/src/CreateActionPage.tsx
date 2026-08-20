@@ -1,12 +1,12 @@
 import * as React from "react";
+import { Badge } from "@/components/Badge";
 import { Banner } from "@/components/Banner";
 import { Button } from "@/components/Button";
-import { Dropdown } from "@/components/Dropdown";
+import { Dropdown, type DropdownListItem } from "@/components/Dropdown";
 import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
-import { Radio } from "@/components/Radio";
 import { Toggle } from "@/components/Toggle";
-import { IconChevronRight, IconClose, IconFile } from "@/components/Icon";
+import { IconClose, IconFile } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import { useAgentAssistTakeover } from "./agentAssistTakeover";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
@@ -62,6 +62,94 @@ function SectionKicker({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * One rung of the When → Then → Trigger Action rail. The connector runs behind
+ * the dot so consecutive steps read as a single continuous line, the same way
+ * the Voice Agent action builder stacks its stages.
+ */
+function SetupStep({
+  badge,
+  title,
+  description,
+  first = false,
+  last = false,
+  children,
+}: {
+  badge: string;
+  title: string;
+  description?: string;
+  first?: boolean;
+  last?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    // The step spacing sits on the content column, not the row, so the rail
+    // stretches through it and the connector stays unbroken between steps.
+    <li className="relative flex gap-4">
+      <div className="relative flex w-2.5 shrink-0 justify-center" aria-hidden>
+        {first ? null : (
+          <span className="absolute top-0 h-2.5 w-px bg-line" />
+        )}
+        {last ? null : (
+          <span className="absolute top-2.5 bottom-0 w-px bg-line" />
+        )}
+        <span className="absolute top-2.5 size-2.5 -translate-y-1/2 rounded-full bg-control-border" />
+      </div>
+
+      <div
+        className={cn(
+          // Field pairs inside a step size off this column, not the viewport —
+          // the two asides squeeze it well below the `sm` breakpoint.
+          "@container flex min-w-0 flex-1 flex-col gap-4",
+          last ? null : "pb-9"
+        )}
+      >
+        <header className="flex flex-col gap-1">
+          <Badge
+            variant="primary-inverted"
+            className="mb-1 self-start rounded-[4px]"
+          >
+            {badge}
+          </Badge>
+          <h2 className="text-heading-lg text-foreground">{title}</h2>
+          {description ? (
+            <p className="text-pretty text-paragraph-md text-muted-foreground">
+              {description}
+            </p>
+          ) : null}
+        </header>
+        {children}
+      </div>
+    </li>
+  );
+}
+
+/** Groups the fields a single operation needs, so they read as one payload. */
+function ConfigCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-line bg-secondary-bg p-4">
+      {children}
+    </div>
+  );
+}
+
+function FieldGroup({
+  title,
+  children,
+}: {
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      {title ? (
+        <h3 className="text-label-md-semi text-foreground">{title}</h3>
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
 export function CreateActionPage({
   initial,
   mode,
@@ -80,10 +168,6 @@ export function CreateActionPage({
       initial?.value.kind === "from_conversation" &&
       Boolean(initial.value.extractPrompt)
   );
-  const [thenPickerOpen, setThenPickerOpen] = React.useState(
-    () => !initial?.capabilityId
-  );
-
   const integration = integrationById(integrations, draft.integrationId);
   const capability = draft.capabilityId
     ? capabilityById(integrations, draft.integrationId, draft.capabilityId)
@@ -128,6 +212,8 @@ export function CreateActionPage({
 
   const canSave =
     (draft.agentLabel.trim().length > 0 || draft.name.trim().length > 0) &&
+    // An AI-recommended action has nothing to match on without its moment.
+    draft.detectWhen.trim().length > 0 &&
     Boolean(draft.capabilityId) &&
     Boolean(integration?.connected) &&
     valueReady &&
@@ -166,10 +252,11 @@ export function CreateActionPage({
       email: sendingEmail ? (draft.email ?? createDefaultEmailConfig()) : draft.email,
       requiresConfirmation: sendingEmail ? true : draft.requiresConfirmation,
     });
-    setThenPickerOpen(false);
   };
 
-  const selectDisconnected = (id: IntegrationId) => {
+  /** Switching app clears the operation — its fields never carry across apps. */
+  const selectIntegration = (id: IntegrationId) => {
+    if (id === draft.integrationId) return;
     patch({
       integrationId: id,
       capabilityId: "",
@@ -293,103 +380,134 @@ export function CreateActionPage({
               </Banner>
             ) : null}
 
-            <section className="flex flex-col gap-4">
-              <header className="flex flex-col gap-1">
-                <h2 className="text-label-md-semi text-foreground">
-                  What should the agent be able to do?
-                </h2>
-              </header>
-
-              {capability && integration && !thenPickerOpen ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-paragraph-md text-foreground">
-                    {integration.name}
-                    <span className="text-muted-foreground"> → </span>
-                    {capability.label.replace(/^Update a /, "Update ")}
-                  </p>
-                  <Button
-                    variant="link"
-                    size="sm"
-                    onClick={() => setThenPickerOpen(true)}
-                  >
-                    Change
-                  </Button>
+            <ol className="flex flex-col">
+              <SetupStep
+                first
+                badge="When"
+                title="Caller says"
+                description="Outline the conversation moment that should surface this action."
+              >
+                <div className="flex flex-col gap-2">
+                  <textarea
+                    id="action-detect-when"
+                    rows={3}
+                    value={draft.detectWhen}
+                    onChange={(event) =>
+                      patch({ detectWhen: event.target.value })
+                    }
+                    placeholder="e.g. The customer mentions a competitor they use or are evaluating"
+                    className={textareaClass}
+                  />
                 </div>
-              ) : (
-                <ThenPicker
+                <div className="flex flex-col gap-2">
+                  <FieldLabel>Example phrases</FieldLabel>
+                  <p className="text-paragraph-sm text-muted-foreground">
+                    Optional. Real caller wording sharpens the match.
+                  </p>
+                  <ExamplePhrases
+                    phrases={draft.detectExamples}
+                    onChange={(detectExamples) => patch({ detectExamples })}
+                  />
+                </div>
+              </SetupStep>
+
+              <SetupStep
+                badge="Then"
+                title="Agent Assist suggests"
+                description="Pick the connected app and what the agent can run in one tap."
+              >
+                <ActionPicker
                   integrations={integrations}
                   selectedIntegrationId={draft.integrationId}
                   selectedCapabilityId={draft.capabilityId}
+                  onSelectIntegration={selectIntegration}
                   onSelectOperation={selectOperation}
-                  onSelectDisconnected={selectDisconnected}
                   onConnect={connectIntegration}
                 />
-              )}
+              </SetupStep>
 
-              {capability && integration?.connected ? (
-                isEmail ? (
-                  <EmailThenConfig
-                    email={draft.email ?? createDefaultEmailConfig()}
-                    onChange={patchEmail}
-                  />
-                ) : (
-                  <RecordThenConfig
-                    needsRecord={needsRecord}
-                    object={draft.object}
-                    objectOptions={objectOptions}
-                    property={draft.property}
-                    value={draft.value}
-                    onObjectChange={(object) => patch({ object })}
-                    onPropertyChange={(property) => {
-                      patch({
-                        property,
-                        value:
-                          draft.value.kind === "from_conversation" &&
-                          !extractTouched
-                            ? {
-                                kind: "from_conversation",
-                                extractPrompt: defaultExtractPrompt(property),
-                              }
-                            : draft.value,
-                      });
-                    }}
-                    onValueKindChange={setValueSource}
-                    onExtractChange={(extractPrompt) => {
-                      setExtractTouched(true);
-                      patch({
-                        value: { kind: "from_conversation", extractPrompt },
-                      });
-                    }}
-                    onFixedChange={(value) =>
-                      patch({ value: { kind: "fixed", value } })
-                    }
-                  />
-                )
-              ) : null}
-            </section>
-
-            <section className="flex flex-col gap-3">
-              <SectionKicker>Agent confirmation</SectionKicker>
-              <Toggle
-                size="sm"
-                controlPosition="end"
-                checked={draft.requiresConfirmation}
-                onCheckedChange={(checked) =>
-                  patch({ requiresConfirmation: checked })
-                }
-                label={
-                  isEmail
-                    ? "Ask agent to review before sending"
-                    : "Ask the agent to confirm before writing"
-                }
+              <SetupStep
+                last
+                badge="Trigger Action"
+                title="Action details"
                 description={
-                  isEmail
-                    ? "The agent can review and edit the generated email before it is sent."
-                    : "On by default for actions that write to a connected app."
+                  capability && integration
+                    ? `Set what ${integration.name} receives when the agent confirms.`
+                    : "Choose an app and action above to set up what it receives."
                 }
-                wrapperClassName="justify-between"
-              />
-            </section>
+              >
+                {capability && integration?.connected ? (
+                  <ConfigCard>
+                    {isEmail ? (
+                      <EmailThenConfig
+                        email={draft.email ?? createDefaultEmailConfig()}
+                        onChange={patchEmail}
+                      />
+                    ) : (
+                      <RecordThenConfig
+                        needsRecord={needsRecord}
+                        object={draft.object}
+                        objectOptions={objectOptions}
+                        property={draft.property}
+                        value={draft.value}
+                        onObjectChange={(object) => patch({ object })}
+                        onPropertyChange={(property) => {
+                          patch({
+                            property,
+                            value:
+                              draft.value.kind === "from_conversation" &&
+                              !extractTouched
+                                ? {
+                                    kind: "from_conversation",
+                                    extractPrompt:
+                                      defaultExtractPrompt(property),
+                                  }
+                                : draft.value,
+                          });
+                        }}
+                        onValueKindChange={setValueSource}
+                        onExtractChange={(extractPrompt) => {
+                          setExtractTouched(true);
+                          patch({
+                            value: { kind: "from_conversation", extractPrompt },
+                          });
+                        }}
+                        onFixedChange={(value) =>
+                          patch({ value: { kind: "fixed", value } })
+                        }
+                      />
+                    )}
+                  </ConfigCard>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-line px-4 py-5">
+                    <p className="text-pretty text-paragraph-sm text-muted-foreground">
+                      Nothing to configure yet — the fields here follow the
+                      action you pick above.
+                    </p>
+                  </div>
+                )}
+
+                <Toggle
+                  size="sm"
+                  controlPosition="end"
+                  checked={draft.requiresConfirmation}
+                  onCheckedChange={(checked) =>
+                    patch({ requiresConfirmation: checked })
+                  }
+                  label={
+                    isEmail
+                      ? "Ask agent to review before sending"
+                      : "Ask the agent to confirm before writing"
+                  }
+                  description={
+                    isEmail
+                      ? "The agent can review and edit the generated email before it is sent."
+                      : "On by default for actions that write to a connected app."
+                  }
+                  wrapperClassName="justify-between"
+                />
+              </SetupStep>
+            </ol>
 
             <div className="flex flex-col gap-4 lg:hidden">
               <AssignTeamAndGroups
@@ -413,161 +531,101 @@ export function CreateActionPage({
   );
 }
 
-function ThenPicker({
+/**
+ * App, then operation — two labelled selects instead of one long radio list of
+ * every operation across every app. Disconnected apps stay pickable so the
+ * connect step happens in place rather than sending the user to Integrations.
+ */
+function ActionPicker({
   integrations,
   selectedIntegrationId,
   selectedCapabilityId,
+  onSelectIntegration,
   onSelectOperation,
-  onSelectDisconnected,
   onConnect,
 }: {
   integrations: Integration[];
   selectedIntegrationId: IntegrationId;
   selectedCapabilityId: string;
+  onSelectIntegration: (id: IntegrationId) => void;
   onSelectOperation: (integrationId: IntegrationId, capabilityId: string) => void;
-  onSelectDisconnected: (id: IntegrationId) => void;
   onConnect: (id: IntegrationId) => void;
 }) {
-  const ordered = [...integrations].sort((a, b) => {
-    if (a.connected === b.connected) return 0;
-    return a.connected ? -1 : 1;
-  });
+  const connected = integrations.filter((item) => item.connected);
+  const disconnected = integrations.filter((item) => !item.connected);
+
+  const appOptions: DropdownListItem[] = [
+    ...connected.map((item) => ({ value: item.id, label: item.name })),
+    ...(disconnected.length > 0
+      ? ([
+          { type: "separator" },
+          { type: "heading", label: "Not connected" },
+          ...disconnected.map((item) => ({
+            value: item.id,
+            label: item.name,
+          })),
+        ] as DropdownListItem[])
+      : []),
+  ];
+
+  const selected = integrations.find((item) => item.id === selectedIntegrationId);
+  const operations = selected ? operationsForIntegration(selected) : [];
+  const operationOptions: DropdownListItem[] = operations.map((operation) => ({
+    value: operation.id,
+    label: operation.label,
+  }));
 
   return (
-    <div className="flex flex-col gap-5">
-      {ordered.map((item) => {
-        const operations = operationsForIntegration(item);
-        const selectedHere = selectedIntegrationId === item.id;
-        return (
-          <div key={item.id} className="flex flex-col gap-2">
-            <p className="text-label-md-semi text-foreground">{item.name}</p>
-            {item.connected ? (
-              <ul className="flex flex-col gap-1">
-                {operations.map((operation) => {
-                  const selected =
-                    selectedHere && selectedCapabilityId === operation.id;
-                  return (
-                    <li key={operation.id}>
-                      <Radio
-                        name="action-then"
-                        size="sm"
-                        label={operation.label}
-                        checked={selected}
-                        onChange={() => onSelectOperation(item.id, operation.id)}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : selectedHere ? (
-              <div className="flex flex-col gap-3 rounded-lg border border-line bg-white px-3 py-3">
-                <div className="flex flex-col gap-1">
-                  <p className="text-label-md-semi text-foreground">
-                    Connect {item.name} to continue
-                  </p>
-                  <p className="text-pretty text-paragraph-sm text-muted-foreground">
-                    Uses your existing JustCall connection. This setup stays
-                    exactly where you left it.
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  className="self-start"
-                  onClick={() => onConnect(item.id)}
-                >
-                  Connect {item.name}
-                </Button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onSelectDisconnected(item.id)}
-                className="w-fit cursor-pointer text-label-md text-brand outline-none hover:text-brand-hover focus-visible:ring-2 focus-visible:ring-brand/24"
-              >
-                Connect {item.name} to continue
-              </button>
-            )}
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-3 @md:grid-cols-2">
+        <Dropdown
+          label="App"
+          placeholder="Select an app"
+          searchable={false}
+          options={appOptions}
+          value={selectedIntegrationId}
+          onValueChange={(next) =>
+            onSelectIntegration(pick(next) as IntegrationId)
+          }
+          triggerClassName="h-9"
+        />
+        <Dropdown
+          label="Action"
+          placeholder={
+            selected?.connected ? "Select an action" : "Connect the app first"
+          }
+          searchable={false}
+          disabled={!selected?.connected}
+          options={operationOptions}
+          value={selectedCapabilityId}
+          onValueChange={(next) =>
+            onSelectOperation(selectedIntegrationId, pick(next))
+          }
+          triggerClassName="h-9"
+        />
+      </div>
+
+      {selected && !selected.connected ? (
+        <div className="flex flex-col gap-3 rounded-lg border border-line bg-secondary-bg px-4 py-3">
+          <div className="flex flex-col gap-1">
+            <p className="text-label-md-semi text-foreground">
+              Connect {selected.name} to continue
+            </p>
+            <p className="text-pretty text-paragraph-sm text-muted-foreground">
+              {selected.connectHint} Uses your existing JustCall connection —
+              this setup stays exactly where you left it.
+            </p>
           </div>
-        );
-      })}
+          <Button
+            size="sm"
+            className="self-start"
+            onClick={() => onConnect(selected.id)}
+          >
+            Connect {selected.name}
+          </Button>
+        </div>
+      ) : null}
     </div>
-  );
-}
-
-function ConfigChain({
-  object,
-  objectOptions,
-  property,
-  valueKind,
-  onObjectChange,
-  onPropertyChange,
-  onValueKindChange,
-}: {
-  object: string;
-  objectOptions: { value: string; label: string }[];
-  property: string;
-  valueKind: ActionValueSource["kind"];
-  onObjectChange: (value: string) => void;
-  onPropertyChange: (value: string) => void;
-  onValueKindChange: (kind: ActionValueSource["kind"]) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <ChainDropdown
-        placeholder="Record"
-        options={objectOptions}
-        value={object}
-        onChange={onObjectChange}
-      />
-      <IconChevronRight
-        size={16}
-        className="size-4 shrink-0 text-muted-foreground"
-      />
-      <ChainDropdown
-        placeholder="Field"
-        searchable
-        options={ACTION_PROPERTY_OPTIONS}
-        value={property}
-        onChange={onPropertyChange}
-      />
-      <IconChevronRight
-        size={16}
-        className="size-4 shrink-0 text-muted-foreground"
-      />
-      <ChainDropdown
-        placeholder="Value"
-        options={VALUE_SOURCE_OPTIONS}
-        value={valueKind}
-        onChange={(kind) => onValueKindChange(kind as ActionValueSource["kind"])}
-      />
-    </div>
-  );
-}
-
-function ChainDropdown({
-  placeholder,
-  options,
-  value,
-  onChange,
-  searchable = false,
-}: {
-  placeholder: string;
-  options: { value: string; label: string }[];
-  value: string;
-  onChange: (value: string) => void;
-  searchable?: boolean;
-}) {
-  return (
-    <Dropdown
-      placeholder={placeholder}
-      searchable={searchable}
-      searchPlaceholder="Search"
-      options={options}
-      value={value}
-      onValueChange={(next) => onChange(pick(next))}
-      className="w-[168px]"
-      triggerClassName="h-9"
-    />
   );
 }
 
@@ -629,29 +687,43 @@ function RecordThenConfig({
   onFixedChange: (value: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-3">
-      {needsRecord ? (
-        <ConfigChain
-          object={object}
-          objectOptions={objectOptions}
-          property={property}
-          valueKind={value.kind}
-          onObjectChange={onObjectChange}
-          onPropertyChange={onPropertyChange}
-          onValueKindChange={onValueKindChange}
+    <FieldGroup title={needsRecord ? "Record and field" : "Value"}>
+      <div className="grid gap-3 @md:grid-cols-2">
+        {needsRecord ? (
+          <>
+            <Dropdown
+              label="Record"
+              placeholder="Select a record"
+              searchable={false}
+              options={objectOptions}
+              value={object}
+              onValueChange={(next) => onObjectChange(pick(next))}
+              triggerClassName="h-9"
+            />
+            <Dropdown
+              label="Field"
+              placeholder="Select a field"
+              searchable
+              searchPlaceholder="Search fields"
+              options={ACTION_PROPERTY_OPTIONS}
+              value={property}
+              onValueChange={(next) => onPropertyChange(pick(next))}
+              triggerClassName="h-9"
+            />
+          </>
+        ) : null}
+        <Dropdown
+          label="Value comes from"
+          placeholder="Select a source"
+          searchable={false}
+          options={VALUE_SOURCE_OPTIONS}
+          value={value.kind}
+          onValueChange={(next) =>
+            onValueKindChange(pick(next) as ActionValueSource["kind"])
+          }
+          triggerClassName="h-9"
         />
-      ) : (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <ChainDropdown
-            placeholder="Value"
-            options={VALUE_SOURCE_OPTIONS}
-            value={value.kind}
-            onChange={(kind) =>
-              onValueKindChange(kind as ActionValueSource["kind"])
-            }
-          />
-        </div>
-      )}
+      </div>
 
       {needsRecord && !property ? null : value.kind === "from_conversation" ? (
         <InputField
@@ -670,7 +742,7 @@ function RecordThenConfig({
           clearable={false}
         />
       )}
-    </div>
+    </FieldGroup>
   );
 }
 
@@ -703,7 +775,7 @@ function VariableChips({
           key={variable}
           type="button"
           onClick={() => onInsert(`{{${variable}}}`)}
-          className="cursor-pointer rounded-[4px] border border-line bg-secondary-bg px-1.5 py-0.5 font-mono text-[12px] leading-4 text-muted-foreground outline-none hover:border-brand hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/24"
+          className="cursor-pointer rounded-[4px] border border-line bg-white px-1.5 py-0.5 font-mono text-[12px] leading-4 text-muted-foreground outline-none hover:border-brand hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/24"
         >
           {`{{${variable}}}`}
         </button>
@@ -754,8 +826,7 @@ function EmailThenConfig({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3">
-        <h3 className="text-label-md-semi text-foreground">Recipient</h3>
+      <FieldGroup title="Recipient">
         <Dropdown
           label="Send email to"
           placeholder="Choose recipient"
@@ -794,10 +865,9 @@ function EmailThenConfig({
             wrapperClassName="max-w-[320px]"
           />
         ) : null}
-      </div>
+      </FieldGroup>
 
-      <div className="flex flex-col gap-3">
-        <h3 className="text-label-md-semi text-foreground">Email content</h3>
+      <FieldGroup title="Email content">
         <div className="flex flex-col gap-2">
           <InputField
             label="Subject"
@@ -824,10 +894,9 @@ function EmailThenConfig({
             onInsert={(token) => onChange({ message: appendToken(email.message, token) })}
           />
         </div>
-      </div>
+      </FieldGroup>
 
-      <div className="flex flex-col gap-3">
-        <h3 className="text-label-md-semi text-foreground">AI personalization</h3>
+      <FieldGroup title="AI personalization">
         <Toggle
           size="sm"
           controlPosition="end"
@@ -852,9 +921,9 @@ function EmailThenConfig({
             />
           </div>
         ) : null}
-      </div>
+      </FieldGroup>
 
-      <div className="flex flex-col gap-3">
+      <FieldGroup title="Attachments">
         <Button
           variant="link"
           size="sm"
@@ -868,7 +937,7 @@ function EmailThenConfig({
             {email.attachments.map((item) => (
               <li
                 key={item.id}
-                className="flex items-center gap-3 rounded-[4px] border border-line px-3 py-2"
+                className="flex items-center gap-3 rounded-[4px] border border-line bg-white px-3 py-2"
               >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-[6px] bg-secondary-bg text-muted-foreground">
                   <IconFile size={16} />
@@ -903,7 +972,7 @@ function EmailThenConfig({
             ))}
           </ul>
         ) : null}
-      </div>
+      </FieldGroup>
 
       <Modal
         open={attachOpen}

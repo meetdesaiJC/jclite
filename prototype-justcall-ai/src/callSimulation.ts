@@ -425,15 +425,8 @@ export function resolvePostCallActionItems(
   });
 }
 
-export function postCallSectionTitle(items: ResolvedCallActionItem[]): string {
-  const outstanding = items.some(
-    (item) =>
-      item.status === "pending" ||
-      item.status === "failed" ||
-      item.status === "in_progress"
-  );
-  return outstanding ? "Action items" : "Call actions";
-}
+/** The recap heading stays put regardless of how many rows are ticked off. */
+export const POST_CALL_SECTION_TITLE = "Action items";
 
 /** Live libraries the runtime reads. Defaults to the seeded admin setup. */
 export interface SimulationLibraries {
@@ -519,7 +512,7 @@ const AUTHORED_SCENARIOS: CallScenario[] = [
       { id: "sentiment", label: "Sentiment coaching", atMs: 77000 },
       { id: "task", label: "Follow-up task", atMs: 80500 },
       { id: "schedule", label: "Schedule meeting", atMs: 87500 },
-      { id: "combined", label: "Knowledge + guidance", atMs: 95500 },
+      { id: "combined", label: "Knowledge Base + guidance", atMs: 95500 },
       { id: "queue", label: "Aircall again", atMs: 102000 },
       { id: "pace", label: "Pace coaching", atMs: 114000 },
       { id: "end", label: "End of call", atMs: 122000 },
@@ -913,7 +906,8 @@ Best,`,
         },
         {
           id: "pricing",
-          title: "Elena's ops lead will join the Thursday working session",
+          title: "Build the Aircall price-difference one-pager before Thursday",
+          allowMarkDone: true,
         },
       ],
     },

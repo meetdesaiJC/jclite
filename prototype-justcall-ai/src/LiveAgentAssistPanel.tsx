@@ -710,6 +710,56 @@ interface StreamRow {
 }
 
 /**
+ * How far ahead the panel looks for the next card. Long enough that "Building
+ * context…" reads as work in progress, short enough that it only ever fires on
+ * a moment that actually produces guidance — not on routine ticking.
+ */
+const PREPARING_LEAD_MS = 2000;
+
+/**
+ * The column before anything has landed. Agent Assist is listening either way;
+ * this only says so, in one line, and stops as soon as the first card arrives.
+ * It never comes back — once cards exist, the stream is the state.
+ */
+function GuidanceListeningState({
+  preparing,
+  reduced,
+}: {
+  preparing: boolean;
+  reduced: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 px-0.5 pt-3.5" aria-live="polite">
+      <GuidanceSparklesIcon
+        size={14}
+        className={cn("shrink-0", !reduced && "assist-listen-sparkle")}
+      />
+      {/* Both lines share one grid cell, so the swap crossfades in place. */}
+      <span className="grid text-paragraph-sm text-muted-foreground">
+        <span
+          aria-hidden={preparing}
+          className={cn(
+            "col-start-1 row-start-1 assist-listen-line",
+            preparing && "is-out"
+          )}
+        >
+          Listening to the conversation…
+        </span>
+        <span
+          aria-hidden={!preparing}
+          className={cn(
+            "col-start-1 row-start-1 assist-listen-line",
+            !preparing && "is-out"
+          )}
+        >
+          Building context…
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/**
  * Arrival order, frozen. New cards prepend newest-first so the latest cue is
  * at the top; cards already on screen never swap places with each other.
  */
@@ -756,12 +806,13 @@ export function LiveAgentAssistPanel({
   className,
 }: LiveAgentAssistPanelProps) {
   const reduced = prefersReducedMotion();
-  const snapshot = simulationAt(scenario, elapsedMs, guidanceItems, {
+  const libraries = {
     knowledge: knowledgeSources,
     coaching: coachingRules,
     integrations,
     actions: actionLibrary,
-  });
+  };
+  const snapshot = simulationAt(scenario, elapsedMs, guidanceItems, libraries);
 
   const [viewingResource, setViewingResource] = useState<GuidanceResource | null>(null);
   const [collapsedKnowledge, setCollapsedKnowledge] = useState<Set<string>>(new Set());
@@ -1029,6 +1080,22 @@ export function LiveAgentAssistPanel({
     visibleStreamActions.length === 0 &&
     coaching.stack.length === 0;
 
+  /**
+   * "Building context…" is earned, not decorative: the panel replays the call a
+   * couple of seconds ahead and only switches over when that pass actually
+   * produces something. Asked while the column is empty, so the second pass
+   * costs nothing for the rest of the call.
+   */
+  const ahead = nothingYet
+    ? simulationAt(scenario, elapsedMs + PREPARING_LEAD_MS, guidanceItems, libraries)
+    : null;
+  const preparing =
+    ahead !== null &&
+    (ahead.suggestions.length > 0 ||
+      ahead.knowledge.length > 0 ||
+      ahead.coaching.length > 0 ||
+      ahead.actions.length > 0);
+
   const renderKnowledge = (surface: KnowledgeSurface) => (
     <KnowledgeCard
       key={surface.id}
@@ -1085,10 +1152,7 @@ export function LiveAgentAssistPanel({
         {...stream.scrollHandlers}
       >
         {nothingYet ? (
-          <p className="px-0.5 py-1 text-pretty text-paragraph-sm text-muted-foreground">
-            Answers, guidance, and next steps show up here as the conversation
-            gives Agent Assist something to work with.
-          </p>
+          <GuidanceListeningState preparing={preparing} reduced={reduced} />
         ) : null}
 
         {stream.criticalAlert ? (

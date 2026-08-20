@@ -50,7 +50,7 @@ export function GuidanceTemplatesModal({
       onClose={onClose}
       size="md"
       title="Create a response card"
-      description="Choose what you want to help agents handle during calls. Start with a template, create your own, or let AI draft one from your knowledge base."
+      description="Choose what you want to help agents handle during calls. Start with a template, create your own, or let AI draft one from your Knowledge Base."
     >
       <div className="flex flex-col gap-5">
         {GUIDANCE_TEMPLATE_GROUPS.map((group) => (
@@ -117,10 +117,10 @@ export function GuidanceTemplatesModal({
             </span>
             <span className="min-w-0">
               <span className="block text-label-md-semi text-foreground">
-                Generate from Knowledge
+                Generate from Knowledge Base
               </span>
               <span className="mt-0.5 block text-pretty text-paragraph-sm text-muted-foreground">
-                Pick knowledge bases and AI drafts it for you to review.
+                Pick Knowledge Bases and AI drafts it for you to review.
               </span>
             </span>
           </button>
