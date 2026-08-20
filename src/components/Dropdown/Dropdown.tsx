@@ -196,6 +196,11 @@ export interface DropdownProps
   /** Leading prefix segment (e.g. "USD") with a divider. */
   prefix?: React.ReactNode;
   disabled?: boolean;
+  /**
+   * Which trigger edge the menu hangs from. `end` keeps a content-sized menu
+   * inside its container when the trigger sits against the right edge.
+   */
+  align?: "start" | "end";
   /** Show a search field at the top of the menu. Default `true`. */
   searchable?: boolean;
   searchPlaceholder?: string;
@@ -279,6 +284,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
       leftIcon,
       prefix,
       disabled = false,
+      align = "start",
       searchable = true,
       searchPlaceholder = "Search placeholder value",
       emptyTitle = "No Results Found",
@@ -613,7 +619,10 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
                   )}
                 </>
               ) : (
-                <span className={cn("truncate", triggerTextClass)}>
+                <span
+                  className={cn("truncate", triggerTextClass)}
+                  title={filled ? displayValue : undefined}
+                >
                   {filled ? displayValue : placeholder}
                 </span>
               )}
@@ -664,7 +673,15 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
               onKeyDown={onMenuKeyDown}
               data-state={panelState}
               className={cn(
-                "dropdown-panel absolute top-[calc(100%+8px)] left-0 z-50 flex w-full flex-col overflow-hidden rounded-[4px] border border-line bg-white shadow-400",
+                "dropdown-panel absolute top-[calc(100%+8px)] z-50 flex flex-col overflow-hidden rounded-[4px] border border-line bg-white shadow-400",
+                align === "end" ? "right-0" : "left-0",
+                // Bordered fields read as one control with the menu, so the
+                // menu matches the field. A borderless trigger is only as wide
+                // as its text, so the menu sizes to its own content instead —
+                // never narrower than the trigger, capped before it sprawls.
+                variant === "borderless"
+                  ? "w-max min-w-full max-w-[280px]"
+                  : "w-full",
                 menuClassName
               )}
             >
@@ -814,7 +831,9 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
                           {item.icon}
                         </span>
                       )}
-                      <span className="min-w-0 flex-1 truncate">
+                      {/* Labels past the menu cap truncate — the title gives
+                          the full value back on hover. */}
+                      <span className="min-w-0 flex-1 truncate" title={item.label}>
                         {item.label}
                       </span>
                     </button>
