@@ -2,8 +2,11 @@
  * Choreographed during-call demo for stakeholders. One discovery call walks
  * the in-call surface through its full vocabulary, in this rhythm:
  *
- *   Script → Knowledge → Guidance → Coaching → Script → Guidance → Coaching
- *   → Action → Action → Combined suggestions → wrap → completed cards
+ *   Script → Knowledge → Guidance → Coaching → Guidance → Coaching →
+ *   Guidance → Action → Coaching → Action → Knowledge → Coaching → wrap
+ *
+ * Coaching is a live nudge, so each cue fires on its own beat — never as a
+ * stack of behavioural cards sitting on top of each other.
  */
 
 import {
@@ -43,8 +46,23 @@ import {
   type SuggestedAction,
 } from "./actionsData";
 
+/**
+ * Demo pacing. The scenarios below are authored on a natural conversation
+ * clock, which leaves dead air between cards when someone is presenting over
+ * it. Every authored timestamp runs through `paced()` before playback, so this
+ * is the one knob for the whole walkthrough: 1 plays the authored call,
+ * lower tightens the gap between one card and the next.
+ */
+export const TIMELINE_PACE = 0.6;
+
+const paced = (atMs: number) => Math.round(atMs * TIMELINE_PACE);
+
 /** After the script wraps, keep default cards this long before resolved / sent. */
-export const POST_WRAP_COMPLETED_DELAY_MS = 5000;
+const POST_WRAP_COMPLETED_DELAY_AUTHORED_MS = 5000;
+
+export const POST_WRAP_COMPLETED_DELAY_MS = paced(
+  POST_WRAP_COMPLETED_DELAY_AUTHORED_MS
+);
 
 export interface ScriptStep {
   title: string;
@@ -79,8 +97,6 @@ export interface KnowledgeSurface {
   sourceName: string;
   /** Filename or hostname, shown under the source name when available. */
   sourceOrigin?: string;
-  /** The admin can publish a source without exposing where it came from. */
-  showSource: boolean;
   confidence: KnowledgeConfidence;
   /** Retrieval question — used to tell when the topic has moved on. */
   query: string;
@@ -160,16 +176,69 @@ export interface CallMoment {
  * Only what the product actually has — anything else stays a plain item the
  * agent ticks off themselves.
  */
-export type CallActionKind = "schedule" | "message";
+export type CallActionKind =
+  | "schedule"
+  | "message"
+  | "prepare"
+  | "ticket"
+  | "update"
+  | "create";
+
+export type CallActionStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "failed";
+
+/** What View opens — the result of a completed action, not another CTA. */
+export interface CallActionResult {
+  title: string;
+  detail?: string;
+  href?: string;
+  hrefLabel?: string;
+}
 
 export interface CallActionItem {
   id: string;
   title: string;
   action?: CallActionKind;
+  /** Maps this recap row to a live SuggestedAction from the call. */
+  linkedActionId?: string;
+  /**
+   * Authored fallback when the recap is generated. Live completion and
+   * failure override this so the agent never sees a CTA they already ran.
+   */
+  status?: CallActionStatus;
+  /** Outcome-specific label — never a generic "Done". */
+  outcome?: string;
+  result?: CallActionResult;
+  /** Secondary escape when JustCall cannot verify the work itself. */
+  allowMarkDone?: boolean;
 }
+
+export interface ResolvedCallActionItem extends CallActionItem {
+  status: CallActionStatus;
+  outcome: string;
+}
+
+/**
+ * The dispositions wrap-up offers. Kept here rather than in the panel because
+ * the call itself is what picks one: Agent Assist reads the conversation and
+ * fills the field in, and the agent only has to disagree.
+ */
+export type CallOutcomeValue =
+  | "interested"
+  | "follow-up"
+  | "meeting"
+  | "not-interested"
+  | "no-answer"
+  | "voicemail"
+  | "wrong-number";
 
 export interface CallWrapUp {
   summary: string;
+  /** What the call sounded like — pre-filled in wrap-up, agent can change it. */
+  suggestedOutcome: CallOutcomeValue;
   actionItems: CallActionItem[];
 }
 
@@ -197,9 +266,171 @@ export interface SimulationSnapshot {
   wrapped: boolean;
   /** Auto-retrieved answers, newest last. */
   knowledge: KnowledgeSurface[];
-  /** Every cue fired so far — the panel keeps them stacked for the call. */
+  /** Every cue fired so far — the panel shows the live one, not the pile. */
   coaching: CoachingCue[];
   actions: ActionSurface[];
+}
+
+const ACTION_OUTCOMES: Record<CallActionKind, string> = {
+  schedule: "Scheduled",
+  message: "Sent",
+  prepare: "Prepared",
+  ticket: "Ticket created",
+  update: "Updated",
+  create: "Created",
+};
+
+const ACTION_PROGRESS: Record<CallActionKind, string> = {
+  schedule: "Scheduling…",
+  message: "Sending…",
+  prepare: "Preparing…",
+  ticket: "Creating ticket…",
+  update: "Updating…",
+  create: "Creating…",
+};
+
+export function callActionOutcome(kind?: CallActionKind, fallback = "Updated"): string {
+  if (!kind) return fallback;
+  return ACTION_OUTCOMES[kind];
+}
+
+export function callActionProgressLabel(kind?: CallActionKind): string {
+  if (!kind) return "Working…";
+  return ACTION_PROGRESS[kind];
+}
+
+function outcomeFromLiveAction(action: SuggestedAction): string {
+  if (action.email || /send/i.test(action.title)) return "Sent";
+  if (/schedule|meeting|event/i.test(`${action.title} ${action.capabilityId}`)) {
+    return "Scheduled";
+  }
+  if (/ticket/i.test(`${action.title} ${action.capabilityId}`)) {
+    return "Ticket created";
+  }
+  if (/note/i.test(action.title)) return "Added";
+  if (/task|creat/i.test(`${action.title} ${action.capabilityId}`)) return "Created";
+  if (/update|competitor/i.test(action.title)) return "Updated";
+  return "Updated";
+}
+
+function resultFromLiveAction(action: SuggestedAction): CallActionResult | undefined {
+  const href = action.viewUrl;
+  const hrefLabel =
+    action.integrationId === "hubspot"
+      ? "Open in HubSpot"
+      : action.integrationId === "salesforce"
+        ? "Open in Salesforce"
+        : action.integrationId === "zendesk"
+          ? "Open in Zendesk"
+          : href
+            ? "Open result"
+            : undefined;
+  if (action.email) {
+    return {
+      title: action.email.subject,
+      detail: `To ${action.email.to}`,
+      href,
+      hrefLabel,
+    };
+  }
+  const detail = action.fields
+    .map((field) => field.value)
+    .filter((value) => value.trim())
+    .join(" · ");
+  if (!detail && !href) return undefined;
+  return {
+    title: action.title,
+    detail: detail || action.summary,
+    href,
+    hrefLabel,
+  };
+}
+
+function liveActionState(
+  item: CallActionItem,
+  snapshot: SimulationSnapshot,
+  liveStates: Record<string, ActionState>
+): ActionState | undefined {
+  const id = item.linkedActionId;
+  if (!id) return undefined;
+  const runtime = liveStates[id];
+  if (
+    runtime === "done" ||
+    runtime === "failed" ||
+    runtime === "permission_denied" ||
+    runtime === "executing"
+  ) {
+    return runtime;
+  }
+  const fromSnapshot = snapshot.actions.find(
+    (entry) => entry.id === id || entry.action.actionId === id
+  )?.state;
+  if (
+    fromSnapshot === "done" ||
+    fromSnapshot === "failed" ||
+    fromSnapshot === "permission_denied" ||
+    fromSnapshot === "executing"
+  ) {
+    return fromSnapshot;
+  }
+  return undefined;
+}
+
+function statusFromLiveState(
+  state: ActionState | undefined
+): CallActionStatus | undefined {
+  if (state === "done") return "completed";
+  if (state === "failed" || state === "permission_denied") return "failed";
+  if (state === "executing") return "in_progress";
+  return undefined;
+}
+
+/**
+ * Recap rows reflect the call: a completed live action never gets its CTA
+ * again, and a failed one stays retryable instead of looking finished.
+ * Authored wrap-up statuses apply once the call has wrapped, so hanging up
+ * at the end still shows what happened even if the live cards hadn't flipped.
+ */
+export function resolvePostCallActionItems(
+  items: CallActionItem[],
+  snapshot: SimulationSnapshot,
+  liveStates: Record<string, ActionState> = {}
+): ResolvedCallActionItem[] {
+  return items.map((item) => {
+    const live = snapshot.actions.find(
+      (entry) =>
+        entry.id === item.linkedActionId ||
+        entry.action.actionId === item.linkedActionId
+    )?.action;
+    const liveStatus = statusFromLiveState(
+      liveActionState(item, snapshot, liveStates)
+    );
+    const status =
+      liveStatus ?? (snapshot.wrapped ? item.status : undefined) ?? "pending";
+    const outcome =
+      item.outcome ??
+      (item.action
+        ? callActionOutcome(item.action)
+        : live
+          ? outcomeFromLiveAction(live)
+          : "");
+    return {
+      ...item,
+      status,
+      outcome,
+      result: item.result ?? (live ? resultFromLiveAction(live) : undefined),
+    };
+  });
+}
+
+export function postCallSectionTitle(items: ResolvedCallActionItem[]): string {
+  const outstanding = items.some(
+    (item) =>
+      item.status === "pending" ||
+      item.status === "failed" ||
+      item.status === "in_progress"
+  );
+  return outstanding ? "Action items" : "Call actions";
 }
 
 /** Live libraries the runtime reads. Defaults to the seeded admin setup. */
@@ -219,7 +450,7 @@ function step(
   return { title, wording, required, relatedGuidanceIds };
 }
 
-export const CALL_SCENARIOS: CallScenario[] = [
+const AUTHORED_SCENARIOS: CallScenario[] = [
   {
     id: "discovery",
     scriptName: "Discovery call",
@@ -280,20 +511,20 @@ export const CALL_SCENARIOS: CallScenario[] = [
       { id: "talk-ratio", label: "Talk-ratio coaching", atMs: 39500 },
       { id: "discovery", label: "Discovery guidance", atMs: 46500 },
       { id: "interrupt", label: "Interruption coaching", atMs: 51000 },
-      { id: "sentiment", label: "Sentiment coaching", atMs: 53500 },
       { id: "pricing", label: "Pricing guidance", atMs: 61000 },
       { id: "send", label: "Send action", atMs: 66500 },
       { id: "crm", label: "CRM update", atMs: 73500 },
+      { id: "sentiment", label: "Sentiment coaching", atMs: 77000 },
       { id: "task", label: "Follow-up task", atMs: 80500 },
       { id: "schedule", label: "Schedule meeting", atMs: 87500 },
       { id: "combined", label: "Knowledge + guidance", atMs: 95500 },
-      { id: "priority", label: "Guidance + coaching", atMs: 99000 },
       { id: "queue", label: "Aircall again", atMs: 102000 },
+      { id: "pace", label: "Pace coaching", atMs: 114000 },
       { id: "end", label: "End of call", atMs: 122000 },
       {
         id: "resolved",
         label: "Resolved suggestions",
-        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS,
+        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_AUTHORED_MS,
       },
     ],
     conversationActions: [
@@ -509,7 +740,9 @@ Best,`,
         coachingRuleId: "cr-interruptions",
         coachingDetail: "You've interrupted the customer 3 times recently.",
       },
-      // 10. Sentiment / empathy coaching
+      // 10. Customer names the pain — discovery already covers this beat.
+      // Empathy coaching waits until later so two behavioural cards don't land
+      // on the same stretch of conversation.
       {
         atMs: 53500,
         speaker: "customer",
@@ -517,8 +750,6 @@ Best,`,
           "That's twenty missed leads a week. The team is exhausted chasing them the next morning.",
         skipKnowledge: true,
         skipActions: true,
-        coachingRuleId: "cr-frustration",
-        coachingDetail: "The customer is showing signs of frustration.",
       },
       { atMs: 56000, scriptIndex: 4 },
       {
@@ -547,6 +778,13 @@ Best,`,
       { atMs: 66500, actionId: "act-send-comparison" },
       // 13. CRM update — same: suggestion only, until wrap.
       { atMs: 73500, actionId: "act-update-competitor" },
+      // Sentiment sits between actions, after the agent skipped the pain and
+      // the internal-sell concern. One coaching card, its own beat.
+      {
+        atMs: 77000,
+        coachingRuleId: "cr-frustration",
+        coachingDetail: "The customer is showing signs of frustration.",
+      },
       {
         atMs: 79500,
         speaker: "customer",
@@ -556,7 +794,8 @@ Best,`,
       },
       // 14. Create task — suggestion only, until wrap.
       { atMs: 80500, actionId: "act-followup-task" },
-      // 15. Schedule meeting — left as a suggestion so wrap-up still has work.
+      // 15. Schedule meeting — suggested here, completed at wrap so hangup
+      //     at end-of-call already has a mixed recap (booked + sent + prepare).
       { atMs: 87500, actionId: "act-schedule-meeting" },
       { atMs: 94000, scriptIndex: 5 },
       // 16. Knowledge + guidance together
@@ -568,15 +807,7 @@ Best,`,
         knowledgeQuery: "does justcall integrate with salesforce",
         skipActions: true,
       },
-      // 17. Guidance + coaching together — a different cue than talk-ratio so
-      // the stacked demo doesn't repeat the same card. Coaching is the interrupt;
-      // Salesforce guidance stays.
-      {
-        atMs: 99000,
-        coachingRuleId: "cr-pace",
-        coachingDetail: "You're speaking faster than your usual pace.",
-      },
-      // 18. Same competitor again — re-activates the Aircall card (Relevant again)
+      // 17. Same competitor again — re-activates the Aircall card (Relevant again)
       {
         atMs: 102000,
         speaker: "customer",
@@ -587,7 +818,7 @@ Best,`,
       // 19. Multiple suggestions sit together — New / current / Earlier
       { atMs: 105000, handledGuidanceId: "g-status-quo" },
       { atMs: 106000, handledGuidanceId: "g-discovery" },
-      // 20. Guidance covered — coaching and actions stay in their default cards.
+      // 20. Guidance covered — the live coaching cue stays until the next one.
       { atMs: 108000, handledGuidanceId: "g-pricing" },
       // 21. Remaining script steps complete
       { atMs: 112000, scriptIndex: 6 },
@@ -596,6 +827,8 @@ Best,`,
         speaker: "agent",
         quote:
           "Let's lock a time this week. If we can show the missed-call workflow in their language, we'll know whether a trial is worth it.",
+        coachingRuleId: "cr-pace",
+        coachingDetail: "You're speaking faster than your usual pace.",
       },
       {
         atMs: 117000,
@@ -612,23 +845,35 @@ Best,`,
           "Perfect. Success looks like after-hours coverage and Salesforce logging in a workflow your ops lead recognizes.",
       },
       { atMs: 122000, scriptIndex: 8 },
-      // 22. Five seconds after wrap: resolved coaching and sent/done actions.
+      // Recap-linked actions settle at wrap so hangup at end-of-call already
+      // shows Scheduled / Sent instead of offering those CTAs again.
       {
-        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS,
-        resolveCoachingIds: ["cr-overtalking", "cr-interruptions", "cr-pace"],
-      },
-      {
-        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS + 200,
+        atMs: 122000,
         actionId: "act-send-comparison",
         actionState: "done",
       },
       {
-        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS + 400,
+        atMs: 122000,
+        actionId: "act-schedule-meeting",
+        actionState: "done",
+      },
+      // 22. Five seconds after wrap: resolved coaching and remaining CRM work.
+      {
+        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_AUTHORED_MS,
+        resolveCoachingIds: [
+          "cr-overtalking",
+          "cr-interruptions",
+          "cr-frustration",
+          "cr-pace",
+        ],
+      },
+      {
+        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_AUTHORED_MS + 400,
         actionId: "act-update-competitor",
         actionState: "done",
       },
       {
-        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_MS + 600,
+        atMs: 122000 + POST_WRAP_COMPLETED_DELAY_AUTHORED_MS + 600,
         actionId: "act-followup-task",
         actionState: "done",
       },
@@ -636,20 +881,45 @@ Best,`,
     wrapUp: {
       summary:
         "Elena is on Aircall today and evaluating JustCall so calling, SMS, and CRM live in one place. After-hours calls go to voicemail with no owner — about twenty missed leads a week — and nothing logs to Salesforce unless someone remembers. She wants a Thursday afternoon working session with her ops lead, and needs a one-pager to sell a higher price internally versus Aircall.",
+      suggestedOutcome: "meeting",
       actionItems: [
         {
           id: "session",
           title: "Book Thursday afternoon with Elena and her ops lead",
           action: "schedule",
+          linkedActionId: "act-schedule-meeting",
+          status: "completed",
+          outcome: "Scheduled",
+          result: {
+            title: "Working session with Elena",
+            detail: "Thursday afternoon · 30 min · Elena Vasquez + ops lead",
+            href: "https://login.salesforce.com",
+            hrefLabel: "Open in Salesforce",
+          },
         },
         {
           id: "recap",
           title: "Send a recap of Salesforce logging and after-hours coverage",
           action: "message",
+          linkedActionId: "act-send-comparison",
+          status: "completed",
+          outcome: "Sent",
+          result: {
+            title: "Salesforce logging and after-hours coverage",
+            detail: "Sent to Elena Vasquez · elena@acmecorp.com",
+            href: "https://app.hubspot.com",
+            hrefLabel: "Open in HubSpot",
+          },
         },
         {
           id: "pricing",
           title: "Prepare a seat-based price comparison versus Aircall",
+          action: "prepare",
+          allowMarkDone: true,
+          result: {
+            title: "Seat-based price comparison versus Aircall",
+            detail: "One-pager ready to share internally.",
+          },
         },
       ],
     },
@@ -795,6 +1065,7 @@ Best,`,
     wrapUp: {
       summary:
         "Priya couldn't sign in after several failed attempts and also thought she was charged twice. The account was unlocked and a reset email was sent; she confirmed she was back in. Card details were not collected on the call — a secure payment link is the path if a refund is still needed.",
+      suggestedOutcome: "follow-up",
       actionItems: [
         {
           id: "access",
@@ -804,11 +1075,24 @@ Best,`,
         {
           id: "billing",
           title: "Review priya.sharma@email.com for a duplicate charge",
+          allowMarkDone: true,
         },
         {
           id: "follow-up",
           title: "Follow up in 24 hours if she reports another lockout",
           action: "schedule",
+        },
+        {
+          id: "ticket",
+          title: "Create a ticket for the duplicate-charge review",
+          action: "ticket",
+          linkedActionId: "act-billing-ticket",
+          result: {
+            title: "Duplicate-charge review",
+            detail: "Zendesk ticket · priya.sharma@email.com",
+            href: "https://www.zendesk.com",
+            hrefLabel: "Open in Zendesk",
+          },
         },
       ],
     },
@@ -926,10 +1210,25 @@ Best,`,
     wrapUp: {
       summary:
         "Marcus saw two $49 charges — one posted on the 12th for the monthly plan, and a second still pending from yesterday. Pending charges often drop off in a few days. He was offered a reversal if the second charge posts, plus an email once it clears.",
+      suggestedOutcome: "follow-up",
       actionItems: [
+        {
+          id: "note",
+          title: "Log the pending $49 charge on Marcus's HubSpot record",
+          action: "update",
+          linkedActionId: "act-billing-note",
+          status: "failed",
+          result: {
+            title: "Pending $49 charge",
+            detail: "Logged on Marcus Chen · HubSpot",
+            href: "https://app.hubspot.com",
+            hrefLabel: "Open in HubSpot",
+          },
+        },
         {
           id: "watch",
           title: "Watch the pending $49 charge and reverse it if it posts",
+          allowMarkDone: true,
         },
         {
           id: "email",
@@ -940,6 +1239,21 @@ Best,`,
     },
   },
 ];
+
+/**
+ * The played timeline. Events and moments move together, so jumping to a
+ * moment still lands on the beat it names.
+ */
+export const CALL_SCENARIOS: CallScenario[] = AUTHORED_SCENARIOS.map(
+  (scenario) => ({
+    ...scenario,
+    events: scenario.events.map((event) => ({ ...event, atMs: paced(event.atMs) })),
+    moments: scenario.moments.map((moment) => ({
+      ...moment,
+      atMs: paced(moment.atMs),
+    })),
+  })
+);
 
 export function scenarioById(id: string): CallScenario {
   return CALL_SCENARIOS.find((item) => item.id === id) ?? CALL_SCENARIOS[0]!;
@@ -1064,7 +1378,6 @@ export function simulationAt(
         entry: hit.entry,
         sourceName: hit.source.name,
         sourceOrigin: hit.source.origin,
-        showSource: hit.source.showSourceToAgents,
         confidence: hit.confidence,
         query,
       });

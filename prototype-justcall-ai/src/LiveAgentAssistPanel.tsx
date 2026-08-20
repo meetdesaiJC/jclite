@@ -69,8 +69,8 @@ import {
 /**
  * In-call Agent Assist — one panel for everything the agent gets in real time.
  * There are no tabs. Cards share a single stream: each one lands in the order
- * it fired and stays there. Coaching, guidance, knowledge, and actions do not
- * regroup by type, so a newer card never gets buried under an older block.
+ * it fired. Guidance, knowledge, and actions stay; coaching is a live nudge
+ * about this moment, so a new cue replaces the last one instead of stacking.
  */
 
 /** Executed actions confirm, then collapse out of the way. */
@@ -104,9 +104,9 @@ function IconCoaching(props: SVGProps<SVGSVGElement>) {
 }
 
 /**
- * Every cue that fires stays on screen until the agent taps Got it.
- * Frequency still gates whether a rule may fire again (`once`, `cooldown`,
- * `on-return`) — it never takes an already-shown cue away.
+ * Coaching is about this moment, not a running list. Frequency still gates
+ * whether a rule may fire again; a newer cue replaces the live card so
+ * behavioural notes never pile up. Resolved cues come back at wrap.
  */
 function useCoachingStack(cues: CoachingCue[], resetKey: string, reduced: boolean) {
   const [stack, setStack] = useState<CoachingCue[]>([]);
@@ -170,7 +170,24 @@ function useCoachingStack(cues: CoachingCue[], resetKey: string, reduced: boolea
     const next = [...base, ...accepted];
     stackRef.current = next;
     setStack(next);
-    setArrivingIds(new Set(accepted.map((cue) => cue.id)));
+    const liveArriving = accepted.filter((cue) => !cue.resolved);
+    const newest = liveArriving[liveArriving.length - 1];
+    if (newest) {
+      const superseded = [
+        ...base.filter((cue) => !cue.resolved).map((cue) => cue.id),
+        ...liveArriving.slice(0, -1).map((cue) => cue.id),
+      ];
+      if (superseded.length) {
+        setDismissedIds((current) => {
+          const nextIds = new Set(current);
+          for (const id of superseded) nextIds.add(id);
+          return nextIds;
+        });
+      }
+      setArrivingIds(new Set([newest.id]));
+    } else {
+      setArrivingIds(new Set());
+    }
     // Cue arrival is the only trigger; the cue list itself is derived state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latestSig, resetKey]);
@@ -197,8 +214,16 @@ function useCoachingStack(cues: CoachingCue[], resetKey: string, reduced: boolea
     return () => window.clearTimeout(timer);
   }, [arrivingIds, reduced]);
 
+  const unresolved = stack.filter(
+    (cue) => !cue.resolved && !dismissedIds.has(cue.id)
+  );
+  const latestLive = unresolved[unresolved.length - 1];
+  const latestResolved = stack.filter(
+    (cue) => cue.resolved && !dismissedIds.has(cue.id)
+  ).at(-1);
+
   return {
-    stack: stack.filter((cue) => !dismissedIds.has(cue.id)),
+    stack: latestLive ? [latestLive] : latestResolved ? [latestResolved] : [],
     arrivingIds,
     acknowledge: (id: string) => {
       setDismissedIds((current) => {
@@ -374,16 +399,16 @@ function KnowledgeCard({
               </p>
             )}
 
-            {surface.showSource ? (
-              <GuidanceResourceLink
-                resource={{
-                  id: surface.entry.id,
-                  type: "link",
-                  name: surface.sourceName,
-                  url: surface.entry.sourceUrl,
-                }}
-              />
-            ) : null}
+            {/* Where the answer came from is always named — an agent about to
+                say it out loud should be able to check it. */}
+            <GuidanceResourceLink
+              resource={{
+                id: surface.entry.id,
+                type: "link",
+                name: surface.sourceName,
+                url: surface.entry.sourceUrl,
+              }}
+            />
           </div>
           <GuidanceFeedbackBar
             feedback={feedback}
@@ -700,6 +725,8 @@ export interface LiveAgentAssistPanelProps {
   actions?: AgentAction[];
   /** Hangup — the live stream lets go before the phone changes state. */
   exiting?: boolean;
+  /** Keep wrap-up in sync with actions the agent already ran. */
+  onActionStatesChange?: (states: Record<string, ActionState>) => void;
   className?: string;
 }
 
@@ -712,6 +739,7 @@ export function LiveAgentAssistPanel({
   integrations = SEED_INTEGRATIONS,
   actions: actionLibrary = SEED_ACTIONS,
   exiting = false,
+  onActionStatesChange,
   className,
 }: LiveAgentAssistPanelProps) {
   const reduced = prefersReducedMotion();
@@ -726,6 +754,10 @@ export function LiveAgentAssistPanel({
   const [collapsedKnowledge, setCollapsedKnowledge] = useState<Set<string>>(new Set());
   const [knownIds, setKnownIds] = useState<Set<string>>(new Set());
   const [actionRuntimes, setActionRuntimes] = useState<Record<string, ActionRuntime>>({});
+  /** Done receipts leave the stream; the outcome still has to survive hangup. */
+  const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(
+    () => new Set()
+  );
 
   const stream = useGuidanceStream({
     suggestions: snapshot.suggestions,
@@ -739,6 +771,7 @@ export function LiveAgentAssistPanel({
   useEffect(() => {
     setViewingResource(null);
     setActionRuntimes({});
+    setCollapsedActionIds(new Set());
     setKnownIds(new Set());
     setCollapsedKnowledge(new Set());
   }, [scenario.id]);
@@ -845,6 +878,29 @@ export function LiveAgentAssistPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demoStateSig]);
 
+  const runtimeSig = Object.entries(actionRuntimes)
+    .map(([id, runtime]) => `${id}:${runtime.state}`)
+    .join("|");
+
+  useEffect(() => {
+    if (!onActionStatesChange) return;
+    const merged: Record<string, ActionState> = {};
+    for (const entry of snapshot.actions) {
+      if (!entry.state) continue;
+      merged[entry.id] = entry.state;
+      if (entry.action.actionId) merged[entry.action.actionId] = entry.state;
+    }
+    for (const [id, runtime] of Object.entries(actionRuntimes)) {
+      // Dismissing a suggestion is not an outcome. A completed receipt that
+      // collapsed off the stream still has to land on the recap as done.
+      if (runtime.state === "dismissed") continue;
+      merged[id] = runtime.state;
+    }
+    onActionStatesChange(merged);
+    // Parent stores this across hangup; snapshot + runtime are the sources.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoStateSig, runtimeSig]);
+
   // A confirmation is a receipt, not a permanent row — it collapses on its own
   // unless the demo is already choreographing completion and collapse.
   useEffect(() => {
@@ -855,7 +911,13 @@ export function LiveAgentAssistPanel({
     if (doneIds.length === 0) return;
     const timers = doneIds.map((id) =>
       window.setTimeout(
-        () => patchRuntime(id, { state: "dismissed" }),
+        () =>
+          setCollapsedActionIds((current) => {
+            if (current.has(id)) return current;
+            const next = new Set(current);
+            next.add(id);
+            return next;
+          }),
         ACTION_DONE_HOLD_MS
       )
     );
@@ -869,9 +931,12 @@ export function LiveAgentAssistPanel({
       .join("|"),
   ]);
 
+  const isActionVisible = (id: string) =>
+    runtimeFor(id).state !== "dismissed" && !collapsedActionIds.has(id);
+
   const visibleStreamActions = snapshot.actions
     .map((entry) => entry.action)
-    .filter((action) => runtimeFor(action.id).state !== "dismissed");
+    .filter((action) => isActionVisible(action.id));
 
   const renderAction = (action: SuggestedAction) => (
     <SuggestedActionRow
@@ -933,7 +998,7 @@ export function LiveAgentAssistPanel({
       surface,
     })),
     ...snapshot.actions
-      .filter((entry) => runtimeFor(entry.id).state !== "dismissed")
+      .filter((entry) => isActionVisible(entry.id))
       .map((entry) => ({
         kind: "action" as const,
         atMs: entry.atMs,
@@ -1000,7 +1065,7 @@ export function LiveAgentAssistPanel({
 
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-2.5",
+          "call-pane-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-2.5",
           !reduced && exiting && "assist-stream-out"
         )}
         {...stream.scrollHandlers}

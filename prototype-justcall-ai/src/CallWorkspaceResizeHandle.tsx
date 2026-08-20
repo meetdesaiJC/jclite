@@ -16,6 +16,8 @@ export interface CallWorkspaceResizeHandleProps {
   limited: boolean;
   resistPx: number;
   disabled?: boolean;
+  /** The column this divider serves is opening or closing — no width, no grip. */
+  collapsing?: boolean;
   onDragStart: (event: PointerEvent<HTMLDivElement>) => void;
   onDrag: (event: PointerEvent<HTMLDivElement>) => void;
   onDragEnd: (event: PointerEvent<HTMLDivElement>) => void;
@@ -33,6 +35,7 @@ export function CallWorkspaceResizeHandle({
   limited,
   resistPx,
   disabled = false,
+  collapsing = false,
   onDragStart,
   onDrag,
   onDragEnd,
@@ -68,10 +71,12 @@ export function CallWorkspaceResizeHandle({
       aria-valuemax={valueMax}
       aria-valuetext={`${valueNow} pixels for ${leftLabel}`}
       aria-controls={`call-pane-${left} call-pane-${right}`}
-      aria-disabled={disabled || undefined}
-      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || collapsing || undefined}
+      aria-hidden={collapsing || undefined}
+      tabIndex={disabled || collapsing ? -1 : 0}
       className={cn(
         "call-pane-resize",
+        collapsing && "is-collapsing",
         dragging && "is-dragging",
         limited && "is-limited"
       )}

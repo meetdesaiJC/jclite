@@ -1,7 +1,7 @@
 /**
  * Actions — independent, reusable work an agent can perform in a connected
- * system. They live alongside Scripts, Response Cards, and Live Coaching, but
- * they are not a property of any of those. Actions fire from conversation
+ * system. They live alongside Scripts, Response Cards, and Behavioral Coaching,
+ * but they are not a property of any of those. Actions fire from conversation
  * moments; Response Cards never attach or configure them.
  */
 

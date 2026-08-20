@@ -13,6 +13,7 @@ import {
   resistanceOffset,
   resizeAdjacent,
   saveCallPaneFractions,
+  normalizeFractions,
   widthsFromFractions,
   type CallPaneCollapsed,
   type CallPaneFractions,
@@ -102,9 +103,21 @@ export function useCallWorkspaceResize(collapsed: CallPaneCollapsed = NO_COLLAPS
     }, SETTLE_MS);
   }, []);
 
+  const replaceFractions = useCallback((next: CallPaneFractions) => {
+    const normalized = normalizeFractions(next);
+    fractionsRef.current = normalized;
+    setFractions(normalized);
+    saveCallPaneFractions(normalized);
+  }, []);
+
   const persist = useCallback(
     (nextWidths: CallPaneWidths, forSpace = space) => {
-      const nextFractions = fractionsFromWidths(nextWidths, forSpace, visible);
+      const nextFractions = fractionsFromWidths(
+        nextWidths,
+        forSpace,
+        visible,
+        fractionsRef.current
+      );
       fractionsRef.current = nextFractions;
       setFractions(nextFractions);
       saveCallPaneFractions(nextFractions);
@@ -267,8 +280,10 @@ export function useCallWorkspaceResize(collapsed: CallPaneCollapsed = NO_COLLAPS
     containerRef,
     measured,
     resizable,
+    workspaceWidth,
     widths,
     fractions,
+    replaceFractions,
     settling: settling && draggingIndex === null,
     handleProps,
   };

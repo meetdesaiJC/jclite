@@ -778,7 +778,8 @@ export function clonePlaybook(source: ScriptPlaybook): ScriptPlaybook {
   };
 }
 
-export type AssignmentKind = "member" | "group";
+/** A face in an assignment stack: one person, a user group, or a voice agent. */
+export type AssignmentKind = "member" | "group" | "agent";
 
 export interface AssignmentPerson {
   id: string;

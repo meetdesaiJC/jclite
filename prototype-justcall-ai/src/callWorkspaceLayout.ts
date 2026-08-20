@@ -11,9 +11,9 @@ export type CallPaneId = (typeof CALL_PANE_IDS)[number];
 
 export const CALL_WORKSPACE_TOKENS = {
   panes: {
-    script: { minPx: 280, defaultFr: 0.35, maxFr: 0.5 },
-    suggestions: { minPx: 300, defaultFr: 0.28, maxFr: 0.5 },
-    transcript: { minPx: 320, defaultFr: 0.37, maxFr: 0.55 },
+    script: { minPx: 280, defaultFr: 0.42, maxFr: 0.62 },
+    suggestions: { minPx: 300, defaultFr: 0.33, maxFr: 0.55 },
+    transcript: { minPx: 320, defaultFr: 0.25, maxFr: 0.4 },
   },
   /** Visual gap between cards — same as the existing `gap-3`. */
   dividerPx: 12,
@@ -32,6 +32,17 @@ export const CALL_PANE_LABELS: Record<CallPaneId, string> = {
   suggestions: "Conversation Guidance",
   transcript: "Live Transcript",
 };
+
+/**
+ * Right-side utility shell (Notes / Transcript / Live Assist). One panel at
+ * a time; width stays in the 320–360px range so Script and Guidance remain
+ * the core workspace.
+ */
+export const CALL_ASIDE = {
+  minPx: 320,
+  defaultPx: 340,
+  maxPx: 360,
+} as const;
 
 export const CALL_WORKSPACE_DIVIDERS = [
   { index: 0, left: "script", right: "suggestions" },
@@ -89,7 +100,38 @@ export function paneMinPx(id: CallPaneId) {
 }
 
 export function paneMaxPx(id: CallPaneId, space: number) {
-  return CALL_WORKSPACE_TOKENS.panes[id].maxFr * space;
+  const byFr = CALL_WORKSPACE_TOKENS.panes[id].maxFr * space;
+  if (id === "transcript") return Math.min(byFr, CALL_ASIDE.maxPx);
+  return byFr;
+}
+
+export function clampAsidePx(px: number, workspaceWidth: number) {
+  const space = panelSpacePx(workspaceWidth, CALL_PANE_IDS.length);
+  const max = paneMaxPx("transcript", space);
+  const min = Math.min(CALL_ASIDE.minPx, max);
+  return clamp(px, min, max);
+}
+
+/**
+ * Open the right-side column at a pixel width and compress Script + Guidance
+ * from the sizes they had while it was closed, keeping their ratio.
+ */
+export function fractionsForAsideOpen(
+  closed: Pick<CallPaneWidths, "script" | "suggestions">,
+  panelPx: number,
+  workspaceWidth: number
+): CallPaneFractions {
+  const space = panelSpacePx(workspaceWidth, CALL_PANE_IDS.length);
+  const panel = clampAsidePx(panelPx, workspaceWidth);
+  const remaining = Math.max(0, space - panel);
+  const pair = Math.max(1, closed.script + closed.suggestions);
+  const desired: CallPaneWidths = {
+    script: (closed.script / pair) * remaining,
+    suggestions: (closed.suggestions / pair) * remaining,
+    transcript: panel,
+  };
+  const fitted = fitToConstraints(desired, space, CALL_PANE_IDS);
+  return fractionsFromWidths(fitted, space, CALL_PANE_IDS);
 }
 
 export function emptyWidths(): CallPaneWidths {
@@ -154,17 +196,34 @@ export function saveCallPaneFractions(fractions: CallPaneFractions) {
   }
 }
 
+/**
+ * Read a drag back out as fractions. A pane the agent has closed keeps the
+ * share it had in `base` — resizing the two panes that are open must not
+ * decide how wide the closed one comes back.
+ */
 export function fractionsFromWidths(
   widths: CallPaneWidths,
   space: number,
-  visible: readonly CallPaneId[]
+  visible: readonly CallPaneId[],
+  base: CallPaneFractions = DEFAULT_CALL_PANE_FRACTIONS
 ): CallPaneFractions {
   if (space <= 0 || visible.length === 0) return { ...DEFAULT_CALL_PANE_FRACTIONS };
-  const next = { ...DEFAULT_CALL_PANE_FRACTIONS };
   const visibleSum = visible.reduce((total, id) => total + Math.max(0, widths[id]), 0);
-  if (visibleSum <= 0) return next;
+  if (visibleSum <= 0) return { ...base };
+
+  const hiddenShare = CALL_PANE_IDS.reduce(
+    (total, id) => (visible.includes(id) ? total : total + Math.max(0, base[id])),
+    0
+  );
+  // Leave the open panes at least most of the row even if the stored shares
+  // for the closed ones are stale — normalize sorts out the remainder.
+  const openShare = Math.max(0.1, 1 - hiddenShare);
+
+  const next = { ...DEFAULT_CALL_PANE_FRACTIONS };
   for (const id of CALL_PANE_IDS) {
-    next[id] = visible.includes(id) ? Math.max(0, widths[id]) / visibleSum : 0;
+    next[id] = visible.includes(id)
+      ? (Math.max(0, widths[id]) / visibleSum) * openShare
+      : Math.max(0, base[id]);
   }
   return normalizeFractions(next);
 }

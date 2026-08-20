@@ -33,6 +33,8 @@ import {
 import {
   SEED_KNOWLEDGE_SOURCES,
   knowledgeCoverageForTrigger,
+  knowledgeEntryCount,
+  knowledgeRetrievableEntries,
   liveKnowledgeSources,
   type KnowledgeSourceRecord,
 } from "./knowledgeData";
@@ -869,7 +871,7 @@ function GenerateFromKnowledgeModal({
   onApply: (proposal: GuidanceItem) => void;
 }) {
   const usable = liveKnowledgeSources(sources).filter(
-    (source) => source.entries.length > 0
+    (source) => knowledgeEntryCount(source) > 0
   );
   const [sourceIds, setSourceIds] = React.useState<string[]>([]);
   const [proposals, setProposals] = React.useState<GuidanceItem[]>([]);
@@ -895,7 +897,10 @@ function GenerateFromKnowledgeModal({
     setProposals(
       picked
         .flatMap((source) =>
-          proposeGuidanceFromKnowledge(source.entries, source.name)
+          proposeGuidanceFromKnowledge(
+            knowledgeRetrievableEntries(source),
+            source.name
+          )
         )
         .slice(0, 6)
     );
@@ -946,7 +951,7 @@ function GenerateFromKnowledgeModal({
                       {source.name}
                     </span>
                     <span className="shrink-0 text-label-sm text-muted-foreground tabular-nums">
-                      {source.entries.length} answers
+                      {knowledgeEntryCount(source)} answers
                     </span>
                   </label>
                 </li>

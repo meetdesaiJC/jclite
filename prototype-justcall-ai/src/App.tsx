@@ -70,7 +70,7 @@ function SetupFlow() {
           data-active={area === "justcall-ai"}
           aria-hidden={area !== "justcall-ai"}
         >
-          <JustCallAiShell activeKey={aiPage} />
+          <JustCallAiShell activeKey={aiPage} onNavigate={setAiPage} />
         </div>
       </div>
     </div>

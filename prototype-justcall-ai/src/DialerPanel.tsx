@@ -2,6 +2,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -22,39 +23,55 @@ import {
   IconContacts,
   IconMessages,
   IconOtherApps,
+  IconSparkles,
+  IconVoice,
   IconVoicemailDrop,
 } from "@/components/Icon";
+import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import { IconJcaiSettings } from "./icons/JustCallAiNavIcons";
+import {
+  IconCallHold,
+  IconCallKeypad,
+  IconCallNotes,
+  IconCallTranscript,
+  IconCallTransfer,
+} from "./icons/CallControlIcons";
 import { AgentAssistCallSheet, LiveTranscriptPanel } from "./AgentAssistCallSheet";
 import { LiveAgentAssistPanel } from "./LiveAgentAssistPanel";
+import {
+  LiveAssistControl,
+  LiveAssistPanel,
+  LiveAssistToast,
+  useLiveAssist,
+  type LiveAssistThread,
+} from "./LiveAssistPanel";
 import { CallWaveform } from "./CallWaveform";
 import { CallWorkspaceResizeHandle } from "./CallWorkspaceResizeHandle";
-import { type CallPaneId } from "./callWorkspaceLayout";
+import {
+  CALL_ASIDE,
+  fractionsForAsideOpen,
+  type CallPaneCollapsed,
+  type CallPaneId,
+} from "./callWorkspaceLayout";
 import { useCallWorkspaceResize } from "./useCallWorkspaceResize";
 import {
-  NOTES_TEXTAREA_MAX_H,
-  NOTES_TEXTAREA_MIN_H,
-  useNotesTranscriptMotion,
-} from "./useNotesTranscriptMotion";
+  useAsidePanelSwitch,
+  type AsidePanel,
+} from "./useAsidePanelSwitch";
 import {
   CALL_SCENARIOS,
   POST_WRAP_COMPLETED_DELAY_MS,
   scenarioById,
   simulationAt,
+  type CallOutcomeValue,
   type CallScenario,
 } from "./callSimulation";
+import type { ActionState } from "./actionsData";
 import usFlag from "./assets/dialer/us-flag.svg";
 import phoneFilled from "./assets/dialer/phone-filled.svg";
 import hangupIcon from "./assets/dialer/hangup.svg";
 import messageIcon from "./assets/dialer/message.svg";
-import muteIcon from "./assets/dialer/mute.svg";
-import holdIcon from "./assets/dialer/hold.svg";
-import keypadIcon from "./assets/dialer/keypad.svg";
-import transferIcon from "./assets/dialer/transfer.svg";
 import userIcon from "./assets/dialer/user.svg";
-import noteIcon from "./assets/dialer/note.svg";
-import noteWhiteIcon from "./assets/dialer/note-white.svg";
-import voicemailWhiteIcon from "./assets/dialer/voicemail-white.svg";
 
 /**
  * Dialer page — compact 360px webphone, pinned top-center while idle
@@ -73,6 +90,16 @@ type CallPhase = "idle" | "ringing" | "connecting" | "talking" | "wrapup";
 
 const NOTES_MAX = 1500;
 
+/**
+ * How long the workspace takes to give the aside column its width — and
+ * to take it away. Matches `--call-aside-open-ms` / `--call-aside-close-ms`.
+ */
+const ASIDE_OPEN_MS = 280;
+const ASIDE_CLOSE_MS = 240;
+
+/** The beat between arming the width transition and changing the widths. */
+const ASIDE_RELEASE_MS = 48;
+
 /** Disposition reads at a glance — the dot carries the outcome, not the words. */
 const OUTCOME_TONE = {
   positive: "bg-success",
@@ -83,7 +110,11 @@ const OUTCOME_TONE = {
 
 type OutcomeTone = keyof typeof OUTCOME_TONE;
 
-const CALL_OUTCOMES: { value: string; label: string; tone: OutcomeTone }[] = [
+const CALL_OUTCOMES: {
+  value: CallOutcomeValue;
+  label: string;
+  tone: OutcomeTone;
+}[] = [
   { value: "interested", label: "Interested", tone: "positive" },
   { value: "follow-up", label: "Follow-up required", tone: "pending" },
   { value: "meeting", label: "Meeting booked", tone: "positive" },
@@ -467,9 +498,10 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      // A dialog opened from inside the call — the battle card zoom, say —
-      // owns Escape first. Only the topmost surface should close. Capture
-      // phase, so this runs while that dialog is still mounted.
+      // During a live call the stage owns Escape (close the open panel, not
+      // the whole dialer). A dialog opened from inside the call — the battle
+      // card zoom, say — still owns Escape first.
+      if (talking) return;
       const dialogs = document.querySelectorAll('[role="dialog"]');
       const topmost = dialogs[dialogs.length - 1];
       if (topmost && topmost !== rootRef.current) return;
@@ -477,7 +509,7 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
+  }, [onClose, talking]);
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
@@ -892,6 +924,13 @@ function InCallShell({
 }) {
   const reduced = prefersReducedMotion();
   const localTime = formatLocalTime(new Date());
+  const [actionStates, setActionStates] = useState<Record<string, ActionState>>(
+    {}
+  );
+
+  useEffect(() => {
+    setActionStates({});
+  }, [scenario.id]);
 
   // Ringing and live are the same surface, so they share a swap key: the phone
   // morphs into the bar instead of dissolving into a different card. Only
@@ -914,6 +953,7 @@ function InCallShell({
             contactName={contactName}
             contactMeta={contactMeta}
             scenario={scenario}
+            actionStates={actionStates}
             onScenarioChange={onScenarioChange}
             onClose={onCloseWrapUp}
           />
@@ -937,6 +977,7 @@ function InCallShell({
             onMute={onMute}
             onHoldToggle={onHoldToggle}
             onHangup={onHangup}
+            onActionStatesChange={setActionStates}
           />
         )
       }
@@ -977,6 +1018,7 @@ function CallMorphStage({
   onMute,
   onHoldToggle,
   onHangup,
+  onActionStatesChange,
 }: {
   className?: string;
   reduced: boolean;
@@ -996,6 +1038,7 @@ function CallMorphStage({
   onMute: () => void;
   onHoldToggle: () => void;
   onHangup: () => void;
+  onActionStatesChange?: (states: Record<string, ActionState>) => void;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
@@ -1121,12 +1164,93 @@ function CallMorphStage({
 }
 
 /**
- * Live call — the call bar owns the top edge, then three columns split the rest:
- * the Script, Agent Assist, and the live transcript. Agent Assist is the single
- * runtime surface: knowledge, guidance, coaching, and suggested actions all
- * arrive there, with no tabs for the agent to choose between. Column widths
- * are a shared tokenized model (A + divider + B + divider + C); dragging one
- * divider only trades space between its two neighbours.
+ * Notes, Transcript, and Live Assist share one right-side shell. Opening it
+ * slides the column in from the right while Script and Guidance compress;
+ * closing slides it out and restores those widths. Switching views never
+ * re-opens the shell.
+ *
+ * Two beats, and the order matters. First `shifting` arms the width transition
+ * on every pane in the row and mounts the column at no width — a transition
+ * only runs when the element was already transition-able in the frame before
+ * the value changed, so arming and moving in one commit animates nothing.
+ * `entered` is the second beat: the widths change and all three panes travel
+ * together. Closing runs the same two beats in reverse. After the first open,
+ * `mounted` stays true so Transcript scroll, Notes, and Live Assist keep
+ * their state in a zero-width column.
+ */
+function useCallAsidePresence(open: boolean, reduced: boolean) {
+  /** The value the width model reads — one frame behind `open` on a change. */
+  const [entered, setEntered] = useState(open);
+  const [mounted, setMounted] = useState(open);
+  const [shifting, setShifting] = useState(false);
+  const [shift, setShift] = useState<"open" | "close" | null>(null);
+  const prevOpen = useRef(open);
+  const timersRef = useRef<number[]>([]);
+  const rafRef = useRef(0);
+
+  const clear = () => {
+    timersRef.current.forEach((id) => window.clearTimeout(id));
+    timersRef.current = [];
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
+  };
+
+  useLayoutEffect(() => {
+    if (prevOpen.current === open) return;
+    prevOpen.current = open;
+    clear();
+
+    if (reduced) {
+      if (open) setMounted(true);
+      setEntered(open);
+      setShifting(false);
+      setShift(null);
+      return;
+    }
+
+    if (open) setMounted(true);
+    setShift(open ? "open" : "close");
+    setShifting(true);
+
+    const duration = open ? ASIDE_OPEN_MS : ASIDE_CLOSE_MS;
+
+    // Second beat, on whichever clock arrives first. A frame is the accurate
+    // one; the timer is there because a backgrounded tab stops handing out
+    // frames, and the column still has to end up open.
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      setEntered(open);
+    };
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = requestAnimationFrame(release);
+    });
+    timersRef.current.push(window.setTimeout(release, ASIDE_RELEASE_MS));
+
+    timersRef.current.push(
+      window.setTimeout(() => {
+        setShifting(false);
+        setShift(null);
+        // Stay mounted after the first open so Transcript scroll, Notes
+        // caret, and Live Assist chat survive close — width goes to 0.
+      }, duration + ASIDE_RELEASE_MS)
+    );
+  }, [open, reduced]);
+
+  useLayoutEffect(() => clear, []);
+
+  return { mounted, entered, leaving: mounted && !open, shifting, shift };
+}
+
+/**
+ * Live call — the call bar owns the top edge, then Script and Conversation
+ * Guidance split the rest. Notes, Transcript, and Live Assist share one
+ * right-side utility shell, off by default; only one of them is open at a
+ * time, and switching views keeps the column where it is. Closing it does
+ * not reset panel state. Column widths are a shared tokenized model
+ * (A + divider + B + divider + C); dragging one divider only trades space
+ * between its two neighbours.
  */
 function LiveCallStage({
   className,
@@ -1157,17 +1281,52 @@ function LiveCallStage({
   onHoldToggle: () => void;
   onHangup: () => void;
 }) {
-  const [notesOpen, setNotesOpen] = useState(false);
+  const [asidePanel, setAsidePanel] = useState<AsidePanel | null>(null);
   const [notes, setNotes] = useState("");
-  const [transcriptExpanded, setTranscriptExpanded] = useState(true);
-  const workspace = useCallWorkspaceResize();
+
+  const liveAssist = useLiveAssist({
+    scenarioId: scenario.id,
+    elapsedMs,
+    panelOpen: asidePanel === "assist",
+  });
+  const liveTranscript = simulationAt(scenario, elapsedMs).transcript;
+
+  useEffect(() => {
+    setAsidePanel(null);
+  }, [scenario.id]);
+
+  useEffect(() => {
+    if (assistCollapsing) setAsidePanel(null);
+  }, [assistCollapsing]);
+
+  const asideOpen = asidePanel !== null;
+  const aside = useCallAsidePresence(asideOpen, reduced);
+  // `entered`, not `asideOpen` — the column is in the width model from the beat
+  // the panes start travelling, not from the click.
+  const collapsed = useMemo<CallPaneCollapsed>(
+    () => ({ transcript: !aside.entered }),
+    [aside.entered]
+  );
+  const workspace = useCallWorkspaceResize(collapsed);
+  const asideSwitch = useAsidePanelSwitch(asidePanel, reduced);
+
+  // The width the aside settles at, kept across the close so the cards inside
+  // keep their layout while the column clips away from them. Next open uses
+  // this rather than a fresh default, unless the agent has never opened it.
+  const asideWidthRef = useRef(CALL_ASIDE.defaultPx);
+  const closedSnapshotRef = useRef<{ script: number; suggestions: number } | null>(
+    null
+  );
+  if (workspace.widths.transcript > 0) {
+    asideWidthRef.current = workspace.widths.transcript;
+  }
+
+  const shownNotes = asideSwitch.shown === "notes";
+  const shownTranscript = asideSwitch.shown === "transcript";
+  const shownAssist = asideSwitch.shown === "assist";
+
   const notesAreaRef = useRef<HTMLTextAreaElement>(null);
   const notesCaret = useRef({ start: 0, end: 0, scroll: 0 });
-  const notesMotion = useNotesTranscriptMotion({
-    open: notesOpen,
-    transcriptExpanded,
-    reduced,
-  });
 
   const saveNotesCaret = () => {
     const el = notesAreaRef.current;
@@ -1179,27 +1338,73 @@ function LiveCallStage({
     };
   };
 
-  const toggleNotes = () => {
-    if (notesOpen) saveNotesCaret();
-    setNotesOpen((v) => !v);
+  const closeAside = () => {
+    if (asidePanel === "notes") saveNotesCaret();
+    setAsidePanel(null);
   };
 
-  useLayoutEffect(() => {
-    const el = notesAreaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, NOTES_TEXTAREA_MAX_H)}px`;
-    if (notesOpen) notesMotion.syncLayout();
-  }, [notes, notesOpen]);
+  const toggleAside = (next: AsidePanel) => {
+    if (asidePanel === next) {
+      closeAside();
+      return;
+    }
+    if (asidePanel === "notes") saveNotesCaret();
+    if (!asidePanel && workspace.workspaceWidth > 0) {
+      closedSnapshotRef.current = {
+        script: workspace.widths.script,
+        suggestions: workspace.widths.suggestions,
+      };
+      workspace.replaceFractions(
+        fractionsForAsideOpen(
+          closedSnapshotRef.current,
+          asideWidthRef.current,
+          workspace.workspaceWidth
+        )
+      );
+    }
+    setAsidePanel(next);
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      // Nested surfaces (battle-card zoom, etc.) own Escape. The dialer
+      // itself is a dialog, so only a second one means something else is up.
+      const dialogs = document.querySelectorAll('[role="dialog"]');
+      if (dialogs.length > 1) return;
+      if (document.querySelector('[role="listbox"]')) return;
+      if (!asidePanel) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeAside();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [asidePanel]);
 
   useLayoutEffect(() => {
-    if (!notesMotion.interactive) return;
+    if (!shownNotes || !aside.entered || aside.leaving) return;
     const el = notesAreaRef.current;
     if (!el) return;
     el.focus({ preventScroll: true });
     el.setSelectionRange(notesCaret.current.start, notesCaret.current.end);
     el.scrollTop = notesCaret.current.scroll;
-  }, [notesMotion.interactive]);
+  }, [shownNotes, aside.entered, aside.leaving]);
+
+  const prevEnteredRef = useRef(aside.entered);
+  useLayoutEffect(() => {
+    const was = prevEnteredRef.current;
+    prevEnteredRef.current = aside.entered;
+    const snap = closedSnapshotRef.current;
+    if (!was || aside.entered || !snap || workspace.workspaceWidth <= 0) return;
+    workspace.replaceFractions(
+      fractionsForAsideOpen(snap, asideWidthRef.current, workspace.workspaceWidth)
+    );
+    // Restore runs in the same close beat as the width model collapsing, so
+    // Script and Guidance travel back to the sizes they had before this open.
+    // workspace is read from the render that flipped `entered`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aside.entered]);
 
   return (
     <div
@@ -1210,7 +1415,7 @@ function LiveCallStage({
         // in the middle of it — the three panes read as one object, not as
         // three columns stretched to the viewport. Horizontal overflow is
         // clipped so a resize never introduces a workspace scrollbar.
-        "flex h-[700px] max-h-full min-h-0 w-full max-w-[1504px] flex-col gap-3 overflow-x-hidden px-16",
+        "relative z-0 flex h-[700px] max-h-full min-h-0 w-full max-w-[1504px] flex-col gap-3 overflow-x-hidden px-16",
         className
       )}
     >
@@ -1224,18 +1429,25 @@ function LiveCallStage({
         contactName={contactName}
         muted={muted}
         onHold={onHold}
-        notesOpen={notesOpen}
+        notesOpen={asidePanel === "notes"}
+        transcriptOpen={asidePanel === "transcript"}
+        liveAssistOpen={asidePanel === "assist"}
+        help={liveAssist}
         onMute={onMute}
         onHoldToggle={onHoldToggle}
         onHangup={onHangup}
-        onNotesToggle={toggleNotes}
+        onNotesToggle={() => toggleAside("notes")}
+        onTranscriptToggle={() => toggleAside("transcript")}
+        onLiveAssistToggle={() => toggleAside("assist")}
       />
 
       <div
         ref={workspace.containerRef}
         className={cn(
           "call-workspace-row flex min-h-0 min-w-0 flex-1",
-          workspace.resizable ? "call-workspace-panes" : "gap-3"
+          workspace.resizable ? "call-workspace-panes" : "gap-3",
+          aside.shift === "open" && "is-shifting-open",
+          aside.shift === "close" && "is-shifting-close"
         )}
       >
         <StagePane
@@ -1276,12 +1488,17 @@ function LiveCallStage({
             elapsedMs={elapsedMs}
             scenario={scenario}
             exiting={assistCollapsing}
+            onActionStatesChange={onActionStatesChange}
             className="h-full"
           />
         </StagePane>
-        {workspace.resizable ? (
-          <CallWorkspaceResizeHandle {...workspace.handleProps(1)} />
+        {workspace.resizable && aside.mounted ? (
+          <CallWorkspaceResizeHandle
+            {...workspace.handleProps(1)}
+            collapsing={!aside.entered}
+          />
         ) : null}
+        {aside.mounted ? (
         <StagePane
           index={2}
           paneId="transcript"
@@ -1291,13 +1508,28 @@ function LiveCallStage({
           widthPx={workspace.resizable ? workspace.widths.transcript : undefined}
           settling={workspace.settling}
           surface={false}
+          animateIn={false}
+          className="call-aside-pane"
+          // Nothing to read or reach in a column that is on its way out.
+          inert={aside.leaving || undefined}
         >
-          <div ref={notesMotion.stageRef} className="notes-transcript-stage min-h-0 flex-1">
+          <div
+            className={cn(
+              "call-aside-stage min-h-0 flex-1",
+              asideSwitch.switching && "is-switching"
+            )}
+            // Pinned to the pane's right edge at the width it settles at, so
+            // the clip opens across the cards instead of reflowing them.
+            style={
+              workspace.resizable && asideWidthRef.current
+                ? { width: `${asideWidthRef.current}px` }
+                : undefined
+            }
+          >
             <div
-              ref={notesMotion.notesRef}
-              className="notes-slot"
-              aria-hidden={!notesMotion.announced}
-              inert={!notesMotion.announced || undefined}
+              className={cn("call-aside-view", shownNotes && "is-active")}
+              aria-hidden={!shownNotes}
+              inert={!shownNotes || undefined}
             >
               <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[16px] border border-line bg-white">
                 <header className="flex h-11 shrink-0 items-center justify-between gap-1.5 border-b border-line px-4">
@@ -1308,23 +1540,13 @@ function LiveCallStage({
                   <button
                     type="button"
                     aria-label="Close notes"
-                    onClick={() => {
-                      saveNotesCaret();
-                      setNotesOpen(false);
-                    }}
+                    onClick={closeAside}
                     className="flex size-6 items-center justify-center rounded-[4px] text-muted-foreground outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
                   >
                     <IconClose size={16} />
                   </button>
                 </header>
-                <div
-                  ref={notesMotion.notesInnerRef}
-                  className={cn(
-                    "notes-inner flex flex-col gap-1 p-4",
-                    notesMotion.interactive && "is-ready"
-                  )}
-                  inert={!notesMotion.interactive || undefined}
-                >
+                <div className="flex min-h-0 flex-1 flex-col gap-1 p-4">
                   <TextArea
                     ref={notesAreaRef}
                     placeholder="Type your notes here..."
@@ -1332,12 +1554,8 @@ function LiveCallStage({
                     rows={3}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    wrapperClassName="min-h-0"
-                    className="h-auto resize-none overflow-y-auto"
-                    style={{
-                      minHeight: NOTES_TEXTAREA_MIN_H,
-                      maxHeight: NOTES_TEXTAREA_MAX_H,
-                    }}
+                    wrapperClassName="min-h-0 flex-1"
+                    className="h-auto min-h-0 flex-1 resize-none overflow-y-auto"
                     aria-label="Call notes"
                   />
                   <p className="shrink-0 text-right text-label-sm text-muted-foreground tabular-nums">
@@ -1346,22 +1564,52 @@ function LiveCallStage({
                 </div>
               </div>
             </div>
-            <div ref={notesMotion.transcriptRef} className="transcript-slot">
+            <div
+              className={cn("call-aside-view", shownTranscript && "is-active")}
+              aria-hidden={!shownTranscript}
+              inert={!shownTranscript || undefined}
+            >
               <div className="h-full min-h-0 w-full overflow-hidden rounded-[16px] border border-line bg-white">
                 <LiveTranscriptPanel
                   key={scenario.id}
                   elapsedMs={elapsedMs}
                   scenario={scenario}
                   exiting={assistCollapsing}
-                  expanded={transcriptExpanded}
-                  onExpandedChange={setTranscriptExpanded}
-                  className={transcriptExpanded ? "h-full" : "h-11"}
+                  active={shownTranscript}
+                  onClose={closeAside}
+                  className="h-full"
+                />
+              </div>
+            </div>
+            <div
+              className={cn("call-aside-view", shownAssist && "is-active")}
+              aria-hidden={!shownAssist}
+              inert={!shownAssist || undefined}
+            >
+              <div className="h-full min-h-0 w-full overflow-hidden rounded-[16px] border border-line bg-white">
+                <LiveAssistPanel
+                  thread={liveAssist}
+                  scenario={scenario}
+                  transcript={liveTranscript}
+                  active={shownAssist && aside.entered && !aside.leaving}
+                  onClose={closeAside}
+                  className="h-full"
                 />
               </div>
             </div>
           </div>
         </StagePane>
+        ) : null}
       </div>
+
+      <LiveAssistToast
+        toast={liveAssist.toast}
+        onDismiss={liveAssist.dismissToast}
+        onView={() => {
+          liveAssist.dismissToast();
+          if (asidePanel !== "assist") toggleAside("assist");
+        }}
+      />
     </div>
   );
 }
@@ -1376,6 +1624,9 @@ function StagePane({
   settling = false,
   reduced,
   surface = true,
+  animateIn = true,
+  className,
+  inert,
   children,
 }: {
   index: number;
@@ -1388,17 +1639,23 @@ function StagePane({
   reduced: boolean;
   /** White card chrome. Off when this column stacks its own cards. */
   surface?: boolean;
+  /** Off for the aside column — its entrance is the width it opens into. */
+  animateIn?: boolean;
+  className?: string;
+  inert?: boolean;
   children: ReactNode;
 }) {
   const sized = widthPx != null;
   return (
     <div
       id={paneId ? `call-pane-${paneId}` : undefined}
+      inert={inert}
       className={cn(
         "call-stage-pane flex min-h-0 min-w-0 flex-col",
         surface && "overflow-hidden rounded-[16px] border border-line bg-white",
-        !reduced && "call-stage-pane-in",
-        settling && sized && "is-settling"
+        !reduced && animateIn && "call-stage-pane-in",
+        settling && sized && "is-settling",
+        className
       )}
       style={
         {
@@ -1430,10 +1687,15 @@ function CallBar({
   muted,
   onHold,
   notesOpen,
+  transcriptOpen,
+  liveAssistOpen,
+  help,
   onMute,
   onHoldToggle,
   onHangup,
   onNotesToggle,
+  onTranscriptToggle,
+  onLiveAssistToggle,
 }: {
   className?: string;
   morphing?: boolean;
@@ -1443,10 +1705,15 @@ function CallBar({
   muted: boolean;
   onHold: boolean;
   notesOpen?: boolean;
+  transcriptOpen?: boolean;
+  liveAssistOpen?: boolean;
+  help: LiveAssistThread;
   onMute: () => void;
   onHoldToggle: () => void;
   onHangup: () => void;
   onNotesToggle?: () => void;
+  onTranscriptToggle?: () => void;
+  onLiveAssistToggle: () => void;
 }) {
   const detail = (delay: number) =>
     revealing
@@ -1460,7 +1727,7 @@ function CallBar({
     <div
       data-morph-bar
       className={cn(
-        "flex h-[72px] shrink-0 items-center gap-4 rounded-[16px] px-4",
+        "relative z-30 flex h-[72px] shrink-0 items-center gap-4 rounded-[16px] px-4",
         morphing ? "bg-transparent" : "bg-[#071532] shadow-600",
         className
       )}
@@ -1524,40 +1791,60 @@ function CallBar({
         <CallWaveform active={!morphing} muted={muted} onHold={onHold} reduced={!revealing} />
       </span>
 
-      <div className="ml-auto flex shrink-0 items-center gap-0.5">
+      {/* Icon-only: on a bar this dense the labels cost more room than they
+          buy, and the four that morph in from the phone were already circles
+          there. Live Assist sits next to Transfer — they are the two ways
+          another person gets involved, one by taking the call and one by
+          asking a supervisor in without the customer hearing. Notes,
+          Transcript, and Live Assist share one right-side shell. */}
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
         <BarControl
           morphKey="mute"
-          label="Mute"
-          src={muteIcon}
+          label={muted ? "Unmute" : "Mute"}
           pressed={muted}
           onClick={onMute}
-        />
+        >
+          <IconVoice size={20} />
+        </BarControl>
         <BarControl
           morphKey="hold"
-          label="Hold"
-          src={holdIcon}
+          label={onHold ? "Resume call" : "Hold"}
           pressed={onHold}
           onClick={onHoldToggle}
+        >
+          <IconCallHold size={20} />
+        </BarControl>
+        <BarControl morphKey="keypad" label="Keypad">
+          <IconCallKeypad size={20} />
+        </BarControl>
+        <BarControl morphKey="transfer" label="Transfer">
+          <IconCallTransfer size={20} />
+        </BarControl>
+        <LiveAssistControl
+          help={help}
+          panelOpen={Boolean(liveAssistOpen)}
+          revealing={revealing}
+          onToggle={onLiveAssistToggle}
         />
-        <BarControl morphKey="keypad" label="Keypad" src={keypadIcon} />
-        <BarControl morphKey="transfer" label="Transfer" src={transferIcon} />
         <BarControl
-          label="Notes"
-          src={noteWhiteIcon}
+          label={notesOpen ? "Hide notes" : "Notes"}
           pressed={notesOpen}
           onClick={onNotesToggle}
-          className={cn("call-bar-notes", revealing && "call-bar-detail-in")}
-          style={
-            revealing
-              ? ({ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties)
-              : undefined
-          }
-        />
-        <BarControl
-          label="Voicemail"
-          src={voicemailWhiteIcon}
           {...detail(BAR_DETAIL_DELAY_MS)}
-        />
+        >
+          <IconCallNotes size={20} />
+        </BarControl>
+        <BarControl
+          label={transcriptOpen ? "Hide transcript" : "Show transcript"}
+          pressed={transcriptOpen}
+          onClick={onTranscriptToggle}
+          {...detail(BAR_DETAIL_DELAY_MS)}
+        >
+          <IconCallTranscript size={20} />
+        </BarControl>
+        <BarControl label="Voicemail drop" {...detail(BAR_DETAIL_DELAY_MS)}>
+          <IconVoicemailDrop size={20} />
+        </BarControl>
 
         <span
           style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
@@ -1584,10 +1871,16 @@ function CallBar({
   );
 }
 
+/**
+ * One icon-only control on the bar. The label is the only naming the control
+ * gets, so it does double duty: the accessible name, and the hover tooltip
+ * that stands in for the caption the phone's controls wear. The bubble sits
+ * below — the bar is pinned to the top of the workspace.
+ */
 function BarControl({
   label,
-  src,
   pressed,
+  badge,
   morphKey,
   className,
   style,
@@ -1595,38 +1888,47 @@ function BarControl({
   children,
 }: {
   label: string;
-  src?: string;
   pressed?: boolean;
+  /** Something came back while the panel was shut — a dot, not a count. */
+  badge?: boolean;
   morphKey?: string;
   className?: string;
   style?: CSSProperties;
   onClick?: () => void;
-  children?: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={pressed}
-      data-morph={morphKey}
-      data-morph-scale={morphKey ? "height" : undefined}
-      style={style}
-      onClick={onClick}
-      className={cn(
-        "flex w-[58px] flex-col items-center gap-1 rounded-lg px-1 py-1.5 outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]",
-        pressed && "bg-white/15",
-        className
-      )}
+    <TooltipTrigger
+      placement="bottom"
+      content={<Tooltip theme="dark" arrow="top-center" title={label} />}
+      className="shrink-0"
     >
-      <span className="relative flex size-5 items-center justify-center overflow-clip">
-        {children ?? (
-          <img src={src} alt="" className="size-full object-contain" />
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={pressed}
+        data-morph={morphKey}
+        data-morph-scale={morphKey ? "height" : undefined}
+        style={style}
+        onClick={onClick}
+        className={cn(
+          "call-bar-control relative flex size-9 shrink-0 items-center justify-center rounded-full text-white outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]",
+          className
         )}
-      </span>
-      <span className="text-[10px] leading-3 whitespace-nowrap text-white/80">
-        {label}
-      </span>
-    </button>
+      >
+        <span className="relative flex size-5 items-center justify-center overflow-clip">
+          {children}
+        </span>
+        {badge ? (
+          <span
+            aria-hidden="true"
+            // Ringed in the bar's own dark so the dot reads as sitting on the
+            // icon rather than floating next to it.
+            className="absolute top-1.5 right-1.5 size-2 rounded-full border border-[#071532] bg-brand"
+          />
+        ) : null}
+      </button>
+    </TooltipTrigger>
   );
 }
 
@@ -1692,8 +1994,8 @@ function RingingPhone({
               aria-label="Notes"
               className="flex size-8 items-center justify-center rounded-lg bg-[#713f12] outline-none transition-colors hover:brightness-110 focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]"
             >
-              <span className="relative size-4 overflow-clip">
-                <img src={noteIcon} alt="" className="size-full object-contain" />
+              <span className="relative flex size-4 items-center justify-center overflow-clip text-white">
+                <IconCallNotes size={16} />
               </span>
             </button>
           </div>
@@ -1764,32 +2066,24 @@ function RingingPhone({
             which is also the moment they start travelling. */}
         <div className="flex flex-col items-center justify-center gap-4">
           <div className="flex gap-4">
-            <CallControl
-              morphKey="mute"
-              label="Mute"
-              src={muteIcon}
-              disabled={!connected}
-            />
-            <CallControl
-              morphKey="hold"
-              label="Hold"
-              src={holdIcon}
-              disabled={!connected}
-            />
+            <CallControl morphKey="mute" label="Mute" disabled={!connected}>
+              <IconVoice size={24} />
+            </CallControl>
+            <CallControl morphKey="hold" label="Hold" disabled={!connected}>
+              <IconCallHold size={24} />
+            </CallControl>
           </div>
           <div className="flex gap-4">
-            <CallControl
-              morphKey="keypad"
-              label="Keypad"
-              src={keypadIcon}
-              disabled={!connected}
-            />
+            <CallControl morphKey="keypad" label="Keypad" disabled={!connected}>
+              <IconCallKeypad size={24} />
+            </CallControl>
             <CallControl
               morphKey="transfer"
               label="Transfer"
-              src={transferIcon}
               disabled={!connected}
-            />
+            >
+              <IconCallTransfer size={24} />
+            </CallControl>
           </div>
         </div>
 
@@ -1833,6 +2127,7 @@ function PostCallStage({
   contactName,
   contactMeta,
   scenario,
+  actionStates,
   onScenarioChange,
   onClose,
 }: {
@@ -1842,6 +2137,7 @@ function PostCallStage({
   contactName: string;
   contactMeta: string;
   scenario: CallScenario;
+  actionStates?: Record<string, ActionState>;
   onScenarioChange: (id: string) => void;
   onClose: () => void;
 }) {
@@ -1874,11 +2170,16 @@ function PostCallStage({
             ended
             transcriptOpen={transcriptOpen}
             onTranscriptOpenChange={setTranscriptOpen}
+            actionStates={actionStates}
             className="h-full"
           />
         </StagePane>
         <StagePane index={1} reduced={reduced} grow={4}>
-          <WrapUpPanel onClose={onClose} />
+          <WrapUpPanel
+            key={scenario.id}
+            suggestedOutcome={scenario.wrapUp.suggestedOutcome}
+            onClose={onClose}
+          />
         </StagePane>
       </div>
     </div>
@@ -1978,10 +2279,21 @@ function BarAction({
  * Wrap up — disposition, notes and rating. The recap next door is the raw
  * material: the agent copies the generated summary from there if they want it
  * in the notes, or writes their own.
+ *
+ * The disposition arrives already filled: Agent Assist heard the whole call, so
+ * making the agent re-derive it from memory is busywork. It stays a plain
+ * dropdown — changing it is one click, and the sparkle says where it came from
+ * so an agent who disagrees knows it wasn't their own earlier pick.
  */
-function WrapUpPanel({ onClose }: { onClose: () => void }) {
+function WrapUpPanel({
+  suggestedOutcome,
+  onClose,
+}: {
+  suggestedOutcome: CallOutcomeValue;
+  onClose: () => void;
+}) {
   const [rating, setRating] = useState(0);
-  const [outcome, setOutcome] = useState("");
+  const [outcome, setOutcome] = useState<string>(suggestedOutcome);
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<number | null>(null);
@@ -2006,6 +2318,10 @@ function WrapUpPanel({ onClose }: { onClose: () => void }) {
     icon: <OutcomeDot tone={item.tone} />,
   }));
   const selected = CALL_OUTCOMES.find((item) => item.value === outcome);
+  // The mark is about the value in the field, not about who typed it last: it
+  // disappears the moment the agent picks something else, and comes back if
+  // they land on the suggestion again.
+  const aiFilled = outcome === suggestedOutcome;
 
   return (
     <section
@@ -2018,22 +2334,48 @@ function WrapUpPanel({ onClose }: { onClose: () => void }) {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-        <Dropdown
-          searchable={false}
-          label={
-            <>
-              Call outcome <span className="text-error">*</span>
-            </>
-          }
-          placeholder="Select call outcome"
-          options={outcomeOptions}
-          leftIcon={selected ? <OutcomeDot tone={selected.tone} /> : undefined}
-          value={outcome}
-          onValueChange={(value) =>
-            setOutcome(Array.isArray(value) ? value[0] ?? "" : value)
-          }
-          aria-label="Call outcome"
-        />
+        <div className="relative">
+          <Dropdown
+            searchable={false}
+            label={
+              <>
+                Call outcome <span className="text-error">*</span>
+              </>
+            }
+            placeholder="Select call outcome"
+            options={outcomeOptions}
+            leftIcon={selected ? <OutcomeDot tone={selected.tone} /> : undefined}
+            value={outcome}
+            onValueChange={(value) =>
+              setOutcome(Array.isArray(value) ? value[0] ?? "" : value)
+            }
+            aria-label="Call outcome"
+          />
+          {/* Sits inside the field, clear of the chevron, so the mark belongs to
+              the value rather than to the label. */}
+          {aiFilled ? (
+            <TooltipTrigger
+              placement="top"
+              className="absolute right-9 bottom-0 h-10 items-center"
+              content={
+                <Tooltip
+                  theme="dark"
+                  arrow="bottom-center"
+                  title="Filled in by Agent Assist"
+                  description="Suggested from this call — change it if you disagree."
+                />
+              }
+            >
+              <span
+                tabIndex={0}
+                aria-label="Filled in by Agent Assist"
+                className="flex size-5 items-center justify-center rounded-[4px] text-ai outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+              >
+                <IconSparkles size={16} className="size-4 shrink-0" />
+              </span>
+            </TooltipTrigger>
+          ) : null}
+        </div>
 
         <div className="flex flex-col gap-2">
           <p className="text-label-md text-foreground">Notes</p>
@@ -2131,18 +2473,18 @@ function StarIcon({ filled }: { filled: boolean }) {
 
 function CallControl({
   label,
-  src,
   pressed,
   disabled,
   morphKey,
   onClick,
+  children,
 }: {
   label: string;
-  src: string;
   pressed?: boolean;
   disabled?: boolean;
   morphKey?: string;
   onClick?: () => void;
+  children: ReactNode;
 }) {
   return (
     <button
@@ -2150,21 +2492,25 @@ function CallControl({
       aria-label={label}
       aria-pressed={pressed}
       disabled={disabled}
-      data-morph={morphKey}
       onClick={onClick}
       className={cn(
         "flex flex-col items-center gap-2 outline-none transition-opacity duration-150",
         disabled && "cursor-not-allowed opacity-45"
       )}
     >
+      {/* The mark travels, not the button — circle to circle, so the ratio the
+          morph reads off the height is the two diameters. */}
       <span
+        data-morph={morphKey}
         className={cn(
           "flex size-14 items-center justify-center overflow-clip rounded-full border border-white transition-colors",
           pressed ? "bg-white/15" : "bg-transparent",
           !disabled && "hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]"
         )}
       >
-        <Glyph src={src} />
+        <span className="relative flex size-6 items-center justify-center overflow-clip text-white">
+          {children}
+        </span>
       </span>
       <span className="text-[10px] leading-3 whitespace-nowrap text-white">{label}</span>
     </button>

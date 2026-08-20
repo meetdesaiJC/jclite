@@ -2,15 +2,13 @@ import type { DropdownListItem } from "@/components/Dropdown";
 
 /**
  * Knowledge — what AI is allowed to read. There is one JustCall knowledge
- * base, shared: each KB says which products may use it (Voice Agent, Agent
- * Assist, or both). Turning a KB on for Agent Assist flips availability on the
- * same record — it never copies the KB — so admins keep one place to maintain
- * answers. Billing stays product-specific: Voice Agent KB limits follow the
- * Voice Agent add-on tier, and Agent Assist access rides on the Pro+ plan.
+ * base, shared: a published KB serves whoever is assigned to it, human agent
+ * or voice agent, so admins keep one place to maintain answers rather than a
+ * copy per product.
  *
  * Nobody writes a trigger. Retrieval happens against whatever is published and
- * available to Agent Assist, so a routine question like "does this work with
- * Salesforce?" never needs a Guidance rule behind it.
+ * assigned, so a routine question like "does this work with Salesforce?" never
+ * needs a Guidance rule behind it.
  */
 
 export type KnowledgeSourceKind =
@@ -22,89 +20,6 @@ export type KnowledgeSourceKind =
   | "help-center"
   | "website"
   | "internal";
-
-export type KnowledgeAudience = "everyone" | "teams" | "users";
-
-/** Which products may read this knowledge base. One KB, shared availability. */
-export type KnowledgeUsedBy = "voice-agent" | "agent-assist" | "both";
-
-export const KNOWLEDGE_USED_BY_OPTIONS: {
-  value: KnowledgeUsedBy;
-  label: string;
-  hint: string;
-}[] = [
-  {
-    value: "voice-agent",
-    label: "Voice Agent",
-    hint: "The AI voice agent answers from this knowledge base.",
-  },
-  {
-    value: "agent-assist",
-    label: "Agent Assist",
-    hint: "Human agents get answers from it on live calls.",
-  },
-  {
-    value: "both",
-    label: "Both",
-    hint: "One knowledge base, used by Voice Agent and Agent Assist.",
-  },
-];
-
-export function usedByVoiceAgent(source: KnowledgeSourceRecord): boolean {
-  return source.usedBy === "voice-agent" || source.usedBy === "both";
-}
-
-export function usedByAgentAssist(source: KnowledgeSourceRecord): boolean {
-  return source.usedBy === "agent-assist" || source.usedBy === "both";
-}
-
-export function knowledgeUsedByLabel(usedBy: KnowledgeUsedBy): string {
-  return (
-    KNOWLEDGE_USED_BY_OPTIONS.find((option) => option.value === usedBy)?.label ??
-    "Both"
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Entitlements
-// ---------------------------------------------------------------------------
-
-/**
- * Sharing the knowledge base does not share the bill. Voice Agent KB capacity
- * comes from its add-on tier; Agent Assist is bundled with eligible Pro+
- * plans, so switching a KB on for Agent Assist consumes no Voice Agent quota.
- */
-export interface KnowledgeEntitlements {
-  /** Add-on tier the Voice Agent KB limit comes from. */
-  voiceAgentTier: string;
-  voiceAgentKbLimit: number;
-  /** Plan Agent Assist is included with. */
-  agentAssistPlan: string;
-  agentAssistIncluded: boolean;
-}
-
-export const KNOWLEDGE_ENTITLEMENTS: KnowledgeEntitlements = {
-  voiceAgentTier: "Voice Agent Growth add-on",
-  voiceAgentKbLimit: 5,
-  agentAssistPlan: "Pro+",
-  agentAssistIncluded: true,
-};
-
-export function voiceAgentKbCount(sources: KnowledgeSourceRecord[]): number {
-  return sources.filter(usedByVoiceAgent).length;
-}
-
-export function agentAssistKbCount(sources: KnowledgeSourceRecord[]): number {
-  return sources.filter(usedByAgentAssist).length;
-}
-
-/** True once the Voice Agent add-on tier has no KB slots left. */
-export function voiceAgentKbLimitReached(
-  sources: KnowledgeSourceRecord[],
-  entitlements: KnowledgeEntitlements = KNOWLEDGE_ENTITLEMENTS
-): boolean {
-  return voiceAgentKbCount(sources) >= entitlements.voiceAgentKbLimit;
-}
 
 export interface KnowledgeSourceKindMeta {
   id: KnowledgeSourceKind;
@@ -227,23 +142,362 @@ export function knowledgeFacts(entry: KnowledgeEntry): {
   return { summary, points: [] };
 }
 
+// ---------------------------------------------------------------------------
+// Content
+// ---------------------------------------------------------------------------
+
+/**
+ * What a knowledge base is made of. One KB is a bucket, not a single import:
+ * an admin can point it at web pages, paste text, type Q&A pairs, upload
+ * files, and connect the apps that already hold the answers, and AI reads all
+ * of it. Each kind carries its own ceiling.
+ */
+export type KnowledgeContentTab =
+  | "web"
+  | "text"
+  | "qa"
+  | "files"
+  | "integrations";
+
+export interface KnowledgeWebPage {
+  id: string;
+  url: string;
+}
+
+/** A question the team wants answered a particular way. */
+export interface KnowledgeQaPair {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+export interface KnowledgeFileRef {
+  id: string;
+  name: string;
+  typeLabel: string;
+  sizeLabel: string;
+}
+
+/**
+ * A connected source. The app is connected once at the account; a knowledge
+ * base may opt into its knowledge. Customer context is shared, and Agent Assist
+ * resolves it for the person currently on the call — it is not content inside
+ * a specific knowledge base.
+ */
+export interface KnowledgeIntegrationRef {
+  id: string;
+  /** Catalog id of the connected app. */
+  provider: string;
+  /** Short summary of what this KB is using, e.g. "Knowledge articles". */
+  scope: string;
+  usesKnowledge: boolean;
+  usesCustomerContext: boolean;
+  customerObjects: CustomerContextObjectId[];
+  customerFields: string[];
+}
+
+/** What a connected app can power — not what kind of product it is. */
+export type SourceCapability = "knowledge" | "customerContext";
+
+export type CustomerContextObjectId =
+  | "contacts"
+  | "companies"
+  | "deals"
+  | "tickets"
+  | "customProperties";
+
+export interface CustomerContextObjectMeta {
+  id: CustomerContextObjectId;
+  label: string;
+  description: string;
+}
+
+export const CUSTOMER_CONTEXT_OBJECTS: CustomerContextObjectMeta[] = [
+  {
+    id: "contacts",
+    label: "Contacts",
+    description: "The person on the call — name, email, and contact properties.",
+  },
+  {
+    id: "companies",
+    label: "Companies",
+    description: "The account they belong to, including plan and owner.",
+  },
+  {
+    id: "deals",
+    label: "Deals",
+    description: "Open opportunities, stage, amount, and renewal.",
+  },
+  {
+    id: "tickets",
+    label: "Tickets",
+    description: "Open and recent support tickets tied to this customer.",
+  },
+  {
+    id: "customProperties",
+    label: "Custom properties",
+    description: "Extra CRM fields you choose for Agent Assist to read.",
+  },
+];
+
+export const ALL_CUSTOMER_CONTEXT_OBJECT_IDS: CustomerContextObjectId[] =
+  CUSTOMER_CONTEXT_OBJECTS.map((item) => item.id);
+
+export interface CustomerContextFieldMeta {
+  id: string;
+  label: string;
+  group: "Contact" | "Company" | "Deal";
+}
+
+/** Fields an admin can allow Agent Assist to read from customer context. */
+export const CUSTOMER_CONTEXT_FIELDS: CustomerContextFieldMeta[] = [
+  { id: "customer-since", label: "Customer since", group: "Contact" },
+  { id: "plan", label: "Plan", group: "Contact" },
+  { id: "lifecycle-stage", label: "Lifecycle stage", group: "Contact" },
+  { id: "account-owner", label: "Account owner", group: "Company" },
+  { id: "deal-stage", label: "Deal stage", group: "Deal" },
+  { id: "deal-amount", label: "Deal amount", group: "Deal" },
+  { id: "renewal-date", label: "Renewal date", group: "Deal" },
+  { id: "existing-discount", label: "Existing discount", group: "Deal" },
+];
+
+export const ALL_CUSTOMER_CONTEXT_FIELD_IDS: string[] =
+  CUSTOMER_CONTEXT_FIELDS.map((item) => item.id);
+
+export const SOURCE_CAPABILITY_LABEL: Record<SourceCapability, string> = {
+  knowledge: "Knowledge",
+  customerContext: "Customer context",
+};
+
+export interface KnowledgeIntegrationMeta {
+  id: string;
+  label: string;
+  capabilities: SourceCapability[];
+  /** Knowledge/help-center content this source can sync. */
+  knowledgeLabel: string;
+  /** One line on what connecting this gives AI. */
+  detail: string;
+}
+
+const CRM_CAPABILITIES: SourceCapability[] = ["knowledge", "customerContext"];
+const KNOWLEDGE_ONLY: SourceCapability[] = ["knowledge"];
+
+/** Apps that can feed knowledge and, for CRMs, live customer context. */
+export const KNOWLEDGE_INTEGRATIONS: KnowledgeIntegrationMeta[] = [
+  {
+    id: "hubspot",
+    label: "HubSpot",
+    capabilities: CRM_CAPABILITIES,
+    knowledgeLabel: "Knowledge articles",
+    detail:
+      "Use knowledge articles, contacts, companies, deals, tickets, and CRM properties.",
+  },
+  {
+    id: "salesforce",
+    label: "Salesforce",
+    capabilities: CRM_CAPABILITIES,
+    knowledgeLabel: "Salesforce knowledge",
+    detail:
+      "Use Salesforce knowledge and CRM records to personalize AI assistance.",
+  },
+  {
+    id: "zendesk",
+    label: "Zendesk",
+    capabilities: CRM_CAPABILITIES,
+    knowledgeLabel: "Help center",
+    detail: "Use help center content, customer details, and support tickets.",
+  },
+  {
+    id: "notion",
+    label: "Notion",
+    capabilities: KNOWLEDGE_ONLY,
+    knowledgeLabel: "Selected pages",
+    detail: "Use selected pages and databases as company knowledge.",
+  },
+  {
+    id: "google-drive",
+    label: "Google Drive",
+    capabilities: KNOWLEDGE_ONLY,
+    knowledgeLabel: "Documents and sheets",
+    detail: "Use selected documents and sheets as company knowledge.",
+  },
+  {
+    id: "zoho",
+    label: "Zoho CRM",
+    capabilities: CRM_CAPABILITIES,
+    knowledgeLabel: "Solutions",
+    detail: "Use Zoho knowledge and CRM records to personalize AI assistance.",
+  },
+  {
+    id: "intercom",
+    label: "Intercom",
+    capabilities: CRM_CAPABILITIES,
+    knowledgeLabel: "Articles",
+    detail: "Use articles, customer details, and conversations.",
+  },
+  {
+    id: "freshdesk",
+    label: "Freshdesk",
+    capabilities: CRM_CAPABILITIES,
+    knowledgeLabel: "Solution articles",
+    detail: "Use solution articles, customer details, and support tickets.",
+  },
+  {
+    id: "confluence",
+    label: "Confluence",
+    capabilities: KNOWLEDGE_ONLY,
+    knowledgeLabel: "Spaces",
+    detail: "Use selected spaces and pages as company knowledge.",
+  },
+  {
+    id: "sharepoint",
+    label: "SharePoint",
+    capabilities: KNOWLEDGE_ONLY,
+    knowledgeLabel: "Document library",
+    detail: "Use selected document libraries as company knowledge.",
+  },
+];
+
+export function knowledgeIntegrationMeta(
+  provider: string
+): KnowledgeIntegrationMeta | undefined {
+  return KNOWLEDGE_INTEGRATIONS.find((item) => item.id === provider);
+}
+
+export function knowledgeIntegrationLabel(ref: KnowledgeIntegrationRef): string {
+  return knowledgeIntegrationMeta(ref.provider)?.label ?? ref.provider;
+}
+
+export function sourceHasCustomerContext(app: KnowledgeIntegrationMeta): boolean {
+  return app.capabilities.includes("customerContext");
+}
+
+export function knowledgeIntegrationScope(input: {
+  app: KnowledgeIntegrationMeta;
+  usesKnowledge: boolean;
+  usesCustomerContext: boolean;
+  customerObjects: CustomerContextObjectId[];
+}): string {
+  const parts: string[] = [];
+  if (input.usesKnowledge) parts.push(input.app.knowledgeLabel);
+  if (input.usesCustomerContext) {
+    const labels = input.customerObjects
+      .map(
+        (id) => CUSTOMER_CONTEXT_OBJECTS.find((item) => item.id === id)?.label
+      )
+      .filter(Boolean);
+    parts.push(labels.length ? labels.join(", ") : "Customer context");
+  }
+  return parts.join(" · ");
+}
+
+export const KNOWLEDGE_CONTENT_LIMITS = {
+  webPages: 500,
+  /** Text is budgeted in characters, not sources. */
+  textChars: 40000,
+  qaPairs: 500,
+  files: 10,
+  integrations: 10,
+} as const;
+
+/** How many things AI has to read here — pasted text counts as one. */
+export function knowledgeContentItemCount(source: KnowledgeSourceRecord): number {
+  return (
+    source.webPages.length +
+    source.qaPairs.length +
+    source.files.length +
+    source.integrations.length +
+    (source.text.trim() ? 1 : 0)
+  );
+}
+
+/** Derived entries carry this prefix so re-saving replaces them in place. */
+const QA_ENTRY_PREFIX = "ke-qa-";
+
+/** Typed Q&A pairs are answers already — they need no extraction step. */
+export function entriesFromQaPairs(pairs: KnowledgeQaPair[]): KnowledgeEntry[] {
+  return pairs
+    .filter((pair) => pair.question.trim() && pair.answer.trim())
+    .map((pair) => {
+      const question = pair.question.trim();
+      return {
+        id: `${QA_ENTRY_PREFIX}${pair.id}`,
+        title: question.replace(/\?+$/, ""),
+        answer: pair.answer.trim(),
+        cues: [question.toLowerCase()],
+      };
+    });
+}
+
+/**
+ * Everything AI can answer from here: the Q&A the team typed, plus whatever
+ * ingestion pulled out of the web pages, text, and files. Authored answers come
+ * first — when both cover a subject, the wording the team chose should win.
+ */
+export function knowledgeRetrievableEntries(
+  source: KnowledgeSourceRecord
+): KnowledgeEntry[] {
+  return [...entriesFromQaPairs(source.qaPairs), ...source.entries];
+}
+
+/** What the table shows under the knowledge base name. */
+export function knowledgeOriginFromContent(source: KnowledgeSourceRecord): string {
+  if (source.webPages.length > 0) return source.webPages[0]!.url;
+  if (source.files.length > 0) return source.files[0]!.name;
+  if (source.integrations.length > 0) {
+    return knowledgeIntegrationLabel(source.integrations[0]!);
+  }
+  if (source.qaPairs.length > 0) return "Typed Q&A";
+  if (source.text.trim()) return "Pasted text";
+  return "";
+}
+
+/**
+ * A KB holds mixed content, so its `kind` is a description of what dominates
+ * rather than a choice the admin makes up front.
+ */
+export function knowledgeKindFromContent(
+  source: KnowledgeSourceRecord
+): KnowledgeSourceKind {
+  const file = source.files[0]?.name.toLowerCase() ?? "";
+  if (/\.pdf$/.test(file)) return "pdf";
+  if (/\.docx?$/.test(file)) return "doc";
+  if (/\.csv$/.test(file)) return "csv";
+  if (source.webPages.length > 0) {
+    return /help|support|docs/.test(source.webPages[0]!.url.toLowerCase())
+      ? "help-center"
+      : "website";
+  }
+  if (source.integrations.length > 0) return "internal";
+  if (source.qaPairs.length > 0 || source.text.trim()) return "faq";
+  return source.kind;
+}
+
 export interface KnowledgeSourceRecord {
   id: string;
   name: string;
   kind: KnowledgeSourceKind;
   /** Filename or URL, depending on the kind. */
   origin: string;
-  audience: KnowledgeAudience;
+  /** Admin-facing scratch note. Never read by AI. */
+  note: string;
+  /** Pages ingestion crawls. */
+  webPages: KnowledgeWebPage[];
+  /** Pasted knowledge, budgeted in characters. */
+  text: string;
+  /** Answers the team wrote themselves. */
+  qaPairs: KnowledgeQaPair[];
+  files: KnowledgeFileRef[];
+  /** Account sources this KB uses for knowledge. Customer context is shared. */
+  integrations: KnowledgeIntegrationRef[];
+  /**
+   * Who this KB serves. The three lists are additive rather than exclusive —
+   * a KB can be assigned to a couple of user groups, one extra person, and a
+   * voice agent at once. No people picked at all means every agent.
+   */
   audienceTeams: string[];
   audienceUsers: string[];
-  /**
-   * Products allowed to read this KB. Anything without Agent Assist here stays
-   * out of live agent calls — the KB itself is untouched and still serves
-   * Voice Agent.
-   */
-  usedBy: KnowledgeUsedBy;
-  /** Off means the answer surfaces without naming where it came from. */
-  showSourceToAgents: boolean;
+  audienceVoiceAgents: string[];
   /** `failed` means ingestion could not read the source — retrain to retry. */
   status: "live" | "draft" | "failed";
   updated: string;
@@ -256,6 +510,14 @@ export const KNOWLEDGE_TEAMS: DropdownListItem[] = [
   { value: "success", label: "Customer Success" },
   { value: "billing", label: "Billing" },
   { value: "ops", label: "Operations" },
+];
+
+/** Voice agents configured on the account — assignable, same as people. */
+export const KNOWLEDGE_VOICE_AGENTS: DropdownListItem[] = [
+  { value: "va-inbound-support", label: "Inbound Support Agent" },
+  { value: "va-after-hours", label: "After-hours Agent" },
+  { value: "va-lead-qualifier", label: "Lead Qualifier" },
+  { value: "va-billing", label: "Billing Concierge" },
 ];
 
 export const KNOWLEDGE_USERS: DropdownListItem[] = [
@@ -274,11 +536,20 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
     name: "JustCall product knowledge base",
     kind: "justcall-kb",
     origin: "help.justcall.io",
-    audience: "everyone",
+    note: "Public help centre. Anything customer-facing lives here first.",
+    webPages: [
+      { id: "kw-jc-integrations", url: "https://help.justcall.io/integrations" },
+      { id: "kw-jc-recordings", url: "https://help.justcall.io/recording-retention" },
+      { id: "kw-jc-porting", url: "https://help.justcall.io/porting" },
+      { id: "kw-jc-after-hours", url: "https://help.justcall.io/after-hours" },
+    ],
+    text: "",
+    qaPairs: [],
+    files: [],
+    integrations: [],
     audienceTeams: [],
     audienceUsers: [],
-    usedBy: "both",
-    showSourceToAgents: true,
+    audienceVoiceAgents: ["va-inbound-support", "va-after-hours"],
     status: "live",
     updated: "Yesterday",
     entries: [
@@ -441,11 +712,25 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
     name: "Sales competitive knowledge",
     kind: "pdf",
     origin: "Competitive Battlecards.pdf",
-    audience: "teams",
+    note: "Reviewed with Sales each quarter — check pricing lines before a demo.",
+    webPages: [],
+    text:
+      "Positioning: JustCall wins on bundled calling, messaging, and in-call AI on one plan. " +
+      "Lead with workflow depth (dialer, SMS campaigns, CRM-native logging) rather than seat price. " +
+      "Never quote a discount on the first call — route pricing pushback to the AE.",
+    qaPairs: [],
+    files: [
+      {
+        id: "kf-battlecards",
+        name: "Competitive Battlecards.pdf",
+        typeLabel: "PDF",
+        sizeLabel: "1.8 MB",
+      },
+    ],
+    integrations: [],
     audienceTeams: ["sales"],
     audienceUsers: [],
-    usedBy: "agent-assist",
-    showSourceToAgents: true,
+    audienceVoiceAgents: [],
     status: "live",
     updated: "3 days ago",
     entries: [
@@ -522,11 +807,56 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
     name: "Support macros and policies",
     kind: "csv",
     origin: "support-macros.csv",
-    audience: "teams",
+    note: "",
+    webPages: [],
+    text: "",
+    // Typed by the team, so the wording is theirs — these sit alongside what
+    // ingestion pulled out of the CSV rather than repeating it.
+    qaPairs: [
+      {
+        id: "kq-update-card",
+        question: "How do I update the card on file?",
+        answer:
+          "Billing owners can change the card under Settings → Billing. The new card is charged from the next cycle, and any failed charge retries within 24 hours.",
+      },
+      {
+        id: "kq-invoice-copy",
+        question: "Can you send me a copy of my invoice?",
+        answer:
+          "Every invoice is downloadable under Settings → Billing → Invoices, and an agent can email a copy to the billing contact on the account.",
+      },
+    ],
+    files: [
+      {
+        id: "kf-support-macros",
+        name: "support-macros.csv",
+        typeLabel: "CSV",
+        sizeLabel: "112 KB",
+      },
+    ],
+    integrations: [
+      {
+        id: "ki-support-zendesk",
+        provider: "zendesk",
+        scope: "Help center · Contacts, Tickets",
+        usesKnowledge: true,
+        usesCustomerContext: true,
+        customerObjects: ["contacts", "tickets", "customProperties"],
+        customerFields: ALL_CUSTOMER_CONTEXT_FIELD_IDS,
+      },
+      {
+        id: "ki-support-salesforce",
+        provider: "salesforce",
+        scope: "Salesforce knowledge · Contacts, Companies, Deals",
+        usesKnowledge: true,
+        usesCustomerContext: true,
+        customerObjects: ALL_CUSTOMER_CONTEXT_OBJECT_IDS,
+        customerFields: ALL_CUSTOMER_CONTEXT_FIELD_IDS,
+      },
+    ],
     audienceTeams: ["support", "billing"],
     audienceUsers: [],
-    usedBy: "both",
-    showSourceToAgents: true,
+    audienceVoiceAgents: ["va-billing"],
     status: "live",
     updated: "1 week ago",
     entries: [
@@ -585,11 +915,22 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
     name: "Security and compliance pack",
     kind: "doc",
     origin: "Security overview.docx",
-    audience: "teams",
+    note: "Draft — legal still has the data residency wording.",
+    webPages: [],
+    text: "",
+    qaPairs: [],
+    files: [
+      {
+        id: "kf-security-overview",
+        name: "Security overview.docx",
+        typeLabel: "DOCX",
+        sizeLabel: "640 KB",
+      },
+    ],
+    integrations: [],
     audienceTeams: ["sales", "success"],
     audienceUsers: [],
-    usedBy: "voice-agent",
-    showSourceToAgents: true,
+    audienceVoiceAgents: ["va-lead-qualifier"],
     status: "draft",
     updated: "Just now",
     entries: [
@@ -619,11 +960,18 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
     name: "Partner portal help center",
     kind: "help-center",
     origin: "https://partners.justcall.io/help",
-    audience: "teams",
+    note: "",
+    webPages: [
+      { id: "kw-partner-help", url: "https://partners.justcall.io/help" },
+      { id: "kw-partner-payouts", url: "https://partners.justcall.io/help/payouts" },
+    ],
+    text: "",
+    qaPairs: [],
+    files: [],
+    integrations: [],
     audienceTeams: ["success"],
     audienceUsers: [],
-    usedBy: "agent-assist",
-    showSourceToAgents: true,
+    audienceVoiceAgents: [],
     // Ingestion could not reach the pages behind the partner login.
     status: "failed",
     updated: "2 days ago",
@@ -707,13 +1055,11 @@ export interface KnowledgeHit {
   confidence: KnowledgeConfidence;
 }
 
-/** Only published KBs the admin made available to Agent Assist are searchable. */
+/** Only published knowledge bases are searchable on a live call. */
 export function liveKnowledgeSources(
   sources: KnowledgeSourceRecord[]
 ): KnowledgeSourceRecord[] {
-  return sources.filter(
-    (source) => source.status === "live" && usedByAgentAssist(source)
-  );
+  return sources.filter((source) => source.status === "live");
 }
 
 /**
@@ -738,7 +1084,7 @@ export function retrieveKnowledge(
   const scored: KnowledgeHit[] = [];
 
   for (const source of searchable) {
-    for (const entry of source.entries) {
+    for (const entry of knowledgeRetrievableEntries(source)) {
       const cueScore = entry.cues.reduce(
         (best, cue) => Math.max(best, overlap(utterance, cue) * 1.15),
         0
@@ -762,7 +1108,7 @@ export function retrieveKnowledge(
 }
 
 export function knowledgeEntryCount(source: KnowledgeSourceRecord): number {
-  return source.entries.length;
+  return knowledgeRetrievableEntries(source).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -822,7 +1168,7 @@ export function knowledgeCoverageForTrigger(
 
   let best: KnowledgeHit | null = null;
   for (const source of liveKnowledgeSources(sources)) {
-    for (const entry of source.entries) {
+    for (const entry of knowledgeRetrievableEntries(source)) {
       const score = coverageScore(trigger, entry);
       if (score < 0.7 || (best && score <= best.score)) continue;
       best = { entry, source, score, confidence: "high" };
@@ -831,43 +1177,102 @@ export function knowledgeCoverageForTrigger(
   return best;
 }
 
-/**
- * Assignees for the Knowledge table avatar stack. "Everyone" is a single
- * group face because that is the whole audience, not a list of people.
- */
-export function knowledgeAssignees(source: KnowledgeSourceRecord): {
+/** Headings and separators can share a dropdown list; only options are people. */
+function selectableOptions(
+  items: DropdownListItem[]
+): { value: string; label: string }[] {
+  return items.filter(
+    (item): item is { type?: "option"; value: string; label: string } =>
+      !("type" in item) || item.type === "option"
+  );
+}
+
+/** Voice agent faces for the avatar stack, in list order. */
+export function knowledgeVoiceAgentAssignees(source: KnowledgeSourceRecord): {
+  id: string;
+  name: string;
+  kind: "agent";
+}[] {
+  return selectableOptions(KNOWLEDGE_VOICE_AGENTS)
+    .filter((option) => source.audienceVoiceAgents.includes(option.value))
+    .map((option) => ({
+      id: option.value,
+      name: option.label,
+      kind: "agent" as const,
+    }));
+}
+
+/** Groups then members, in list order — the people this KB is assigned to. */
+function knowledgePeopleAssignees(source: KnowledgeSourceRecord): {
   id: string;
   name: string;
   kind: "member" | "group";
 }[] {
-  if (source.audience === "everyone") {
-    return [{ id: "everyone", name: "Everyone", kind: "group" }];
+  return [
+    ...selectableOptions(KNOWLEDGE_TEAMS)
+      .filter((option) => source.audienceTeams.includes(option.value))
+      .map((option) => ({
+        id: option.value,
+        name: option.label,
+        kind: "group" as const,
+      })),
+    ...selectableOptions(KNOWLEDGE_USERS)
+      .filter((option) => source.audienceUsers.includes(option.value))
+      .map((option) => ({
+        id: option.value,
+        name: option.label,
+        kind: "member" as const,
+      })),
+  ];
+}
+
+/**
+ * Assignees for the Knowledge table avatar stack. Groups, members, and voice
+ * agents stack up rather than replacing each other. No people picked means
+ * every agent, which shows as one "Everyone" face — that is the whole
+ * audience, not a list of people.
+ */
+export function knowledgeAssignees(source: KnowledgeSourceRecord): {
+  id: string;
+  name: string;
+  kind: "member" | "group" | "agent";
+}[] {
+  const voiceAgents = knowledgeVoiceAgentAssignees(source);
+  const people = knowledgePeopleAssignees(source);
+  if (people.length === 0) {
+    return [
+      { id: "everyone", name: "Everyone", kind: "group" as const },
+      ...voiceAgents,
+    ];
   }
-  const options = source.audience === "teams" ? KNOWLEDGE_TEAMS : KNOWLEDGE_USERS;
-  const picked = source.audience === "teams" ? source.audienceTeams : source.audienceUsers;
-  const kind = source.audience === "teams" ? "group" : "member";
-  return options
-    .filter(
-      (option) =>
-        (!option.type || option.type === "option") && picked.includes(option.value)
-    )
-    .map((option) => ({
-      id: option.value,
-      name: option.label,
-      kind,
-    }));
+  return [...people, ...voiceAgents];
 }
 
 export function knowledgeAssigneeLabels(source: KnowledgeSourceRecord): string[] {
   return knowledgeAssignees(source).map((person) => person.name);
 }
 
-export function knowledgeAudienceLabel(source: KnowledgeSourceRecord): string {
-  if (source.audience === "everyone") return "Everyone";
-  const labels = knowledgeAssigneeLabels(source);
-  if (labels.length === 0) return "Nobody yet";
+function truncatedLabel(labels: string[], empty: string): string {
+  if (labels.length === 0) return empty;
   if (labels.length <= 2) return labels.join(", ");
   return `${labels.slice(0, 2).join(", ")} +${labels.length - 2}`;
+}
+
+/** Who among your people this KB serves — voice agents are counted separately. */
+export function knowledgeAudienceLabel(source: KnowledgeSourceRecord): string {
+  const people = knowledgePeopleAssignees(source);
+  if (people.length === 0) return "Everyone";
+  return truncatedLabel(
+    people.map((person) => person.name),
+    "Everyone"
+  );
+}
+
+export function knowledgeVoiceAgentLabel(source: KnowledgeSourceRecord): string {
+  return truncatedLabel(
+    knowledgeVoiceAgentAssignees(source).map((agent) => agent.name),
+    "None"
+  );
 }
 
 let knowledgeIdCounter = 0;
@@ -877,20 +1282,55 @@ export function newKnowledgeSourceId(): string {
   return `ks-${Date.now().toString(36)}-${knowledgeIdCounter.toString(36)}`;
 }
 
+/** Ids for the things inside a knowledge base — pages, pairs, files. */
+export function newKnowledgeContentId(prefix: string): string {
+  knowledgeIdCounter += 1;
+  return `${prefix}-${Date.now().toString(36)}-${knowledgeIdCounter.toString(36)}`;
+}
+
+export function knowledgeFileTypeLabel(name: string): string {
+  const extension = name.split(".").pop()?.toUpperCase() ?? "";
+  return extension && extension !== name.toUpperCase() ? extension : "File";
+}
+
+export function formatKnowledgeFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** A full webpage link, or `null` when the admin typed something else. */
+export function normalizeKnowledgeUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(withScheme);
+    if (!url.hostname.includes(".")) return null;
+    return url.href.replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
 export function createEmptyKnowledgeSource(
-  kind: KnowledgeSourceKind
+  kind: KnowledgeSourceKind = "faq"
 ): KnowledgeSourceRecord {
   return {
     id: newKnowledgeSourceId(),
     name: "",
     kind,
     origin: "",
-    audience: "everyone",
+    note: "",
+    webPages: [],
+    text: "",
+    qaPairs: [],
+    files: [],
+    integrations: [],
     audienceTeams: [],
     audienceUsers: [],
-    // A new KB starts shared — that is the point of one knowledge base.
-    usedBy: "both",
-    showSourceToAgents: true,
+    audienceVoiceAgents: [],
     status: "draft",
     updated: "Just now",
     entries: [],
