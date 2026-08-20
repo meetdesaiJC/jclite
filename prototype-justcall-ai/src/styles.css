@@ -1222,6 +1222,99 @@ button.call-bar-control[data-help="active"] {
   animation: help-wait-dot 1.4s ease-in-out infinite;
 }
 
+/* Notes editor — Tailwind's reset flattens headings, lists and links, and
+   the notes box is the one place in the prototype where the agent puts them
+   back. The ramp is the shared type scale, trimmed: this is a 320px column,
+   so H1 tops out where a page's H2 would. */
+.notes-editor > :first-child {
+  margin-top: 0;
+}
+
+.notes-editor h1,
+.notes-editor h2,
+.notes-editor h3 {
+  margin: 12px 0 4px;
+  color: var(--color-foreground);
+  text-wrap: pretty;
+}
+
+.notes-editor h1 {
+  font-size: var(--text-heading-xxl);
+  line-height: var(--text-heading-xxl--line-height);
+  font-weight: 600;
+}
+
+.notes-editor h2 {
+  font-size: var(--text-heading-xl);
+  line-height: var(--text-heading-xl--line-height);
+  font-weight: 600;
+}
+
+.notes-editor h3 {
+  font-size: var(--text-heading-lg);
+  line-height: var(--text-heading-lg--line-height);
+  font-weight: 600;
+}
+
+.notes-editor ul,
+.notes-editor ol {
+  margin: 2px 0;
+  padding-left: 20px;
+}
+
+.notes-editor ul {
+  list-style: disc;
+}
+
+.notes-editor ol {
+  list-style: decimal;
+}
+
+.notes-editor ul ul {
+  list-style: circle;
+}
+
+.notes-editor li {
+  margin: 1px 0;
+}
+
+.notes-editor li::marker {
+  color: var(--color-muted-foreground);
+}
+
+.notes-editor blockquote {
+  margin: 6px 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--color-line);
+  color: var(--color-muted-foreground);
+}
+
+.notes-editor b,
+.notes-editor strong {
+  font-weight: 600;
+}
+
+.notes-editor i,
+.notes-editor em {
+  font-style: italic;
+}
+
+.notes-editor u {
+  text-decoration: underline;
+}
+
+.notes-editor s,
+.notes-editor strike {
+  text-decoration: line-through;
+}
+
+.notes-editor a {
+  color: var(--color-brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: text;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .assist-faq-card {
     animation: none !important;

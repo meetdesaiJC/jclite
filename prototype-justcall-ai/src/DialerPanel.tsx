@@ -12,7 +12,7 @@ import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
-import { InputField, TextArea } from "@/components/InputField";
+import { InputField } from "@/components/InputField";
 import { AvatarIndicator } from "@/components/Avatar";
 import {
   IconCallDisposition,
@@ -37,6 +37,12 @@ import {
   IconCallTransfer,
 } from "./icons/CallControlIcons";
 import { AgentAssistCallSheet, LiveTranscriptPanel } from "./AgentAssistCallSheet";
+import {
+  NotesEditor,
+  type NotesEditorCaret,
+  type NotesEditorHandle,
+  type NotesEditorValue,
+} from "./NotesEditor";
 import { LiveAgentAssistPanel } from "./LiveAgentAssistPanel";
 import {
   LiveAssistControl,
@@ -1285,7 +1291,7 @@ function LiveCallStage({
   onActionStatesChange?: (states: Record<string, ActionState>) => void;
 }) {
   const [asidePanel, setAsidePanel] = useState<AsidePanel | null>(null);
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState<NotesEditorValue>({ html: "", text: "" });
 
   const liveAssist = useLiveAssist({
     scenarioId: scenario.id,
@@ -1327,18 +1333,11 @@ function LiveCallStage({
   const shownTranscript = asideSwitch.shown === "transcript";
   const shownAssist = asideSwitch.shown === "assist";
 
-  const notesAreaRef = useRef<HTMLTextAreaElement>(null);
-  const notesCaret = useRef({ start: 0, end: 0, scroll: 0 });
+  const notesEditorRef = useRef<NotesEditorHandle>(null);
+  // Parent-owned: the editor unmounts with the column, the caret shouldn't.
+  const notesCaret = useRef<NotesEditorCaret>({ offset: 0, scroll: 0 });
 
-  const saveNotesCaret = () => {
-    const el = notesAreaRef.current;
-    if (!el) return;
-    notesCaret.current = {
-      start: el.selectionStart,
-      end: el.selectionEnd,
-      scroll: el.scrollTop,
-    };
-  };
+  const saveNotesCaret = () => notesEditorRef.current?.saveCaret();
 
   const closeAside = () => {
     if (asidePanel === "notes") saveNotesCaret();
@@ -1375,6 +1374,8 @@ function LiveCallStage({
       const dialogs = document.querySelectorAll('[role="dialog"]');
       if (dialogs.length > 1) return;
       if (document.querySelector('[role="listbox"]')) return;
+      // The notes formatting overlay dismisses itself first.
+      if (document.querySelector("[data-notes-overlay]")) return;
       if (!asidePanel) return;
       event.preventDefault();
       event.stopPropagation();
@@ -1386,11 +1387,7 @@ function LiveCallStage({
 
   useLayoutEffect(() => {
     if (!shownNotes || !aside.entered || aside.leaving) return;
-    const el = notesAreaRef.current;
-    if (!el) return;
-    el.focus({ preventScroll: true });
-    el.setSelectionRange(notesCaret.current.start, notesCaret.current.end);
-    el.scrollTop = notesCaret.current.scroll;
+    notesEditorRef.current?.focus();
   }, [shownNotes, aside.entered, aside.leaving]);
 
   const prevEnteredRef = useRef(aside.entered);
@@ -1549,19 +1546,19 @@ function LiveCallStage({
                   </button>
                 </header>
                 <div className="flex min-h-0 flex-1 flex-col gap-1 p-4">
-                  <TextArea
-                    ref={notesAreaRef}
+                  <NotesEditor
+                    ref={notesEditorRef}
+                    caretRef={notesCaret}
                     placeholder="Type your notes here..."
                     maxLength={NOTES_MAX}
-                    rows={3}
                     value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
+                    onChange={setNotes}
                     wrapperClassName="min-h-0 flex-1"
-                    className="h-auto min-h-0 flex-1 resize-none overflow-y-auto"
-                    aria-label="Call notes"
+                    className="min-h-0 flex-1"
+                    ariaLabel="Call notes"
                   />
                   <p className="shrink-0 text-right text-label-sm text-muted-foreground tabular-nums">
-                    {notes.length}/{NOTES_MAX}
+                    {notes.text.length}/{NOTES_MAX}
                   </p>
                 </div>
               </div>
@@ -2290,7 +2287,7 @@ function WrapUpPanel({
 }) {
   const [rating, setRating] = useState(0);
   const [outcome, setOutcome] = useState<string>(suggestedOutcome);
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState<NotesEditorValue>({ html: "", text: "" });
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<number | null>(null);
 
@@ -2376,16 +2373,16 @@ function WrapUpPanel({
         <div className="flex flex-col gap-2">
           <p className="text-label-md text-foreground">Notes</p>
           <div className="flex flex-col gap-1">
-            <TextArea
+            <NotesEditor
               placeholder="Add your notes about this call..."
               maxLength={NOTES_MAX}
               value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              className="h-32 resize-none"
-              aria-label="Notes"
+              onChange={setNotes}
+              className="h-32"
+              ariaLabel="Notes"
             />
             <p className="text-right text-label-sm text-muted-foreground tabular-nums">
-              {notes.length}/{NOTES_MAX}
+              {notes.text.length}/{NOTES_MAX}
             </p>
           </div>
         </div>
