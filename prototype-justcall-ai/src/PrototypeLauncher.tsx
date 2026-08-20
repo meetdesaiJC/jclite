@@ -18,18 +18,20 @@ function PrototypeCard({
     <button
       type="button"
       onClick={onClick}
-      className="group relative h-[179px] w-full overflow-hidden rounded-lg border border-line bg-avatar-indigo-bg text-left transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-1 hover:border-brand hover:bg-brand-subtle hover:shadow-200 active:scale-[0.98] active:duration-75 active:ease-in"
+      className="group flex h-[179px] w-full flex-col justify-end overflow-hidden rounded-lg border border-line bg-avatar-indigo-bg p-[19px] text-left transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-1 hover:border-brand hover:bg-brand-subtle hover:shadow-200 active:scale-[0.98] active:duration-75 active:ease-in"
     >
-      <div className="absolute left-[19px] top-[85px] flex w-[260px] flex-col gap-1">
-        <p className="w-full text-heading-xl text-disabled-fg transition-colors duration-200 ease-out group-hover:text-brand">
-          {index}
-        </p>
-        <p className="w-full text-heading-xl text-foreground">{title}</p>
+      <div className="flex w-full items-end justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-heading-xl text-disabled-fg transition-colors duration-200 ease-out group-hover:text-brand">
+            {index}
+          </p>
+          <p className="text-heading-xl text-foreground">{title}</p>
+        </div>
+        <IconArrowRight
+          size={24}
+          className="shrink-0 text-foreground transition-transform duration-200 ease-out group-hover:translate-x-1.5"
+        />
       </div>
-      <IconArrowRight
-        size={24}
-        className="absolute right-[19px] top-[134px] text-foreground transition-transform duration-200 ease-out group-hover:translate-x-1.5"
-      />
     </button>
   );
 }
