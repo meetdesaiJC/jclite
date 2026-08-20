@@ -836,7 +836,7 @@ function ActionStatusToggle({
         disconnected && integration ? (
           <button
             type="button"
-            className="cursor-pointer bg-transparent p-0 font-medium hover:underline"
+            className="cursor-pointer bg-transparent p-0 font-medium"
             onClick={() => onConnect(integration.id)}
           >
             Connect {integration.name}

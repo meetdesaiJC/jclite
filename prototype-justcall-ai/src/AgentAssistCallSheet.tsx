@@ -27,7 +27,7 @@ import { IconJcaiAgentAssist } from "./icons/JustCallAiNavIcons";
 import {
   CALL_SCENARIOS,
   callActionProgressLabel,
-  postCallSectionTitle,
+  POST_CALL_SECTION_TITLE,
   resolvePostCallActionItems,
   simulationAt,
   type CallActionKind,
@@ -241,6 +241,10 @@ export function AgentAssistCallSheet({
             <Dropdown
               searchable={false}
               variant="borderless"
+              // The trigger sits against the panel's right edge, so the menu
+              // hangs from that edge — a left-hung menu gets clipped by the
+              // panel's overflow.
+              align="end"
               leftIcon={guidanceDetached ? undefined : <IconScript />}
               options={options}
               value={scenario.id}
@@ -580,37 +584,19 @@ function usePostCallGeneration({
   };
 }
 
+/**
+ * The AI mark stays a sparkle for the life of the section — it pulses while
+ * the section is still generating and settles once it's done. No swap to a
+ * check: the sparkle is what says "this came from AI".
+ */
 function RecapSparkleCheck({ ready }: { ready: boolean }) {
   return (
     <span className="relative flex size-4 shrink-0 items-center justify-center">
       <IconSparkles
         size={16}
         aria-hidden="true"
-        className={cn(
-          "absolute inset-0 size-4 text-ai",
-          ready ? "recap-sparkle-out" : "recap-sparkle-pulse"
-        )}
+        className={cn("size-4 text-ai", !ready && "recap-sparkle-pulse")}
       />
-      <svg
-        viewBox="0 0 16 16"
-        width={16}
-        height={16}
-        fill="none"
-        aria-hidden="true"
-        className={cn(
-          "absolute inset-0 size-4 text-success",
-          ready ? "recap-check-in" : "opacity-0"
-        )}
-      >
-        <path
-          className="recap-check-mark"
-          d="M3.4 8.15 L6.55 11.2 L12.6 4.7"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
     </span>
   );
 }
@@ -746,26 +732,37 @@ function PostCallAssist({
     []
   );
 
-  const items = useMemo(
+  const items: RecapActionItem[] = useMemo(
     () =>
       resolved.map((item) => {
         const override = overrides[item.id];
-        if (!override) return item;
+        const markedManually = override?.markedManually === true;
+        if (!override) return { ...item, markedManually };
         return {
           ...item,
           status: override.status,
-          result: override.markedManually ? undefined : item.result,
+          result: markedManually ? undefined : item.result,
+          markedManually,
         };
       }),
     [resolved, overrides]
   );
-  const sectionTitle = postCallSectionTitle(items);
 
   const patchItem = (
     id: string,
     patch: { status: CallActionStatus; markedManually?: boolean }
   ) => {
     setOverrides((current) => ({ ...current, [id]: patch }));
+  };
+
+  /** Unticking drops the override so the row falls back to what the call left. */
+  const clearItem = (id: string) => {
+    setOverrides((current) => {
+      if (!(id in current)) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
   };
 
   const runItem = (item: ResolvedCallActionItem) => {
@@ -838,7 +835,7 @@ function PostCallAssist({
               className="flex min-h-7 items-center gap-1.5 text-label-md-semi text-foreground"
             >
               <RecapSparkleCheck ready={complete} />
-              {sectionTitle}
+              {POST_CALL_SECTION_TITLE}
             </h2>
             {visibleItems === 0 ? (
               <RecapItemSkeleton copy={statusCopy} reduced={reduced} />
@@ -852,11 +849,13 @@ function PostCallAssist({
                     animate={index >= itemsAtMount}
                     onRun={() => runItem(item)}
                     onRetry={() => runItem(item)}
-                    onMarkDone={() =>
-                      patchItem(item.id, {
-                        status: "completed",
-                        markedManually: true,
-                      })
+                    onToggleDone={() =>
+                      item.markedManually
+                        ? clearItem(item.id)
+                        : patchItem(item.id, {
+                            status: "completed",
+                            markedManually: true,
+                          })
                     }
                   />
                 ))}
@@ -868,7 +867,7 @@ function PostCallAssist({
 
       <p className="sr-only" aria-live="polite">
         {complete
-          ? `Recap ready. Call summary and ${sectionTitle.toLowerCase()} are ready.`
+          ? `Recap ready. Call summary and ${POST_CALL_SECTION_TITLE.toLowerCase()} are ready.`
           : statusCopy}
       </p>
     </div>
@@ -943,7 +942,13 @@ const ACTION_CTA_CLASS =
   "inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-[4px] px-2 text-label-sm font-medium text-brand outline-none transition-colors hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24";
 
 const ACTION_VIEW_CLASS =
-  "text-label-sm text-brand outline-none transition-colors hover:text-brand-hover hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-brand/24";
+  "text-label-sm text-brand outline-none transition-colors hover:text-brand-hover focus-visible:ring-2 focus-visible:ring-brand/24";
+
+/**
+ * A recap row remembers whether its tick came from the agent's hand or from
+ * work that actually ran — only the former can be taken back.
+ */
+type RecapActionItem = ResolvedCallActionItem & { markedManually: boolean };
 
 function actionResultLink(result: CallActionResult | undefined): {
   href: string;
@@ -951,6 +956,70 @@ function actionResultLink(result: CallActionResult | undefined): {
 } | null {
   if (!result?.href) return null;
   return { href: result.href, label: result.hrefLabel ?? "View" };
+}
+
+/**
+ * Done-ness leads the row. A ticked box on the left and an empty one right
+ * under it read as a list at a glance — faster than parsing "Sent" against
+ * "Scheduled" on the far side of every title. When a pending item can be
+ * closed by hand the box is the control itself, so the row never needs a
+ * second "mark as done" button competing with its CTA. A tick the agent
+ * placed is theirs to take back; a tick the call earned is a receipt and
+ * stays put.
+ */
+function ActionItemCheck({
+  done,
+  onToggle,
+  label,
+}: {
+  done: boolean;
+  onToggle?: () => void;
+  label?: string;
+}) {
+  const box = cn(
+    "flex size-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors",
+    done ? "border-success bg-success text-white" : "border-control-border bg-white"
+  );
+  const tick = done ? (
+    <svg viewBox="0 0 16 16" width={10} height={10} fill="none" aria-hidden="true">
+      <path
+        d="M3.5 8.5L6.5 11.5L12.5 4.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ) : null;
+
+  if (!onToggle) {
+    return (
+      <span className={box} role="img" aria-label={done ? "Done" : "Not done"}>
+        {tick}
+      </span>
+    );
+  }
+
+  const intent = done ? "as not done" : "as done";
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      role="checkbox"
+      aria-checked={done}
+      aria-label={label ? `Mark "${label}" ${intent}` : `Mark ${intent}`}
+      className={cn(
+        box,
+        "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+        done
+          ? "hover:border-success/80 hover:bg-success/80"
+          : "hover:border-success"
+      )}
+    >
+      {tick}
+    </button>
+  );
 }
 
 /**
@@ -964,14 +1033,14 @@ function ActionItemRow({
   animate,
   onRun,
   onRetry,
-  onMarkDone,
+  onToggleDone,
 }: {
-  item: ResolvedCallActionItem;
+  item: RecapActionItem;
   reduced: boolean;
   animate: boolean;
   onRun: () => void;
   onRetry: () => void;
-  onMarkDone: () => void;
+  onToggleDone: () => void;
 }) {
   const pending = item.status === "pending";
   const completed = item.status === "completed";
@@ -980,7 +1049,9 @@ function ActionItemRow({
   const cta = item.action ? ACTION_CTA[item.action] : null;
   const CtaIcon = cta?.icon;
   const viewLink = completed ? actionResultLink(item.result) : null;
-  const showMarkDone = pending && item.allowMarkDone;
+  const showToggle =
+    item.allowMarkDone === true &&
+    (pending || (completed && item.markedManually));
   const needsAttention = pending || failed || busy;
 
   return (
@@ -990,6 +1061,11 @@ function ActionItemRow({
         !reduced && animate && "recap-item-in"
       )}
     >
+      <ActionItemCheck
+        done={completed}
+        onToggle={showToggle ? onToggleDone : undefined}
+        label={item.title}
+      />
       <p
         className={cn(
           "min-w-0 flex-1 text-pretty text-label-md",
@@ -1009,33 +1085,16 @@ function ActionItemRow({
           </span>
         ) : null}
 
-        {completed ? (
-          <span className="inline-flex h-8 items-center gap-3 px-1.5">
-            <span
-              className="inline-flex items-center gap-1.5"
-              role="status"
+        {completed && viewLink ? (
+          <span className="inline-flex h-8 items-center px-1.5">
+            <a
+              href={viewLink.href}
+              target="_blank"
+              rel="noreferrer"
+              className={ACTION_VIEW_CLASS}
             >
-              <IconCheck
-                size={16}
-                aria-hidden="true"
-                className="size-4 shrink-0 text-success"
-              />
-              {item.outcome ? (
-                <span className="text-label-sm text-muted-foreground">
-                  {item.outcome}
-                </span>
-              ) : null}
-            </span>
-            {viewLink ? (
-              <a
-                href={viewLink.href}
-                target="_blank"
-                rel="noreferrer"
-                className={ACTION_VIEW_CLASS}
-              >
-                {viewLink.label}
-              </a>
-            ) : null}
+              {viewLink.label}
+            </a>
           </span>
         ) : null}
 
@@ -1051,16 +1110,6 @@ function ActionItemRow({
             />
             <span className="text-label-sm text-muted-foreground">Not completed</span>
           </span>
-        ) : null}
-
-        {showMarkDone ? (
-          <button
-            type="button"
-            onClick={onMarkDone}
-            className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[4px] px-2 text-label-sm text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
-          >
-            Mark as done
-          </button>
         ) : null}
 
         {pending && cta && CtaIcon ? (

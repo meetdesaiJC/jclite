@@ -356,7 +356,7 @@ export function InCallEmailSuggestionCard({
   return (
     <div
       className={cn(
-        "flex shrink-0 flex-col gap-2 rounded-lg border border-line bg-white px-3 py-2",
+        "flex shrink-0 flex-col gap-2 rounded-lg border border-line bg-white px-3 pb-3.5 pt-2",
         className
       )}
     >

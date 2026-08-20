@@ -599,7 +599,7 @@ export function GuidanceResourceLink({
 
   const linkClass = cn(
     "inline-flex min-w-0 max-w-full items-center gap-1 text-label-md text-brand",
-    "hover:text-brand-hover hover:underline hover:underline-offset-2",
+    "hover:text-brand-hover",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24 focus-visible:ring-offset-1",
     className
   );
