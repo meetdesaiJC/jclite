@@ -1144,6 +1144,7 @@ function CallMorphStage({
           onMute={onMute}
           onHoldToggle={onHoldToggle}
           onHangup={onHangup}
+          onActionStatesChange={onActionStatesChange}
         />
       ) : (
         <RingingPhone
@@ -1266,6 +1267,7 @@ function LiveCallStage({
   onMute,
   onHoldToggle,
   onHangup,
+  onActionStatesChange,
 }: {
   className?: string;
   reduced: boolean;
@@ -1280,6 +1282,7 @@ function LiveCallStage({
   onMute: () => void;
   onHoldToggle: () => void;
   onHangup: () => void;
+  onActionStatesChange?: (states: Record<string, ActionState>) => void;
 }) {
   const [asidePanel, setAsidePanel] = useState<AsidePanel | null>(null);
   const [notes, setNotes] = useState("");
@@ -1313,7 +1316,7 @@ function LiveCallStage({
   // The width the aside settles at, kept across the close so the cards inside
   // keep their layout while the column clips away from them. Next open uses
   // this rather than a fresh default, unless the agent has never opened it.
-  const asideWidthRef = useRef(CALL_ASIDE.defaultPx);
+  const asideWidthRef = useRef<number>(CALL_ASIDE.defaultPx);
   const closedSnapshotRef = useRef<{ script: number; suggestions: number } | null>(
     null
   );
