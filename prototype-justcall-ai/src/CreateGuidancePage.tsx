@@ -53,6 +53,11 @@ export interface CreateGuidancePageProps {
   startWithGenerate?: boolean;
   /** Offered when Knowledge already covers the trigger. Optional escape hatch. */
   onUseKnowledgeInstead?: () => void;
+  /**
+   * Leaves for the Knowledge page. The way out when AI drafting has nothing to
+   * draw on — no Knowledge Base, none on for Agent Assist, or none with answers.
+   */
+  onOpenKnowledge?: () => void;
   onClose: () => void;
   onSave: (item: GuidanceItem) => void;
 }
@@ -142,6 +147,7 @@ export function CreateGuidancePage({
   knowledgeSources = SEED_KNOWLEDGE_SOURCES,
   startWithGenerate = false,
   onUseKnowledgeInstead,
+  onOpenKnowledge,
   onClose,
   onSave,
 }: CreateGuidancePageProps) {
@@ -556,6 +562,14 @@ export function CreateGuidancePage({
       <GenerateFromKnowledgeModal
         open={generateOpen}
         sources={knowledgeSources}
+        onGoToKnowledge={
+          onOpenKnowledge
+            ? () => {
+                setGenerateOpen(false);
+                onOpenKnowledge();
+              }
+            : undefined
+        }
         onClose={() => setGenerateOpen(false)}
         onApply={(proposal) => {
           // AI fills the form; the admin still reviews and publishes.
@@ -864,15 +878,17 @@ function GenerateFromKnowledgeModal({
   sources,
   onClose,
   onApply,
+  onGoToKnowledge,
 }: {
   open: boolean;
   sources: KnowledgeSourceRecord[];
   onClose: () => void;
   onApply: (proposal: GuidanceItem) => void;
+  /** Leaves for the Knowledge page — the only place the gap can be closed. */
+  onGoToKnowledge?: () => void;
 }) {
-  const usable = liveKnowledgeSources(sources).filter(
-    (source) => knowledgeEntryCount(source) > 0
-  );
+  const live = liveKnowledgeSources(sources);
+  const usable = live.filter((source) => knowledgeEntryCount(source) > 0);
   const [sourceIds, setSourceIds] = React.useState<string[]>([]);
   const [proposals, setProposals] = React.useState<GuidanceItem[]>([]);
 
@@ -906,6 +922,64 @@ function GenerateFromKnowledgeModal({
     );
   };
 
+  // Nothing to draft from. Which step is missing decides the copy and the
+  // button, so the modal never ends on a disabled Generate.
+  const gap =
+    usable.length > 0
+      ? null
+      : sources.length === 0
+        ? {
+            title: "No Knowledge Base yet",
+            body: "AI drafts response cards from the answers in a Knowledge Base. Create one from a help centre, files, or typed Q&A, and it can propose the trigger and the response for you.",
+            action: "Create Knowledge Base",
+          }
+        : live.length === 0
+          ? {
+              title: "No Knowledge Base is on for Agent Assist",
+              body: `You have ${sources.length === 1 ? "a Knowledge Base" : `${sources.length} Knowledge Bases`}, but none of ${sources.length === 1 ? "it is" : "them are"} switched on for Agent Assist yet. Turn one on and AI can draft response cards from its answers.`,
+              action: "Go to Knowledge Base",
+            }
+          : {
+              title: "No answers to draft from yet",
+              body: "The Knowledge Bases on for Agent Assist have no answers in them yet. Add pages, files, or Q&A, and AI can draft response cards from them.",
+              action: "Add knowledge",
+            };
+
+  if (gap) {
+    return (
+      <Modal
+        open={open}
+        onClose={onClose}
+        size="md"
+        title="Generate response cards from Knowledge Base"
+        footer={
+          <>
+            <Button variant="grey-outline" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            {onGoToKnowledge ? (
+              <Button size="sm" onClick={onGoToKnowledge}>
+                {gap.action}
+              </Button>
+            ) : null}
+          </>
+        }
+      >
+        <div className="flex flex-col items-center gap-4 px-4 py-6 text-center">
+          <span className="flex size-12 items-center justify-center rounded-full bg-secondary-bg text-muted-foreground">
+            <IconKnowledge className="size-5" />
+          </span>
+          <div className="flex max-w-[400px] flex-col gap-1">
+            <p className="text-label-md-semi text-foreground">{gap.title}</p>
+            <p className="text-pretty text-paragraph-md text-muted-foreground">
+              {gap.body}
+            </p>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       open={open}
@@ -930,35 +1004,27 @@ function GenerateFromKnowledgeModal({
       }
     >
       <div className="flex flex-col gap-4">
-        {usable.length === 0 ? (
-          <p className="text-pretty text-paragraph-md text-muted-foreground">
-            No Knowledge Base is available to Agent Assist yet. Add one under
-            Knowledge Base — or switch Agent Assist on for an existing one — and
-            AI can draft response cards from it.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            <span className="text-label-md text-foreground">Knowledge Bases</span>
-            <ul className="flex flex-col gap-1 rounded-lg border border-line p-1">
-              {usable.map((source) => (
-                <li key={source.id}>
-                  <label className="flex cursor-pointer items-center gap-2 rounded-[4px] px-2 py-1.5 hover:bg-secondary-bg">
-                    <Checkbox
-                      checked={sourceIds.includes(source.id)}
-                      onCheckedChange={() => toggleSource(source.id)}
-                    />
-                    <span className="min-w-0 flex-1 truncate text-paragraph-md text-foreground">
-                      {source.name}
-                    </span>
-                    <span className="shrink-0 text-label-sm text-muted-foreground tabular-nums">
-                      {knowledgeEntryCount(source)} answers
-                    </span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <div className="flex flex-col gap-2">
+          <span className="text-label-md text-foreground">Knowledge Bases</span>
+          <ul className="flex flex-col gap-1 rounded-lg border border-line p-1">
+            {usable.map((source) => (
+              <li key={source.id}>
+                <label className="flex cursor-pointer items-center gap-2 rounded-[4px] px-2 py-1.5 hover:bg-secondary-bg">
+                  <Checkbox
+                    checked={sourceIds.includes(source.id)}
+                    onCheckedChange={() => toggleSource(source.id)}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-paragraph-md text-foreground">
+                    {source.name}
+                  </span>
+                  <span className="shrink-0 text-label-sm text-muted-foreground tabular-nums">
+                    {knowledgeEntryCount(source)} answers
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         {proposals.length > 0 ? (
           <div className="flex flex-col gap-2">

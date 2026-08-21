@@ -124,6 +124,12 @@ export interface KnowledgeEntry {
   cues: string[];
   /** Deep link the agent can open when they want the original. */
   sourceUrl?: string;
+  /**
+   * What that link is called. The card names the page the answer came from —
+   * not the knowledge base it sits in, which the agent already knows, and not
+   * the raw URL, which reads as debug output.
+   */
+  sourceTitle?: string;
   /** Lead line above the facts. Optional — the title already orients. */
   summary?: string;
   /** Scannable facts. When omitted, the card shows `answer` as a paragraph. */
@@ -600,6 +606,7 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
           "salesforce sync",
         ],
         sourceUrl: "https://help.justcall.io/salesforce",
+        sourceTitle: "Salesforce integration setup",
       },
       {
         id: "ke-recording-retention",
@@ -629,6 +636,7 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
           "storage of call recordings",
         ],
         sourceUrl: "https://help.justcall.io/recording-retention",
+        sourceTitle: "Recording storage and retention",
       },
       {
         id: "ke-porting",
@@ -653,6 +661,7 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
           "how long does porting take",
         ],
         sourceUrl: "https://help.justcall.io/porting",
+        sourceTitle: "Porting your existing numbers",
       },
       {
         id: "ke-zoho-recruit",
@@ -677,6 +686,7 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
           "zoho recruit integration",
         ],
         sourceUrl: "https://help.justcall.io/zoho",
+        sourceTitle: "Zoho integration setup",
       },
       {
         id: "ke-after-hours-routing",
@@ -702,6 +712,7 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
           "on call routing",
         ],
         sourceUrl: "https://help.justcall.io/after-hours",
+        sourceTitle: "After-hours routing rules",
       },
       {
         id: "ke-sms-compliance",
@@ -727,6 +738,7 @@ export const SEED_KNOWLEDGE_SOURCES: KnowledgeSourceRecord[] = [
           "10dlc registration",
         ],
         sourceUrl: "https://help.justcall.io/sms-compliance",
+        sourceTitle: "SMS consent and opt-out rules",
       },
     ],
   },

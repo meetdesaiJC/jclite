@@ -28,8 +28,9 @@ import {
   TablePagination,
   TableBulkBar,
 } from "@/components/Table";
-import scriptsEmptyIllustration from "./assets/scripts-empty.png";
-import faqsEmptyIllustration from "./assets/faqs-empty.png";
+import scriptsEmptyIllustration from "./assets/scripts-empty.svg";
+import responseCardsEmptyIllustration from "./assets/response-cards-empty.svg";
+import coachingEmptyIllustration from "./assets/coaching-empty.svg";
 import {
   ScriptTemplatesModal,
   type ScriptStartChoice,
@@ -87,6 +88,7 @@ import {
   type CoachingRule,
 } from "./coachingData";
 import { CoachingCueIcon, coachingTone } from "./coachingVisuals";
+import { PageEmptyState } from "./PageEmptyState";
 import type { KnowledgeSourceRecord } from "./knowledgeData";
 
 /**
@@ -172,7 +174,7 @@ const VIEW_COPY: Record<PlaybookView, { title: string; description: string }> = 
   coaching: {
     title: "Behavioral Coaching",
     description:
-      "Coach agents on how the conversation is going — talk balance, delivery, and customer signals.",
+      "Nudge agents on pacing, talk balance, and tone while the call is still live.",
   },
 };
 
@@ -388,50 +390,14 @@ function ActionButtonGroup({
   );
 }
 
-function AgentAssistEmptyState({
-  illustrationSrc,
-  illustrationAlt,
-  title,
-  description,
-  actionLabel,
-  onAction,
-}: {
-  illustrationSrc: string;
-  illustrationAlt: string;
-  title: string;
-  description: string;
-  actionLabel: string;
-  onAction?: () => void;
-}) {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-6 pb-14">
-      <div className="flex flex-col items-center gap-6">
-        <div className="relative h-[281px] w-[418px] shrink-0 overflow-hidden rounded-[6px]">
-          <img
-            src={illustrationSrc}
-            alt={illustrationAlt}
-            className="size-full object-contain"
-            width={418}
-            height={281}
-          />
-        </div>
-        <div className="flex flex-col items-center gap-6">
-          <div className="flex max-w-[444px] flex-col items-center gap-2 text-center">
-            <p className="text-[16px] leading-6 font-semibold text-foreground">{title}</p>
-            <p className="text-[14px] leading-5 text-muted-foreground">{description}</p>
-          </div>
-          <Button size="md" onClick={onAction}>
-            {actionLabel}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export interface AgentAssistPlaybooksPageProps {
   /** Which list to show — owned by the side nav. */
   view: PlaybookView;
+  /**
+   * Whether Scripts starts with the demo library. Off for the empty-state
+   * walkthrough, where every list begins with nothing in it.
+   */
+  seeded?: boolean;
   guidanceItems: GuidanceItem[];
   onGuidanceItemsChange: (next: GuidanceItem[]) => void;
   coachingRules: CoachingRule[];
@@ -442,6 +408,7 @@ export interface AgentAssistPlaybooksPageProps {
 
 export function AgentAssistPlaybooksPage({
   view: tab,
+  seeded = true,
   guidanceItems,
   onGuidanceItemsChange,
   coachingRules,
@@ -462,7 +429,11 @@ export function AgentAssistPlaybooksPage({
   const [coachingTemplatesOpen, setCoachingTemplatesOpen] = React.useState(false);
   const [builder, setBuilder] = React.useState<BuilderLaunch | null>(null);
   const [scripts, setScripts] = React.useState<ScriptRow[]>(() =>
-    SEED_SCRIPTS.map((item) => toScriptRow(item.playbook, item.status, item.updated))
+    seeded
+      ? SEED_SCRIPTS.map((item) =>
+          toScriptRow(item.playbook, item.status, item.updated)
+        )
+      : []
   );
   const [guidanceLaunch, setGuidanceLaunch] = React.useState<{
     mode: "create" | "edit";
@@ -755,6 +726,10 @@ export function AgentAssistPlaybooksPage({
           setGuidanceLaunch(null);
           onOpenKnowledge();
         }}
+        onOpenKnowledge={() => {
+          setGuidanceLaunch(null);
+          onOpenKnowledge();
+        }}
         onClose={() => setGuidanceLaunch(null)}
         onSave={saveGuidance}
       />
@@ -784,11 +759,16 @@ export function AgentAssistPlaybooksPage({
 
   // One primary creation CTA per view (§4): the active view decides what it
   // creates, and the empty state owns the call to action when it is showing.
+  // Header and empty state read the same label from here, so the wording an
+  // admin sees before they have anything is the wording they keep afterwards.
   const createCta = isScripts
-    ? { label: "New script", onClick: openScriptTemplates }
+    ? { label: "Create script", onClick: openScriptTemplates }
     : isGuidance
-      ? { label: "New response card", onClick: openGuidanceTemplates }
-      : { label: "New coaching", onClick: () => setCoachingTemplatesOpen(true) };
+      ? { label: "Create response card", onClick: openGuidanceTemplates }
+      : {
+          label: "Create coaching rule",
+          onClick: () => setCoachingTemplatesOpen(true),
+        };
 
   return (
     <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
@@ -806,31 +786,28 @@ export function AgentAssistPlaybooksPage({
 
       {isEmpty ? (
         isScripts ? (
-          <AgentAssistEmptyState
+          <PageEmptyState
             illustrationSrc={scriptsEmptyIllustration}
-            illustrationAlt=""
-            title="No scripts yet"
-            description="Create a script for the conversations you want agents to run — then Agent Assist guides them live."
-            actionLabel="Create script"
-            onAction={openScriptTemplates}
+            title="Guide agents through every call"
+            description="Create scripts with the talking points and steps agents should follow during conversations."
+            actionLabel={createCta.label}
+            onAction={createCta.onClick}
           />
         ) : isCoaching ? (
-          <AgentAssistEmptyState
-            illustrationSrc={faqsEmptyIllustration}
-            illustrationAlt=""
-            title="No behavioral coaching yet"
-            description="Start from a coaching concept — talk balance, delivery, or customer signals — then set when it should fire."
-            actionLabel="Create coaching"
-            onAction={() => setCoachingTemplatesOpen(true)}
+          <PageEmptyState
+            illustrationSrc={coachingEmptyIllustration}
+            title="Help every agent perform at their best"
+            description="Give agents timely coaching during calls so they can adjust their approach while the conversation is still happening."
+            actionLabel={createCta.label}
+            onAction={createCta.onClick}
           />
         ) : (
-          <AgentAssistEmptyState
-            illustrationSrc={faqsEmptyIllustration}
-            illustrationAlt=""
-            title="No response cards yet"
-            description="Surface answers when a topic comes up, or remind agents when something required still needs covering."
-            actionLabel="Create response card"
-            onAction={openGuidanceTemplates}
+          <PageEmptyState
+            illustrationSrc={responseCardsEmptyIllustration}
+            title="Give agents the right guidance at the right time"
+            description="Surface helpful guidance when specific questions, topics, or situations come up during a call."
+            actionLabel={createCta.label}
+            onAction={createCta.onClick}
           />
         )
       ) : (

@@ -387,28 +387,14 @@ export function CreateActionPage({
                 title="Caller says"
                 description="Outline the conversation moment that should surface this action."
               >
-                <div className="flex flex-col gap-2">
-                  <textarea
-                    id="action-detect-when"
-                    rows={3}
-                    value={draft.detectWhen}
-                    onChange={(event) =>
-                      patch({ detectWhen: event.target.value })
-                    }
-                    placeholder="e.g. The customer mentions a competitor they use or are evaluating"
-                    className={textareaClass}
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <FieldLabel>Example phrases</FieldLabel>
-                  <p className="text-paragraph-sm text-muted-foreground">
-                    Optional. Real caller wording sharpens the match.
-                  </p>
-                  <ExamplePhrases
-                    phrases={draft.detectExamples}
-                    onChange={(detectExamples) => patch({ detectExamples })}
-                  />
-                </div>
+                <textarea
+                  id="action-detect-when"
+                  rows={3}
+                  value={draft.detectWhen}
+                  onChange={(event) => patch({ detectWhen: event.target.value })}
+                  placeholder="e.g. The customer mentions a competitor they use or are evaluating"
+                  className={textareaClass}
+                />
               </SetupStep>
 
               <SetupStep
@@ -625,40 +611,6 @@ function ActionPicker({
           </Button>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function ExamplePhrases({
-  phrases,
-  onChange,
-}: {
-  phrases: string[];
-  onChange: (next: string[]) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      {phrases.map((phrase, index) => (
-        <InputField
-          key={index}
-          placeholder='e.g. “We currently use Aircall.”'
-          value={phrase}
-          onChange={(event) => {
-            const next = [...phrases];
-            next[index] = event.target.value;
-            onChange(next);
-          }}
-          clearable={false}
-        />
-      ))}
-      <Button
-        variant="link"
-        size="sm"
-        className="self-start"
-        onClick={() => onChange([...phrases, ""])}
-      >
-        Add example
-      </Button>
     </div>
   );
 }

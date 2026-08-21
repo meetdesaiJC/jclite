@@ -36,9 +36,10 @@ import {
 import { AssignmentAvatarStack } from "./AssignmentAvatarStack";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
 import { CreateActionPage } from "./CreateActionPage";
-import { IconAaActions } from "./icons/AgentAssistNavIcons";
+import actionsEmptyIllustration from "./assets/actions-empty.svg";
 import { IntegrationLogo, IntegrationName } from "./icons/IntegrationLogos";
 import { ActionInCallPreview } from "./InCallActionCard";
+import { PageEmptyState } from "./PageEmptyState";
 import { TEAM_MEMBERS, USER_GROUPS } from "./guidanceData";
 import {
   actionAssignees,
@@ -527,27 +528,13 @@ export function ActionsPage({
 
 function ActionsEmptyState({ onAction }: { onAction: () => void }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-6 pb-14">
-      <div className="flex max-w-[440px] flex-col items-center gap-6 text-center">
-        <span className="flex size-12 items-center justify-center rounded-full bg-secondary-bg text-foreground">
-          <IconAaActions className="size-6" />
-        </span>
-        <div className="flex flex-col items-center gap-2">
-          <p className="text-[16px] leading-6 font-semibold text-foreground">
-            No actions yet
-          </p>
-          <p className="text-[14px] leading-5 text-muted-foreground">
-            Create reusable actions agents can take in connected apps while they’re on a call.
-          </p>
-          <p className="text-[13px] leading-5 text-muted-foreground">
-            Update CRM fields, create tasks, add notes, and more.
-          </p>
-        </div>
-        <Button size="md" onClick={onAction}>
-          Create action
-        </Button>
-      </div>
-    </div>
+    <PageEmptyState
+      illustrationSrc={actionsEmptyIllustration}
+      title="Help agents take the right action at the right time"
+      description="Surface actions during calls so agents can quickly update records, create tasks, send follow-ups, and keep work moving."
+      actionLabel="Create action"
+      onAction={onAction}
+    />
   );
 }
 

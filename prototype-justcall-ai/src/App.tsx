@@ -9,7 +9,7 @@ import {
 } from "./JustCallAiShell";
 import { PrototypeLauncher } from "./PrototypeLauncher";
 
-type AppView = "launcher" | "setup" | "in-call";
+type AppView = "launcher" | "setup" | "setup-empty" | "in-call";
 type AppArea = "dashboard" | "justcall-ai";
 
 /**
@@ -17,8 +17,12 @@ type AppArea = "dashboard" | "justcall-ai";
  * JustCall AI runs the nav micro-interaction (product nav exits left,
  * AI nav enters from the right; main content crossfades). Logo + sidenav
  * chrome stay fixed. Back reverses the same motion.
+ *
+ * `seeded` decides which account the same flow is walked through: on, the
+ * demo library everything is already configured with; off, the day-one
+ * account where every list opens on its empty state.
  */
-function SetupFlow() {
+function SetupFlow({ seeded = true }: { seeded?: boolean }) {
   const [area, setArea] = useState<AppArea>("dashboard");
   const [navTransition, setNavTransition] = useState<SidenavItemsTransition>("forward");
   const [aiPage, setAiPage] = useState<JustCallAiPageKey>("agent-assist");
@@ -70,7 +74,11 @@ function SetupFlow() {
           data-active={area === "justcall-ai"}
           aria-hidden={area !== "justcall-ai"}
         >
-          <JustCallAiShell activeKey={aiPage} onNavigate={setAiPage} />
+          <JustCallAiShell
+            activeKey={aiPage}
+            onNavigate={setAiPage}
+            seeded={seeded}
+          />
         </div>
       </div>
     </div>
@@ -101,6 +109,7 @@ export default function App() {
       <PrototypeLauncher
         onStartSetup={() => setView("setup")}
         onStartInCall={() => setView("in-call")}
+        onStartEmptySetup={() => setView("setup-empty")}
       />
     );
   }
@@ -109,5 +118,7 @@ export default function App() {
     return <InCallFlow />;
   }
 
-  return <SetupFlow />;
+  // Same flow, different account: "setup" walks the demo library, "setup-empty"
+  // walks a brand-new account with nothing configured yet.
+  return <SetupFlow seeded={view === "setup"} />;
 }

@@ -12,7 +12,13 @@ import {
   useAgentAssistTakeoverHost,
 } from "./agentAssistTakeover";
 import { type KnowledgeSourceRecord } from "./knowledgeData";
-import { SEED_INTEGRATIONS, SEED_ACTIONS, type AgentAction, type Integration } from "./actionsData";
+import {
+  SEED_INTEGRATIONS,
+  SEED_ACTIONS,
+  UNCONNECTED_INTEGRATIONS,
+  type AgentAction,
+  type Integration,
+} from "./actionsData";
 import { SEED_GUIDANCE, type GuidanceItem } from "./guidanceData";
 import { SEED_COACHING_RULES, type CoachingRule } from "./coachingData";
 
@@ -42,6 +48,11 @@ import { SEED_COACHING_RULES, type CoachingRule } from "./coachingData";
  */
 
 export interface AgentAssistAdminProps {
+  /**
+   * Whether the admin opens on a worked-in account or a brand-new one. Off
+   * puts every list into its empty state and leaves all apps unconnected.
+   */
+  seeded?: boolean;
   /** Read by response-card coverage hints; owned by JustCallAiShell. */
   knowledgeSources: KnowledgeSourceRecord[];
   /** Leaves Agent Assist for the global Knowledge page. */
@@ -51,6 +62,7 @@ export interface AgentAssistAdminProps {
 }
 
 export function AgentAssistAdmin({
+  seeded = true,
   knowledgeSources,
   onOpenKnowledge,
   knowledgeSuggestionsEnabled,
@@ -67,13 +79,17 @@ export function AgentAssistAdmin({
   // One source of truth for the whole product: what the admin publishes here
   // is what a live call reads.
   const [integrations, setIntegrations] = React.useState<Integration[]>(
-    SEED_INTEGRATIONS
+    seeded ? SEED_INTEGRATIONS : UNCONNECTED_INTEGRATIONS
   );
-  const [actions, setActions] = React.useState<AgentAction[]>(SEED_ACTIONS);
-  const [guidanceItems, setGuidanceItems] =
-    React.useState<GuidanceItem[]>(SEED_GUIDANCE);
-  const [coachingRules, setCoachingRules] =
-    React.useState<CoachingRule[]>(SEED_COACHING_RULES);
+  const [actions, setActions] = React.useState<AgentAction[]>(
+    seeded ? SEED_ACTIONS : []
+  );
+  const [guidanceItems, setGuidanceItems] = React.useState<GuidanceItem[]>(
+    seeded ? SEED_GUIDANCE : []
+  );
+  const [coachingRules, setCoachingRules] = React.useState<CoachingRule[]>(
+    seeded ? SEED_COACHING_RULES : []
+  );
 
   return (
     <AgentAssistTakeoverContext.Provider value={registerTakeover}>
@@ -83,6 +99,7 @@ export function AgentAssistAdmin({
             activeKey={area}
             onSelect={setArea}
             knowledgeSuggestionsEnabled={knowledgeSuggestionsEnabled}
+            hasKnowledgeBase={knowledgeSources.length > 0}
             onEnableKnowledgeSuggestions={() =>
               onKnowledgeSuggestionsEnabledChange(true)
             }
@@ -97,6 +114,8 @@ export function AgentAssistAdmin({
           open={knowledgeSuggestionsLearnMore}
           onClose={() => setKnowledgeSuggestionsLearnMore(false)}
           onEnable={() => onKnowledgeSuggestionsEnabledChange(true)}
+          hasKnowledgeBase={knowledgeSources.length > 0}
+          onCreateKnowledgeBase={onOpenKnowledge}
         />
 
         {area === "actions" ? (
@@ -109,6 +128,7 @@ export function AgentAssistAdmin({
         ) : (
           <AgentAssistPlaybooksPage
             view={area === "response-cards" ? "guidance" : area}
+            seeded={seeded}
             guidanceItems={guidanceItems}
             onGuidanceItemsChange={setGuidanceItems}
             coachingRules={coachingRules}
