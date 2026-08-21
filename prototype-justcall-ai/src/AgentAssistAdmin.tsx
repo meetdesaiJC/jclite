@@ -45,7 +45,31 @@ import { SEED_COACHING_RULES, type CoachingRule } from "./coachingData";
  *
  * Full-page editors are the one exception to the nav: they take over the whole
  * content area, nav included (see agentAssistTakeover).
+ *
+ * Switching sections animates two things and nothing else. The nav's selection
+ * pill slides (see AgentAssistNav) and the content area crossfades with a 4px
+ * lift; the header, the nav column, the divider, and the content frame all hold
+ * still. Sliding the whole pane would say "you left for another page", and these
+ * four are one workspace — so only what actually changed moves, and it is over
+ * in 220ms.
  */
+
+/**
+ * Content exit, then the swap, then the entrance — 80 + 140ms, the whole
+ * interaction inside the 220ms it has to feel instant. They run back to back
+ * rather than overlapping because both halves share one container: overlapping
+ * would mean mounting both sections at once, and both own scroll, selection,
+ * and open dropdowns.
+ */
+const CONTENT_EXIT_MS = 80;
+const CONTENT_ENTER_MS = 140;
+
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
 
 export interface AgentAssistAdminProps {
   /**
@@ -69,6 +93,18 @@ export function AgentAssistAdmin({
   onKnowledgeSuggestionsEnabledChange,
 }: AgentAssistAdminProps) {
   const [area, setArea] = React.useState<AgentAssistArea>("scripts");
+  /**
+   * The section the admin picked, held while the one on screen fades out. The
+   * nav reads this rather than `area` so the pill leaves at the click and the
+   * content follows — selection is the feedback that the click landed, and
+   * making it wait on the fade would cost the interaction its 80ms.
+   */
+  const [pendingArea, setPendingArea] = React.useState<AgentAssistArea | null>(
+    null
+  );
+  const [contentMotion, setContentMotion] = React.useState<
+    "idle" | "exiting" | "entering"
+  >("idle");
   // "Learn more" on the nav card — the explanation of what agents see on a
   // live call, and the second place the capability can be turned on.
   const [knowledgeSuggestionsLearnMore, setKnowledgeSuggestionsLearnMore] =
@@ -91,13 +127,51 @@ export function AgentAssistAdmin({
     seeded ? SEED_COACHING_RULES : []
   );
 
+  const selectedArea = pendingArea ?? area;
+
+  const selectArea = (next: AgentAssistArea) => {
+    if (next === selectedArea) return;
+    // Reduced motion still gets the moving pill's endpoints and the new
+    // section — it just gets them without the travel or the fade.
+    if (prefersReducedMotion()) {
+      setPendingArea(null);
+      setContentMotion("idle");
+      setArea(next);
+      return;
+    }
+    setPendingArea(next);
+    setContentMotion("exiting");
+  };
+
+  // Swap under cover of the faded-out state, then let it back in. Splitting the
+  // two timers keeps `entering` on the element only while its animation runs,
+  // so the next switch starts from a clean transition.
+  React.useEffect(() => {
+    if (contentMotion !== "exiting" || !pendingArea) return;
+    const timer = window.setTimeout(() => {
+      setArea(pendingArea);
+      setPendingArea(null);
+      setContentMotion("entering");
+    }, CONTENT_EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [contentMotion, pendingArea]);
+
+  React.useEffect(() => {
+    if (contentMotion !== "entering") return;
+    const timer = window.setTimeout(
+      () => setContentMotion("idle"),
+      CONTENT_ENTER_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [contentMotion]);
+
   return (
     <AgentAssistTakeoverContext.Provider value={registerTakeover}>
       <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-white">
         {takeover ? null : (
           <AgentAssistNav
-            activeKey={area}
-            onSelect={setArea}
+            activeKey={selectedArea}
+            onSelect={selectArea}
             knowledgeSuggestionsEnabled={knowledgeSuggestionsEnabled}
             hasKnowledgeBase={knowledgeSources.length > 0}
             onKnowledgeSuggestionsEnabledChange={
@@ -118,25 +192,35 @@ export function AgentAssistAdmin({
           onCreateKnowledgeBase={onOpenKnowledge}
         />
 
-        {area === "actions" ? (
-          <ActionsPage
-            actions={actions}
-            onActionsChange={setActions}
-            integrations={integrations}
-            onIntegrationsChange={setIntegrations}
-          />
-        ) : (
-          <AgentAssistPlaybooksPage
-            view={area === "response-cards" ? "guidance" : area}
-            seeded={seeded}
-            guidanceItems={guidanceItems}
-            onGuidanceItemsChange={setGuidanceItems}
-            coachingRules={coachingRules}
-            onCoachingRulesChange={setCoachingRules}
-            knowledgeSources={knowledgeSources}
-            onOpenKnowledge={onOpenKnowledge}
-          />
-        )}
+        {/* One container for the whole section — title, description, search,
+            list, and pagination move together, because they are one thing that
+            changed rather than five that each need announcing. No key here on
+            purpose: remounting would animate identically and throw away the
+            drafts and rows the lists hold. */}
+        <div
+          className="aa-section-content flex min-h-0 min-w-0 flex-1 flex-col"
+          data-motion={contentMotion}
+        >
+          {area === "actions" ? (
+            <ActionsPage
+              actions={actions}
+              onActionsChange={setActions}
+              integrations={integrations}
+              onIntegrationsChange={setIntegrations}
+            />
+          ) : (
+            <AgentAssistPlaybooksPage
+              view={area === "response-cards" ? "guidance" : area}
+              seeded={seeded}
+              guidanceItems={guidanceItems}
+              onGuidanceItemsChange={setGuidanceItems}
+              coachingRules={coachingRules}
+              onCoachingRulesChange={setCoachingRules}
+              knowledgeSources={knowledgeSources}
+              onOpenKnowledge={onOpenKnowledge}
+            />
+          )}
+        </div>
       </div>
     </AgentAssistTakeoverContext.Provider>
   );

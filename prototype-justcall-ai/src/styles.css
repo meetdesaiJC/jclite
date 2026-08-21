@@ -1097,6 +1097,73 @@ html.call-workspace-resizing * {
   animation: recap-caret 1.05s ease-in-out infinite;
 }
 
+/* ── Agent Assist section switch ──────────────────────────────────────────
+   Two things move and nothing else: the nav's selection pill slides to the
+   row you picked, and the content area crossfades with a 4px lift. The
+   header, the nav column, the divider, and the content frame hold still —
+   these four sections are one workspace, so switching between them should
+   not read as navigating away from a page.
+
+   Pill 200ms, content 80ms out + 140ms in: the interaction is complete
+   inside 220ms, which is the budget for feeling immediate rather than
+   animated. */
+.aa-nav-pill {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  border-radius: 4px;
+  background-color: var(--color-brand-subtle);
+}
+
+/* Only after the first measurement — otherwise the pill slides down from the
+   top of the column on mount instead of simply being where selection is. */
+.aa-nav-pill.is-animated {
+  transition:
+    transform 200ms cubic-bezier(0.2, 0, 0, 1),
+    height 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Colour only. The pill is already carrying the movement, and a row that also
+   nudged or scaled would read as a second thing happening. Background is the
+   hover wash on unselected rows, quicker than the colour so a pointer sweeping
+   the column keeps up. */
+.aa-nav-item {
+  transition:
+    color 150ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.aa-section-content[data-motion="exiting"] {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 80ms ease-in,
+    transform 80ms ease-in;
+  /* The outgoing section is already gone as far as the admin is concerned —
+     don't let it take a click on the way out. */
+  pointer-events: none;
+}
+
+.aa-section-content[data-motion="entering"] {
+  animation: aa-section-in 140ms ease-out both;
+}
+
+@keyframes aa-section-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scripts / Guidance list — filter row expands under the search bar.
+   Open: height + fade + 4px settle together. Close: fade first, then collapse
+   so the table slides without the controls hanging around.
+   While open, the clip must not hide in-row dropdowns (they sit over the table). */
 /* Scripts / Guidance list — filter row expands under the search bar.
    Open: height + fade + 4px settle together. Close: fade first, then collapse
    so the table slides without the controls hanging around.
@@ -1408,6 +1475,20 @@ button.call-bar-control[data-help="active"] {
   .thumb-press,
   .thumb-thanks {
     animation: none !important;
+  }
+
+  /* Selection still lands on the right row and the right section still
+     appears — they stop travelling to get there. The pill keeps its transform,
+     which is its position rather than decoration; only the travel goes. */
+  .aa-nav-pill,
+  .aa-nav-item {
+    transition: none !important;
+  }
+
+  .aa-section-content[data-motion] {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
   }
 
   .recap-sparkle-pulse,
