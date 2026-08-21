@@ -52,6 +52,7 @@ export function AgentAssistNav({
   activeKey,
   onSelect,
   knowledgeSuggestionsEnabled,
+  hasKnowledgeBase,
   onEnableKnowledgeSuggestions,
   onLearnAboutKnowledgeSuggestions,
   onManageKnowledge,
@@ -60,6 +61,7 @@ export function AgentAssistNav({
   activeKey: AgentAssistArea;
   onSelect: (key: AgentAssistArea) => void;
   knowledgeSuggestionsEnabled: boolean;
+  hasKnowledgeBase: boolean;
   onEnableKnowledgeSuggestions: () => void;
   onLearnAboutKnowledgeSuggestions: () => void;
   onManageKnowledge: () => void;
@@ -102,6 +104,7 @@ export function AgentAssistNav({
 
       <KnowledgeSuggestionsCard
         enabled={knowledgeSuggestionsEnabled}
+        hasKnowledgeBase={hasKnowledgeBase}
         onEnable={onEnableKnowledgeSuggestions}
         onLearnMore={onLearnAboutKnowledgeSuggestions}
         onManage={onManageKnowledge}
@@ -126,11 +129,13 @@ export function AgentAssistNav({
  */
 function KnowledgeSuggestionsCard({
   enabled,
+  hasKnowledgeBase,
   onEnable,
   onLearnMore,
   onManage,
 }: {
   enabled: boolean;
+  hasKnowledgeBase: boolean;
   onEnable: () => void;
   onLearnMore: () => void;
   onManage: () => void;
@@ -138,7 +143,7 @@ function KnowledgeSuggestionsCard({
   return (
     <div
       className={cn(
-        "mt-auto rounded-[10px] border p-6",
+        "mt-auto rounded-[10px] border p-4",
         "border-brand/15 bg-[linear-gradient(205deg,var(--color-brand-subtle)_0%,#f6f9fd_58%,#ffffff_100%)]"
       )}
     >
@@ -175,19 +180,25 @@ function KnowledgeSuggestionsCard({
             Manage Knowledge Base
           </Button>
         ) : (
-          <div className="flex items-center gap-1">
-            <Button size="xs" onClick={onEnable}>
-              Enable
+          // The nav column is narrow enough that "Create Knowledge Base" and
+          // "Learn more" cannot sit on one line without the link spilling past
+          // the card. Stacking keeps both readable at every label length, so
+          // both states stack rather than only the long one.
+          <div className="flex flex-col items-start gap-2">
+            {/* With no knowledge base in the account there is nothing to
+                enable against — turning the capability on would put agents on
+                calls with an empty shelf. The offer becomes the step that has
+                to happen first, and it hands off to Knowledge to do it. */}
+            <Button
+              size="xs"
+              onClick={hasKnowledgeBase ? onEnable : onManage}
+            >
+              {hasKnowledgeBase ? "Enable" : "Create Knowledge Base"}
             </Button>
             {/* One line cannot show what an answer arriving mid-call looks
                 like, so "Learn more" opens the picture of it rather than
                 sending the admin off to the Knowledge Base page to guess. */}
-            <Button
-              variant="link"
-              size="xs"
-              className="px-2"
-              onClick={onLearnMore}
-            >
+            <Button variant="link" size="xs" onClick={onLearnMore}>
               Learn more
             </Button>
           </div>

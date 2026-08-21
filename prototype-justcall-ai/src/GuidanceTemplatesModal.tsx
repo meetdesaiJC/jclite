@@ -92,36 +92,26 @@ export function GuidanceTemplatesModal({
           <button
             type="button"
             onClick={() => onSelect({ type: "scratch" })}
-            className={cn("flex h-full items-start gap-3 px-4 py-3.5", choiceCardClass)}
+            className={cn("flex h-full items-center gap-3 px-4 py-3", choiceCardClass)}
           >
-            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[6px] bg-secondary-bg text-foreground">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-[6px] bg-secondary-bg text-foreground">
               <PlusIcon size={20} />
             </span>
-            <span className="min-w-0">
-              <span className="block text-label-md-semi text-foreground">
-                Create manually
-              </span>
-              <span className="mt-0.5 block text-pretty text-paragraph-sm text-muted-foreground">
-                Write your own trigger, response, and talking points.
-              </span>
+            <span className="min-w-0 text-label-md-semi text-foreground">
+              Create manually
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => onSelect({ type: "generate" })}
-            className={cn("flex h-full items-start gap-3 px-4 py-3.5", choiceCardClass)}
+            className={cn("flex h-full items-center gap-3 px-4 py-3", choiceCardClass)}
           >
-            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[6px] bg-brand-subtle text-brand">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-[6px] bg-brand-subtle text-brand">
               <IconSparkles size={20} />
             </span>
-            <span className="min-w-0">
-              <span className="block text-label-md-semi text-foreground">
-                Generate from Knowledge Base
-              </span>
-              <span className="mt-0.5 block text-pretty text-paragraph-sm text-muted-foreground">
-                Pick Knowledge Bases and AI drafts it for you to review.
-              </span>
+            <span className="min-w-0 text-label-md-semi text-foreground">
+              Generate with AI
             </span>
           </button>
         </div>

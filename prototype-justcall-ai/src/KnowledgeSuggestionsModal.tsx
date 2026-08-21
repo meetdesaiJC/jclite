@@ -1,9 +1,10 @@
-import type { ReactNode, SVGProps } from "react";
+import type { CSSProperties, ReactNode, SVGProps } from "react";
 import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/Button";
 import { IconChevronUp, IconClose, IconSparkles } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import { Modal } from "@/components/Modal";
+import { GuidanceResourceLink } from "./GuidanceCard";
 import { IconAaKnowledge } from "./icons/AgentAssistNavIcons";
 import { SEED_KNOWLEDGE_SOURCES, knowledgeFacts } from "./knowledgeData";
 
@@ -16,11 +17,11 @@ import { SEED_KNOWLEDGE_SOURCES, knowledgeFacts } from "./knowledgeData";
  * explanation is a picture of the thing, not a paragraph about it — the right
  * half sketches the moment as the agent sees it (a live call, then a Knowledge
  * card arriving) using the same card, colours, and entrance the live panel
- * uses. Surrounding transcript stays schematic; the question that retrieves
- * the card, and the card itself, stay readable so the picture is a cause and
- * an effect rather than a collage. The left half answers only what the
- * picture cannot: what triggers it, what the answer looks like, and where
- * the content comes from.
+ * uses. Surrounding transcript stays schematic; the words that retrieve the
+ * card are highlighted and the card's own title, lead line, and source stay
+ * readable, so the picture is a cause and an effect rather than a collage. The
+ * left half answers only what the picture cannot: what triggers it, what the
+ * answer looks like, and where the content comes from.
  *
  * It ends on the decision it opened with, so the modal is a way to say yes
  * rather than a detour on the way back to the card.
@@ -37,11 +38,26 @@ const RETENTION_ENTRY = PRODUCT_KB.entries.find(
 const RETENTION_QUESTION =
   "And how long do you keep call recordings? Compliance will ask.";
 
+/**
+ * The words that retrieved the card, highlighted inside the question so the
+ * picture reads as one cause and one effect rather than "a question happened,
+ * then a card appeared".
+ */
+const RETENTION_CUE = "keep call recordings?";
+
 export interface KnowledgeSuggestionsModalProps {
   open: boolean;
   onClose: () => void;
   /** Turns the capability on. The modal closes itself first. */
   onEnable: () => void;
+  /**
+   * Whether the account has any Knowledge Base at all. With none, there is
+   * nothing for the capability to draw on, so the modal ends on the step that
+   * has to come first instead of on a switch.
+   */
+  hasKnowledgeBase: boolean;
+  /** Leaves for the Knowledge page to author the first Knowledge Base. */
+  onCreateKnowledgeBase: () => void;
 }
 
 const POINTS: Array<{ icon: ReactNode; title: string; body: string }> = [
@@ -66,6 +82,8 @@ export function KnowledgeSuggestionsModal({
   open,
   onClose,
   onEnable,
+  hasKnowledgeBase,
+  onCreateKnowledgeBase,
 }: KnowledgeSuggestionsModalProps) {
   return (
     <Modal
@@ -87,10 +105,7 @@ export function KnowledgeSuggestionsModal({
 
         <div className="flex h-full flex-col gap-8 p-8 pb-10">
           <div className="flex flex-col gap-3">
-            <span className="flex size-9 items-center justify-center rounded-[8px] bg-brand/10 ring-1 ring-inset ring-brand/10">
-              <IconAaKnowledge className="size-[18px] text-brand" />
-            </span>
-            <h2 className="mt-1 text-pretty text-heading-xxl text-foreground">
+            <h2 className="text-pretty text-heading-xxl text-foreground">
               Your Knowledge Base, right when agents need it
             </h2>
             <p className="text-pretty text-paragraph-md text-muted-foreground">
@@ -110,7 +125,7 @@ export function KnowledgeSuggestionsModal({
                   <span className="block text-label-md-semi text-foreground">
                     {point.title}
                   </span>
-                  <span className="mt-0.5 block text-pretty text-paragraph-sm text-muted-foreground">
+                  <span className="mt-0.5 block text-pretty text-paragraph-md text-muted-foreground">
                     {point.body}
                   </span>
                 </span>
@@ -122,10 +137,13 @@ export function KnowledgeSuggestionsModal({
             <Button
               onClick={() => {
                 onClose();
-                onEnable();
+                if (hasKnowledgeBase) onEnable();
+                else onCreateKnowledgeBase();
               }}
             >
-              Enable Knowledge Base suggestions
+              {hasKnowledgeBase
+                ? "Enable Knowledge Base suggestions"
+                : "Create Knowledge Base"}
             </Button>
           </div>
         </div>
@@ -141,13 +159,19 @@ export function KnowledgeSuggestionsModal({
  * nothing in here is focusable — because the left column already carries every
  * fact it depicts.
  *
- * The rest of the transcript is pill bars so the picture stays a sketch. The
- * question that retrieves the card, and the card copy itself, stay readable:
- * asked → surfaced. The 200ms `assist-card-enter` is staggered so the
- * question still lands before the answer does.
+ * The rest of the transcript is pill bars so the picture stays a sketch, and
+ * the card's facts are bars too — three of them, at three lengths, says "a
+ * scannable list of facts" without asking the admin to read a retention
+ * policy. What stays readable is the chain: the asked words, the card's title
+ * and lead line, and the page it came from. The 200ms `assist-card-enter` is
+ * staggered so the question still lands before the answer does.
  */
 function KnowledgeSurfacingIllustration() {
   const { summary, points } = knowledgeFacts(RETENTION_ENTRY);
+  const cueStart = RETENTION_QUESTION.indexOf(RETENTION_CUE);
+  const cueBefore =
+    cueStart < 0 ? null : RETENTION_QUESTION.slice(0, cueStart);
+  const cueAfter = RETENTION_QUESTION.slice(cueStart + RETENTION_CUE.length);
 
   return (
     <div
@@ -182,7 +206,17 @@ function KnowledgeSurfacingIllustration() {
                   Priya Sharma
                 </p>
                 <p className="text-pretty text-paragraph-md text-foreground">
-                  {RETENTION_QUESTION}
+                  {cueBefore}
+                  {cueBefore === null ? (
+                    RETENTION_QUESTION
+                  ) : (
+                    <>
+                      <mark className="rounded-[3px] bg-brand/12 text-foreground">
+                        {RETENTION_CUE}
+                      </mark>
+                      {cueAfter}
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -216,20 +250,24 @@ function KnowledgeSurfacingIllustration() {
                   </p>
                 ) : null}
                 {points.length > 0 ? (
-                  <ul className="list-disc space-y-1.5 pl-5">
+                  <ul className="flex flex-col gap-2.5 pl-1">
                     {points.map((point) => (
-                      <li
-                        key={point.heading}
-                        className="text-pretty text-paragraph-md text-foreground marker:text-muted-foreground"
-                      >
-                        {point.heading}
+                      <li key={point.heading} className="flex items-center gap-2.5">
+                        <span className="size-1 shrink-0 rounded-full bg-gray-400/70" />
+                        <TextBar style={{ width: barWidth(point.heading) }} />
                       </li>
                     ))}
                   </ul>
                 ) : null}
-                <span className="inline-flex min-w-0 max-w-full items-center text-label-md text-brand">
-                  <span className="min-w-0 truncate">{PRODUCT_KB.name}</span>
-                </span>
+                {/* Named the way the real card names it: the page the answer
+                    came from, not the Knowledge Base it lives in. */}
+                <GuidanceResourceLink
+                  resource={{
+                    id: RETENTION_ENTRY.id,
+                    type: "link",
+                    name: RETENTION_ENTRY.sourceTitle ?? PRODUCT_KB.name,
+                  }}
+                />
               </div>
             </article>
 
@@ -259,10 +297,27 @@ function KnowledgeSurfacingIllustration() {
 }
 
 /** Static pill used in place of copy — not an animated skeleton. */
-function TextBar({ className }: { className?: string }) {
+function TextBar({
+  className,
+  style,
+}: {
+  className?: string;
+  style?: CSSProperties;
+}) {
   return (
-    <span className={cn("block h-2 rounded-full bg-gray-300/70", className)} />
+    <span
+      className={cn("block h-2 rounded-full bg-gray-300/70", className)}
+      style={style}
+    />
   );
+}
+
+/**
+ * A bar as long as the fact it stands in for, so the three facts read as three
+ * different lengths rather than a stack of identical rules.
+ */
+function barWidth(heading: string) {
+  return `${Math.min(88, Math.round(34 + heading.length * 1.6))}%`;
 }
 
 /** Stacked sheets — "the Knowledge Base you already have". */
