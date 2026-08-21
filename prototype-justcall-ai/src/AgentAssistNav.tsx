@@ -1,6 +1,6 @@
 import * as React from "react";
-import { Badge } from "@/components/Badge";
 import { Button } from "@/components/Button";
+import { Toggle } from "@/components/Toggle";
 import { cn } from "@/lib/utils";
 import {
   IconAaActions,
@@ -53,7 +53,7 @@ export function AgentAssistNav({
   onSelect,
   knowledgeSuggestionsEnabled,
   hasKnowledgeBase,
-  onEnableKnowledgeSuggestions,
+  onKnowledgeSuggestionsEnabledChange,
   onLearnAboutKnowledgeSuggestions,
   onManageKnowledge,
   className,
@@ -62,7 +62,7 @@ export function AgentAssistNav({
   onSelect: (key: AgentAssistArea) => void;
   knowledgeSuggestionsEnabled: boolean;
   hasKnowledgeBase: boolean;
-  onEnableKnowledgeSuggestions: () => void;
+  onKnowledgeSuggestionsEnabledChange: (enabled: boolean) => void;
   onLearnAboutKnowledgeSuggestions: () => void;
   onManageKnowledge: () => void;
   className?: string;
@@ -105,7 +105,7 @@ export function AgentAssistNav({
       <KnowledgeSuggestionsCard
         enabled={knowledgeSuggestionsEnabled}
         hasKnowledgeBase={hasKnowledgeBase}
-        onEnable={onEnableKnowledgeSuggestions}
+        onEnabledChange={onKnowledgeSuggestionsEnabledChange}
         onLearnMore={onLearnAboutKnowledgeSuggestions}
         onManage={onManageKnowledge}
       />
@@ -126,17 +126,24 @@ export function AgentAssistNav({
  * brand-tinted wash and the icon tile give it enough weight to read as an offer;
  * `mt-auto` and the absence of a nav-style row keep it from reading as a fifth
  * destination.
+ *
+ * The card changes job with its state, and so does the top-right slot. While the
+ * capability is off the card is an offer, and the offer is the body's own CTA —
+ * a switch beside it would be a second control for the same decision. Once it is
+ * on the card is a setting, and the slot carries the switch that turns it back
+ * off. It used to carry an "Enabled" badge there instead, which stated a
+ * decision the admin could no longer reverse anywhere in the product.
  */
 function KnowledgeSuggestionsCard({
   enabled,
   hasKnowledgeBase,
-  onEnable,
+  onEnabledChange,
   onLearnMore,
   onManage,
 }: {
   enabled: boolean;
   hasKnowledgeBase: boolean;
-  onEnable: () => void;
+  onEnabledChange: (enabled: boolean) => void;
   onLearnMore: () => void;
   onManage: () => void;
 }) {
@@ -153,9 +160,17 @@ function KnowledgeSuggestionsCard({
             <IconAaKnowledge className="size-4 shrink-0 text-brand" />
           </span>
           {enabled ? (
-            <Badge variant="blue-grey" className="mt-0.5">
-              Enabled
-            </Badge>
+            // Toggle spreads `className` onto the input itself, so the optical
+            // centring against the 32px icon tile goes on a wrapper instead —
+            // margin on the track would leave the knob behind.
+            <span className="mt-1.5 inline-flex">
+              <Toggle
+                size="sm"
+                checked
+                onCheckedChange={onEnabledChange}
+                aria-label="Knowledge Base suggestions"
+              />
+            </span>
           ) : null}
         </div>
 
@@ -191,7 +206,7 @@ function KnowledgeSuggestionsCard({
                 to happen first, and it hands off to Knowledge to do it. */}
             <Button
               size="xs"
-              onClick={hasKnowledgeBase ? onEnable : onManage}
+              onClick={hasKnowledgeBase ? () => onEnabledChange(true) : onManage}
             >
               {hasKnowledgeBase ? "Enable" : "Create Knowledge Base"}
             </Button>

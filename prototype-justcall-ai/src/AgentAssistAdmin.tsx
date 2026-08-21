@@ -100,8 +100,8 @@ export function AgentAssistAdmin({
             onSelect={setArea}
             knowledgeSuggestionsEnabled={knowledgeSuggestionsEnabled}
             hasKnowledgeBase={knowledgeSources.length > 0}
-            onEnableKnowledgeSuggestions={() =>
-              onKnowledgeSuggestionsEnabledChange(true)
+            onKnowledgeSuggestionsEnabledChange={
+              onKnowledgeSuggestionsEnabledChange
             }
             onLearnAboutKnowledgeSuggestions={() =>
               setKnowledgeSuggestionsLearnMore(true)
