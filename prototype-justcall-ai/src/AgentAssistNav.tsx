@@ -27,6 +27,13 @@ import {
  * whether agents may receive knowledge answers on a live call. That switch is
  * the card pinned below the nav, separated from the primary items because it
  * configures a capability instead of navigating to a section.
+ *
+ * Selection is one pill that slides between the rows rather than a background
+ * each row paints on itself. Switching sections is the most repeated move in
+ * here, and a background that vanishes in one row and reappears in another
+ * reads as two events; one surface travelling reads as the same selection
+ * moving, which is what actually happened. Same reason the DS `Tabs` underline
+ * slides — this is that idea turned vertical.
  */
 
 export type AgentAssistArea =
@@ -67,6 +74,43 @@ export function AgentAssistNav({
   onManageKnowledge: () => void;
   className?: string;
 }) {
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const itemRefs = React.useRef(new Map<AgentAssistArea, HTMLButtonElement>());
+  const [pill, setPill] = React.useState<{ top: number; height: number } | null>(
+    null
+  );
+  // Nothing to slide from on first paint, so the pill lands on the opening
+  // section instead of travelling to it from the top of the column.
+  const [canAnimate, setCanAnimate] = React.useState(false);
+
+  const measurePill = React.useCallback(() => {
+    const list = listRef.current;
+    const item = itemRefs.current.get(activeKey);
+    if (!list || !item) return;
+    // Rect maths rather than offsetTop: the column scrolls, and both rects are
+    // in the same viewport space either way.
+    const listRect = list.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    setPill({ top: itemRect.top - listRect.top, height: itemRect.height });
+  }, [activeKey]);
+
+  React.useLayoutEffect(() => {
+    measurePill();
+  }, [measurePill]);
+
+  React.useEffect(() => {
+    const frame = requestAnimationFrame(() => setCanAnimate(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  React.useEffect(() => {
+    const list = listRef.current;
+    if (!list || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => measurePill());
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [measurePill]);
+
   return (
     <nav
       aria-label="Agent Assist"
@@ -75,32 +119,51 @@ export function AgentAssistNav({
         className
       )}
     >
-      <ul className="flex w-full flex-col">
-        {AGENT_ASSIST_NAV_ITEMS.map((item) => {
-          const active = item.key === activeKey;
-          return (
-            <li key={item.key}>
-              <button
-                type="button"
-                aria-current={active ? "page" : undefined}
-                onClick={() => onSelect(item.key)}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-[4px] px-4 py-2.5 text-left text-label-md transition-colors",
-                  "outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
-                  active
-                    ? "bg-brand-subtle text-brand"
-                    : "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-                )}
-              >
-                <span className="flex size-4 shrink-0 items-center justify-center">
-                  {item.icon}
-                </span>
-                <span className="truncate">{item.label}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <div ref={listRef} className="relative">
+        {/* One selection surface for the whole list. It sits under the rows,
+            so a row's own hover wash can never stack on top of it. */}
+        {pill ? (
+          <span
+            aria-hidden="true"
+            className={cn("aa-nav-pill", canAnimate && "is-animated")}
+            style={{ height: pill.height, transform: `translateY(${pill.top}px)` }}
+          />
+        ) : null}
+
+        <ul className="flex w-full flex-col">
+          {AGENT_ASSIST_NAV_ITEMS.map((item) => {
+            const active = item.key === activeKey;
+            return (
+              <li key={item.key}>
+                <button
+                  type="button"
+                  ref={(node) => {
+                    if (node) itemRefs.current.set(item.key, node);
+                    else itemRefs.current.delete(item.key);
+                  }}
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => onSelect(item.key)}
+                  className={cn(
+                    // `relative` keeps the row above the pill: an absolutely
+                    // positioned sibling paints over static ones whatever the
+                    // DOM order.
+                    "aa-nav-item relative flex w-full items-center gap-2 rounded-[4px] px-4 py-2.5 text-left text-label-md",
+                    "outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+                    active
+                      ? "text-brand"
+                      : "text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+                  )}
+                >
+                  <span className="flex size-4 shrink-0 items-center justify-center">
+                    {item.icon}
+                  </span>
+                  <span className="truncate">{item.label}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
 
       <KnowledgeSuggestionsCard
         enabled={knowledgeSuggestionsEnabled}
