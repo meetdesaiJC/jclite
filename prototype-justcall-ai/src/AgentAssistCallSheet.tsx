@@ -210,7 +210,13 @@ export function AgentAssistCallSheet({
         )}
       >
         <div className="flex min-w-0 items-center gap-1.5">
-          {guidanceDetached && !ended ? (
+          {ended ? (
+            <IconSparkles
+              size={16}
+              className="size-4 shrink-0 text-ai"
+              aria-hidden="true"
+            />
+          ) : guidanceDetached ? (
             <IconScript
               className="size-4 shrink-0 text-muted-foreground"
               aria-hidden="true"
@@ -222,7 +228,7 @@ export function AgentAssistCallSheet({
             />
           )}
           <p className="text-label-md-semi text-foreground">
-            {guidanceDetached && !ended ? "Script" : "Agent Assist"}
+            {ended ? "Conversation recap" : guidanceDetached ? "Script" : "Agent Assist"}
           </p>
         </div>
         {ended ? (
@@ -584,23 +590,6 @@ function usePostCallGeneration({
   };
 }
 
-/**
- * The AI mark stays a sparkle for the life of the section — it pulses while
- * the section is still generating and settles once it's done. No swap to a
- * check: the sparkle is what says "this came from AI".
- */
-function RecapSparkleCheck({ ready }: { ready: boolean }) {
-  return (
-    <span className="relative flex size-4 shrink-0 items-center justify-center">
-      <IconSparkles
-        size={16}
-        aria-hidden="true"
-        className={cn("size-4 text-ai", !ready && "recap-sparkle-pulse")}
-      />
-    </span>
-  );
-}
-
 function RecapSkeleton({
   copy,
   reduced,
@@ -804,9 +793,8 @@ function PostCallAssist({
           <div className="flex min-h-7 items-center justify-between gap-2">
             <h2
               id="call-summary-heading"
-              className="flex items-center gap-1.5 text-label-md-semi text-foreground"
+              className="flex items-center text-label-md-semi text-foreground"
             >
-              <RecapSparkleCheck ready={summaryComplete} />
               Call summary
             </h2>
             <CopyButton text={scenario.wrapUp.summary} disabled={!summaryComplete} />
@@ -832,9 +820,8 @@ function PostCallAssist({
           >
             <h2
               id="action-items-heading"
-              className="flex min-h-7 items-center gap-1.5 text-label-md-semi text-foreground"
+              className="flex min-h-7 items-center text-label-md-semi text-foreground"
             >
-              <RecapSparkleCheck ready={complete} />
               {POST_CALL_SECTION_TITLE}
             </h2>
             {visibleItems === 0 ? (

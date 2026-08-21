@@ -2,7 +2,7 @@ import type { SVGProps } from "react";
 
 /**
  * Agent Assist icons — traced from `icon-library/Agent Assist`
- * ("KB icon", "Guidance icon", "Actions Icon", "hand-stop"). Exported at 16px
+ * ("KB icon", "brand-speedtest", "Actions Icon", "hand-stop"). Exported at 16px
  * with the stroke switched to `currentColor` so one icon covers both the active
  * and resting nav states — and, for Live Assist, both the white call bar and
  * the dark-on-white panel header.
@@ -83,11 +83,19 @@ export function IconAaResponseCards(props: NavIconProps) {
   );
 }
 
+/**
+ * Behavioral Coaching — the speedtest dial (`brand-speedtest`). The headset this
+ * used to be is the glyph the JustCall AI nav already spends on Agent Assist
+ * itself, so at a glance a parent and one of its children read as the same
+ * thing. The dial is also the truer picture: coaching watches how a call is
+ * being delivered — pace, talk ratio, interruptions — which is what the panel's
+ * own pace cue already draws with this icon.
+ */
 export function IconAaCoaching(props: NavIconProps) {
   return (
     <NavIcon {...props}>
       <path
-        d="M2.66602 9.33333V7.33333C2.66602 5.91885 3.22792 4.56229 4.22811 3.5621C5.22831 2.5619 6.58486 2 7.99935 2C9.41384 2 10.7704 2.5619 11.7706 3.5621C12.7708 4.56229 13.3327 5.91885 13.3327 7.33333V9.33333M2.66602 9.33333C2.66602 8.97971 2.80649 8.64057 3.05654 8.39052C3.30659 8.14048 3.64573 8 3.99935 8H4.66602C5.01964 8 5.35878 8.14048 5.60882 8.39052C5.85887 8.64057 5.99935 8.97971 5.99935 9.33333V11.3333C5.99935 11.687 5.85887 12.0261 5.60882 12.2761C5.35878 12.5262 5.01964 12.6667 4.66602 12.6667H3.99935C3.64573 12.6667 3.30659 12.5262 3.05654 12.2761C2.80649 12.0261 2.66602 11.687 2.66602 11.3333V9.33333ZM13.3327 9.33333C13.3327 8.97971 13.1922 8.64057 12.9422 8.39052C12.6921 8.14048 12.353 8 11.9993 8H11.3327C10.9791 8 10.6399 8.14048 10.3899 8.39052C10.1398 8.64057 9.99935 8.97971 9.99935 9.33333V11.3333C9.99935 11.687 10.1398 12.0261 10.3899 12.2761C10.6399 12.5262 10.9791 12.6667 11.3327 12.6667H11.9993M13.3327 9.33333V11.3333C13.3327 11.687 13.1922 12.0261 12.9422 12.2761C12.6921 12.5262 12.353 12.6667 11.9993 12.6667M11.9993 12.6667C11.9993 13.7713 10.2087 14.6667 7.99935 14.6667"
+        d="M3.75734 12.9106C2.91823 12.0715 2.34679 11.0024 2.11529 9.83848C1.88378 8.6746 2.0026 7.4682 2.45673 6.37185C2.91086 5.2755 3.6799 4.33843 4.66659 3.67915C5.65328 3.01986 6.81332 2.66797 8 2.66797C9.18669 2.66797 10.3467 3.01986 11.3334 3.67915C12.3201 4.33843 13.0891 5.2755 13.5433 6.37185C13.9974 7.4682 14.1162 8.6746 13.8847 9.83848C13.6532 11.0024 13.0818 12.0715 12.2427 12.9106M10.6667 6.00122L8 8.66789"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
