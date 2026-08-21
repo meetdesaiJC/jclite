@@ -29,11 +29,12 @@ import {
   TableRow,
 } from "@/components/Table";
 import { cn } from "@/lib/utils";
-import faqsEmptyIllustration from "./assets/faqs-empty.png";
+import knowledgeEmptyIllustration from "./assets/knowledge-empty.svg";
 import { useAgentAssistTakeover } from "./agentAssistTakeover";
 import { AssignmentAvatarStack } from "./AssignmentAvatarStack";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
 import { HeaderEditableTitle } from "./HeaderEditableTitle";
+import { PageEmptyState } from "./PageEmptyState";
 import {
   createEmptyKnowledgeSource,
   formatKnowledgeFileSize,
@@ -226,30 +227,13 @@ export function KnowledgePage({
   return (
     <main className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white">
       {isEmpty ? (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-6 pb-14">
-          <div className="flex max-w-[460px] flex-col items-center gap-6 text-center">
-            <img
-              src={faqsEmptyIllustration}
-              alt=""
-              width={418}
-              height={281}
-              className="h-[281px] w-[418px] max-w-full object-contain"
-            />
-            <div className="flex flex-col gap-2">
-              <p className="text-[16px] leading-6 font-semibold text-foreground">
-                No Knowledge Bases yet
-              </p>
-              <p className="text-[14px] leading-5 text-muted-foreground">
-                Connect a help center, upload a document, or start from what
-                JustCall already publishes. AI reads it and answers the routine
-                questions on its own — for Voice Agent, Agent Assist, or both.
-              </p>
-            </div>
-            <Button size="md" onClick={createSource}>
-              Create Knowledge Base
-            </Button>
-          </div>
-        </div>
+        <PageEmptyState
+          illustrationSrc={knowledgeEmptyIllustration}
+          title="Help your AI answer with the right facts"
+          description="Add the documents, FAQs, and policies your AI should draw on when it answers customer questions."
+          actionLabel="Create Knowledge Base"
+          onAction={createSource}
+        />
       ) : (
         <>
           <div className="flex items-center justify-between gap-4 px-6 py-3">
