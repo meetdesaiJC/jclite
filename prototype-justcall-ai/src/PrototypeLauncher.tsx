@@ -3,6 +3,8 @@ import { IconArrowRight } from "@/components/Icon";
 type PrototypeLauncherProps = {
   onStartSetup: () => void;
   onStartInCall: () => void;
+  /** The setup flow again, on an account with nothing configured yet. */
+  onStartEmptySetup: () => void;
 };
 
 function PrototypeCard({
@@ -36,20 +38,31 @@ function PrototypeCard({
   );
 }
 
-export function PrototypeLauncher({ onStartSetup, onStartInCall }: PrototypeLauncherProps) {
+export function PrototypeLauncher({
+  onStartSetup,
+  onStartInCall,
+  onStartEmptySetup,
+}: PrototypeLauncherProps) {
   return (
-    <div className="flex h-screen bg-white pl-[75px] pt-[42px]">
+    <div className="flex h-screen overflow-y-auto bg-white pb-[42px] pl-[75px] pt-[42px]">
       <div className="flex w-[333px] flex-col items-start gap-[31px]">
         <p className="w-full text-heading-xl text-foreground">Prototypes</p>
 
+        {/* Same setup flow as 02, walked on a day-one account so every list
+            lands on its empty state. */}
         <PrototypeCard
           index="01"
-          title="Setup part of agent assist"
-          onClick={onStartSetup}
+          title="Setup — Empty States"
+          onClick={onStartEmptySetup}
         />
         <PrototypeCard
           index="02"
-          title="In call experience"
+          title="Setup — Configuration"
+          onClick={onStartSetup}
+        />
+        <PrototypeCard
+          index="03"
+          title="In-Call — Agent Experience"
           onClick={onStartInCall}
         />
       </div>

@@ -77,22 +77,29 @@ export interface JustCallAiShellProps {
   activeKey?: JustCallAiPageKey;
   /** Lets a page hand off to another one — Agent Assist → Knowledge. */
   onNavigate?: (key: JustCallAiPageKey) => void;
+  /**
+   * Whether the account already has content in it. Off is the day-one
+   * account: no knowledge bases, no connected apps, and nothing authored in
+   * Agent Assist, so every page opens on its empty state.
+   */
+  seeded?: boolean;
   profileName?: string;
 }
 
 export function JustCallAiShell({
   activeKey = "agent-assist",
   onNavigate,
+  seeded = true,
   profileName = "Sarah Johnson",
 }: JustCallAiShellProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);
   const [knowledgeSources, setKnowledgeSources] = useState<
     KnowledgeSourceRecord[]
-  >(SEED_KNOWLEDGE_SOURCES);
+  >(seeded ? SEED_KNOWLEDGE_SOURCES : []);
   const [connectedSources, setConnectedSources] = useState<
     KnowledgeIntegrationRef[]
-  >(SEED_CONNECTED_SOURCES);
+  >(seeded ? SEED_CONNECTED_SOURCES : []);
   // Agent Assist's own switch: whether agents may receive knowledge answers
   // mid-call. Which knowledge bases they draw on is not asked here — that is
   // assigned in Knowledge.
@@ -130,6 +137,7 @@ export function JustCallAiShell({
         <DialerPanel onClose={() => setDialerOpen(false)} />
       ) : activeKey === "agent-assist" ? (
         <AgentAssistAdmin
+          seeded={seeded}
           knowledgeSources={knowledgeSources}
           onOpenKnowledge={() => onNavigate?.("knowledge")}
           knowledgeSuggestionsEnabled={knowledgeSuggestionsEnabled}

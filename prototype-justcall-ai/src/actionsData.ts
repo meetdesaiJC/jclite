@@ -761,6 +761,15 @@ export function cloneAction(action: AgentAction): AgentAction {
   };
 }
 
+/**
+ * The same catalog of apps, none of them hooked up yet — what a brand-new
+ * account sees. Used by the empty-state walkthrough of the setup flow, where
+ * In-call Actions has nothing to run against until an app is connected.
+ */
+export const UNCONNECTED_INTEGRATIONS: Integration[] = SEED_INTEGRATIONS.map(
+  (integration) => ({ ...integration, connected: false })
+);
+
 export const SEED_ACTIONS: AgentAction[] = [
   {
     id: "act-update-competitor",
