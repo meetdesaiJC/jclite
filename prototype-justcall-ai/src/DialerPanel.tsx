@@ -1990,21 +1990,10 @@ function RingingPhone({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col items-center gap-6 overflow-hidden p-4">
-        <div className="relative flex h-8 w-full items-center justify-center">
+        <div className="flex h-8 w-full items-center justify-center">
           <p className="text-center text-[12px] leading-4 text-white/70">
             It’s {localTime} there
           </p>
-          <div className="absolute top-1/2 right-0 flex -translate-y-1/2 items-center gap-2">
-            <button
-              type="button"
-              aria-label="Notes"
-              className="flex size-8 items-center justify-center rounded-lg bg-[#713f12] outline-none transition-colors hover:brightness-110 focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]"
-            >
-              <span className="relative flex size-4 items-center justify-center overflow-clip text-white">
-                <IconCallNotes size={16} />
-              </span>
-            </button>
-          </div>
         </div>
 
         <div className="flex w-full flex-col items-center gap-2">
