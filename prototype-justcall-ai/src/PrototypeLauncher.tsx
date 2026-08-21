@@ -1,3 +1,4 @@
+import * as React from "react";
 import { IconArrowRight } from "@/components/Icon";
 
 type PrototypeLauncherProps = {
@@ -38,6 +39,23 @@ function PrototypeCard({
   );
 }
 
+function PrototypeGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex w-full flex-col items-start gap-3">
+      <p className="text-label-sm font-medium uppercase tracking-[0.08em] text-muted-foreground">
+        {label}
+      </p>
+      {children}
+    </div>
+  );
+}
+
 export function PrototypeLauncher({
   onStartSetup,
   onStartInCall,
@@ -48,23 +66,28 @@ export function PrototypeLauncher({
       <div className="flex w-[333px] flex-col items-start gap-[31px]">
         <p className="w-full text-heading-xl text-foreground">Prototypes</p>
 
-        {/* Same setup flow as 02, walked on a day-one account so every list
-            lands on its empty state. */}
-        <PrototypeCard
-          index="01"
-          title="Setup — Empty States"
-          onClick={onStartEmptySetup}
-        />
-        <PrototypeCard
-          index="02"
-          title="Setup — Configuration"
-          onClick={onStartSetup}
-        />
-        <PrototypeCard
-          index="03"
-          title="In-Call — Agent Experience"
-          onClick={onStartInCall}
-        />
+        <PrototypeGroup label="Setup">
+          {/* Same flow as 02, walked on a day-one account so every list lands
+              on its empty state. */}
+          <PrototypeCard
+            index="01"
+            title="Empty States"
+            onClick={onStartEmptySetup}
+          />
+          <PrototypeCard
+            index="02"
+            title="With Data"
+            onClick={onStartSetup}
+          />
+        </PrototypeGroup>
+
+        <PrototypeGroup label="In-Call">
+          <PrototypeCard
+            index="03"
+            title="Agent Experience"
+            onClick={onStartInCall}
+          />
+        </PrototypeGroup>
       </div>
     </div>
   );
