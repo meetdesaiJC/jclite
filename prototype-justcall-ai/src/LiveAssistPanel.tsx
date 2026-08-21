@@ -625,12 +625,37 @@ export function LiveAssistPanel({
           type="submit"
           size="md"
           variant="primary"
+          iconOnly
+          aria-label="Send"
           disabled={!draft.trim() || composerLocked}
         >
-          Send
+          <IconSend />
         </Button>
       </form>
     </section>
+  );
+}
+
+/**
+ * Send — the paper plane for the composer button. Drawn on the library's
+ * 24-unit grid with round caps and the 20px stroke weight, so it reads as part
+ * of the same set; the Button's `[&_svg]:size-5` fixes the rendered size.
+ */
+function IconSend() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      stroke="currentColor"
+      strokeWidth={1.25}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M10 14 21 3" />
+      <path d="M21 3l-6.5 18a.55.55 0 0 1-1 0L10 14 3 10.5a.55.55 0 0 1 0-1L21 3Z" />
+    </svg>
   );
 }
 

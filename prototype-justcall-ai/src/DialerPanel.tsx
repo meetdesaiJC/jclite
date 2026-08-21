@@ -1791,58 +1791,66 @@ function CallBar({
 
       {/* Icon-only: on a bar this dense the labels cost more room than they
           buy, and the four that morph in from the phone were already circles
-          there. Live Assist sits next to Transfer — they are the two ways
-          another person gets involved, one by taking the call and one by
-          asking a supervisor in without the customer hearing. Notes,
-          Transcript, and Live Assist share one right-side shell. */}
+          there. Two groups, told apart by the space between them rather than
+          another rule: the controls that run the line itself, then the tools
+          the agent opens alongside it. Notes, Transcript, and Live Assist
+          share one right-side shell. */}
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
-        <BarControl
-          morphKey="mute"
-          label={muted ? "Unmute" : "Mute"}
-          pressed={muted}
-          onClick={onMute}
-        >
-          <IconVoice size={20} />
-        </BarControl>
-        <BarControl
-          morphKey="hold"
-          label={onHold ? "Resume call" : "Hold"}
-          pressed={onHold}
-          onClick={onHoldToggle}
-        >
-          <IconCallHold size={20} />
-        </BarControl>
-        <BarControl morphKey="keypad" label="Keypad">
-          <IconCallKeypad size={20} />
-        </BarControl>
-        <BarControl morphKey="transfer" label="Transfer">
-          <IconCallTransfer size={20} />
-        </BarControl>
-        <LiveAssistControl
-          help={help}
-          panelOpen={Boolean(liveAssistOpen)}
-          revealing={revealing}
-          onToggle={onLiveAssistToggle}
-        />
-        <BarControl
-          label={notesOpen ? "Hide notes" : "Notes"}
-          pressed={notesOpen}
-          onClick={onNotesToggle}
-          {...detail(BAR_DETAIL_DELAY_MS)}
-        >
-          <IconCallNotes size={20} />
-        </BarControl>
-        <BarControl
-          label={transcriptOpen ? "Hide transcript" : "Show transcript"}
-          pressed={transcriptOpen}
-          onClick={onTranscriptToggle}
-          {...detail(BAR_DETAIL_DELAY_MS)}
-        >
-          <IconCallTranscript size={20} />
-        </BarControl>
-        <BarControl label="Voicemail drop" {...detail(BAR_DETAIL_DELAY_MS)}>
-          <IconVoicemailDrop size={20} />
-        </BarControl>
+        {/* Call controls — everything here acts on the line, Voicemail drop
+            included: it is what the agent does when nobody picked up. */}
+        <div className="flex items-center gap-1.5">
+          <BarControl
+            morphKey="mute"
+            label={muted ? "Unmute" : "Mute"}
+            pressed={muted}
+            onClick={onMute}
+          >
+            <IconVoice size={20} />
+          </BarControl>
+          <BarControl
+            morphKey="hold"
+            label={onHold ? "Resume call" : "Hold"}
+            pressed={onHold}
+            onClick={onHoldToggle}
+          >
+            <IconCallHold size={20} />
+          </BarControl>
+          <BarControl morphKey="keypad" label="Keypad">
+            <IconCallKeypad size={20} />
+          </BarControl>
+          <BarControl morphKey="transfer" label="Transfer">
+            <IconCallTransfer size={20} />
+          </BarControl>
+          <BarControl label="Voicemail drop" {...detail(BAR_DETAIL_DELAY_MS)}>
+            <IconVoicemailDrop size={20} />
+          </BarControl>
+        </div>
+
+        {/* In-call tools — each opens a surface; none touch the call. */}
+        <div className="ml-3 flex items-center gap-1.5">
+          <LiveAssistControl
+            help={help}
+            panelOpen={Boolean(liveAssistOpen)}
+            revealing={revealing}
+            onToggle={onLiveAssistToggle}
+          />
+          <BarControl
+            label={notesOpen ? "Hide notes" : "Notes"}
+            pressed={notesOpen}
+            onClick={onNotesToggle}
+            {...detail(BAR_DETAIL_DELAY_MS)}
+          >
+            <IconCallNotes size={20} />
+          </BarControl>
+          <BarControl
+            label={transcriptOpen ? "Hide transcript" : "Show transcript"}
+            pressed={transcriptOpen}
+            onClick={onTranscriptToggle}
+            {...detail(BAR_DETAIL_DELAY_MS)}
+          >
+            <IconCallTranscript size={20} />
+          </BarControl>
+        </div>
 
         <span
           style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
