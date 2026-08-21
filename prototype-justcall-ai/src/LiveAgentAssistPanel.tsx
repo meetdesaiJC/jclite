@@ -400,12 +400,14 @@ function KnowledgeCard({
             )}
 
             {/* Where the answer came from is always named — an agent about to
-                say it out loud should be able to check it. */}
+                say it out loud should be able to check it. The name is the
+                page, not the Knowledge Base: the agent is deciding whether to
+                open this link, and the base it sits in tells them nothing. */}
             <GuidanceResourceLink
               resource={{
                 id: surface.entry.id,
                 type: "link",
-                name: surface.sourceName,
+                name: surface.entry.sourceTitle ?? surface.sourceName,
                 url: surface.entry.sourceUrl,
               }}
             />
