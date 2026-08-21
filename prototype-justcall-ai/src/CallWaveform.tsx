@@ -2,10 +2,10 @@ import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * The live trace in the middle of the call bar. It reads the microphone when
- * the browser hands it over and falls back to a synthesised speech envelope
- * when it does not, so the bar is never a dead strip. Muted or on hold, the
- * trace settles onto the idle line.
+ * The live trace in the middle of the call bar. A synthesised conversation
+ * runs underneath for the whole call, and the microphone rides on top of it
+ * when the browser hands one over, so the bar is never a dead strip. Muted or
+ * on hold, the trace settles onto the idle line.
  */
 
 const BAR_WIDTH = 3;
@@ -13,10 +13,8 @@ const BAR_GAP = 3;
 /** One new sample enters at the right edge on this beat, whatever the frame rate. */
 const SAMPLE_MS = 64;
 const IDLE_LEVEL = 0.05;
-/** Below this the stream is silence, not speech. */
-const MIC_SIGNAL = 0.02;
-/** The mic leads only while it is still being heard, then hands the trace back. */
-const MIC_HOLD_MS = 600;
+/** Below this the stream is room tone, not speech, and the mic stays out of it. */
+const MIC_SIGNAL = 0.06;
 
 type AudioContextCtor = typeof AudioContext;
 
@@ -161,26 +159,25 @@ export function CallWaveform({
         /* No mic, or the user said no — the synthesised envelope carries it. */
       });
 
-    // A blocked or muted stream still resolves and reads as pure silence, and a
-    // real one goes quiet whenever the agent stops talking. So the mic leads
-    // only while it is actually being heard — the moment it drops out the
-    // conversation envelope takes the trace back rather than flatlining on it.
-    let micHeardAt = -Infinity;
-
+    // A blocked or muted stream still resolves and reads as room tone, and a
+    // real one is quiet for most of a call — the agent is listening more than
+    // they are talking. So the mic never leads on its own: the conversation
+    // carries the trace and the mic only adds to it when someone is actually
+    // heard over it. Otherwise a granted-but-quiet mic flatlines the bar for
+    // the rest of the call.
     const read = (now: number, turn: Turn) => {
       if (silentRef.current) return 0;
-      if (analyser && timeDomain) {
-        analyser.getByteTimeDomainData(timeDomain);
-        let sum = 0;
-        for (let index = 0; index < timeDomain.length; index += 1) {
-          const value = (timeDomain[index]! - 128) / 128;
-          sum += value * value;
-        }
-        const level = Math.min(1, Math.sqrt(sum / timeDomain.length) * 3.4);
-        if (level > MIC_SIGNAL) micHeardAt = now;
-        if (now - micHeardAt < MIC_HOLD_MS) return level;
+      const conversation = turnLevel(now, turn);
+      if (!analyser || !timeDomain) return conversation;
+
+      analyser.getByteTimeDomainData(timeDomain);
+      let sum = 0;
+      for (let index = 0; index < timeDomain.length; index += 1) {
+        const value = (timeDomain[index]! - 128) / 128;
+        sum += value * value;
       }
-      return turnLevel(now, turn);
+      const level = Math.min(1, Math.sqrt(sum / timeDomain.length) * 3.4);
+      return level > MIC_SIGNAL ? Math.max(conversation, level) : conversation;
     };
 
     const samples: number[] = [];
