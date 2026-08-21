@@ -47,7 +47,7 @@ function PrototypeGroup({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex w-full flex-col items-start gap-3">
+    <div className="flex w-[333px] shrink-0 flex-col items-start gap-3">
       <p className="text-label-sm font-medium uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </p>
@@ -62,32 +62,36 @@ export function PrototypeLauncher({
   onStartEmptySetup,
 }: PrototypeLauncherProps) {
   return (
-    <div className="flex h-screen overflow-y-auto bg-white pb-[42px] pl-[75px] pt-[42px]">
-      <div className="flex w-[333px] flex-col items-start gap-[31px]">
-        <p className="w-full text-heading-xl text-foreground">Prototypes</p>
+    <div className="flex h-screen overflow-y-auto bg-white px-[75px] pb-[42px] pt-[42px]">
+      <div className="flex flex-col items-start gap-[31px]">
+        <p className="text-heading-xl text-foreground">Prototypes</p>
 
-        <PrototypeGroup label="Setup">
-          {/* Same flow as 02, walked on a day-one account so every list lands
-              on its empty state. */}
-          <PrototypeCard
-            index="01"
-            title="Empty States"
-            onClick={onStartEmptySetup}
-          />
-          <PrototypeCard
-            index="02"
-            title="With Data"
-            onClick={onStartSetup}
-          />
-        </PrototypeGroup>
+        {/* One column per category, so the categories read as siblings rather
+            than as one long queue. */}
+        <div className="flex flex-wrap items-start gap-[31px]">
+          <PrototypeGroup label="Setup">
+            {/* Same flow as 02, walked on a day-one account so every list lands
+                on its empty state. */}
+            <PrototypeCard
+              index="01"
+              title="Empty States"
+              onClick={onStartEmptySetup}
+            />
+            <PrototypeCard
+              index="02"
+              title="With Data"
+              onClick={onStartSetup}
+            />
+          </PrototypeGroup>
 
-        <PrototypeGroup label="In-Call">
-          <PrototypeCard
-            index="03"
-            title="Agent Experience"
-            onClick={onStartInCall}
-          />
-        </PrototypeGroup>
+          <PrototypeGroup label="In-Call">
+            <PrototypeCard
+              index="03"
+              title="Agent Experience"
+              onClick={onStartInCall}
+            />
+          </PrototypeGroup>
+        </div>
       </div>
     </div>
   );
