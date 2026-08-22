@@ -338,8 +338,9 @@ export function KnowledgePage({
                 />
                 {hasFilters ? (
                   <Button
-                    variant="grey-outline"
+                    variant="link"
                     size="sm"
+                    className="text-muted-foreground hover:text-foreground"
                     onClick={() => {
                       setStatusFilter([]);
                       setAgentFilter([]);
@@ -347,7 +348,7 @@ export function KnowledgePage({
                       setPage(1);
                     }}
                   >
-                    Clear
+                    Clear all
                   </Button>
                 ) : null}
               </div>
