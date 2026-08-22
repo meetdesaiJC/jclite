@@ -1,6 +1,5 @@
 import * as React from "react";
 import { Button } from "@/components/Button";
-import { Toggle } from "@/components/Toggle";
 import { cn } from "@/lib/utils";
 import {
   IconAaActions,
@@ -23,10 +22,11 @@ import {
  *
  * Knowledge Base is deliberately *not* one of them. It is a shared JustCall AI
  * capability — Voice Agent reads the same knowledge bases — so it lives in the
- * JustCall AI nav, and Agent Assist keeps only the one decision that is its own:
- * whether agents may receive knowledge answers on a live call. That switch is
- * the card pinned below the nav, separated from the primary items because it
- * configures a capability instead of navigating to a section.
+ * JustCall AI nav. Agent Assist does not gate it either: once the account has a
+ * Knowledge Base, agents receive its answers on live calls, and the switch for
+ * that lives with the rest of the Knowledge settings. All this column carries is
+ * the card pinned below the nav, and only while there is no Knowledge Base to
+ * draw on.
  *
  * Selection is one pill that slides between the rows rather than a background
  * each row paints on itself. Switching sections is the most repeated move in
@@ -58,20 +58,16 @@ export const AGENT_ASSIST_NAV_ITEMS: AgentAssistNavItem[] = [
 export function AgentAssistNav({
   activeKey,
   onSelect,
-  knowledgeSuggestionsEnabled,
   hasKnowledgeBase,
-  onKnowledgeSuggestionsEnabledChange,
   onLearnAboutKnowledgeSuggestions,
-  onManageKnowledge,
+  onCreateKnowledgeBase,
   className,
 }: {
   activeKey: AgentAssistArea;
   onSelect: (key: AgentAssistArea) => void;
-  knowledgeSuggestionsEnabled: boolean;
   hasKnowledgeBase: boolean;
-  onKnowledgeSuggestionsEnabledChange: (enabled: boolean) => void;
   onLearnAboutKnowledgeSuggestions: () => void;
-  onManageKnowledge: () => void;
+  onCreateKnowledgeBase: () => void;
   className?: string;
 }) {
   const listRef = React.useRef<HTMLDivElement>(null);
@@ -165,50 +161,42 @@ export function AgentAssistNav({
         </ul>
       </div>
 
-      <KnowledgeSuggestionsCard
-        enabled={knowledgeSuggestionsEnabled}
-        hasKnowledgeBase={hasKnowledgeBase}
-        onEnabledChange={onKnowledgeSuggestionsEnabledChange}
-        onLearnMore={onLearnAboutKnowledgeSuggestions}
-        onManage={onManageKnowledge}
-      />
+      {hasKnowledgeBase ? null : (
+        <KnowledgeBaseNudge
+          onLearnMore={onLearnAboutKnowledgeSuggestions}
+          onCreateKnowledgeBase={onCreateKnowledgeBase}
+        />
+      )}
     </nav>
   );
 }
 
 /**
- * The one Knowledge control Agent Assist owns: may agents receive knowledge
- * answers during a call. Enabling asks nothing else — no knowledge bases to
- * pick, no assignments to confirm, and no list of what is currently assigned.
- * All of that is the global Knowledge experience's job, so the enabled state
- * hands off there rather than restating it.
+ * The one thing Agent Assist has to say about Knowledge: that the capability
+ * exists, and that the account cannot use it yet.
  *
- * Presented as a feature-promo card rather than the grey panel it used to be:
- * this is the one thing in the column an admin has to *decide*, and while it is
- * off there is nothing on screen telling them the capability exists. The
- * brand-tinted wash and the icon tile give it enough weight to read as an offer;
- * `mt-auto` and the absence of a nav-style row keep it from reading as a fifth
- * destination.
+ * Knowledge Base suggestions are not a decision this column asks for. An
+ * account that maintains a Knowledge Base wants its agents answering from it,
+ * so the capability is simply on, and the switch that turns it back off lives
+ * with the rest of the Knowledge settings rather than beside four navigation
+ * rows. What is left is the case where there is nothing to draw on — no
+ * Knowledge Base in the account — and there the card is a prompt, not a
+ * setting: it names the capability, says what it does, and hands off to
+ * Knowledge to author the first one. Once that exists the card has nothing to
+ * ask and disappears.
  *
- * The card changes job with its state, and so does the top-right slot. While the
- * capability is off the card is an offer, and the offer is the body's own CTA —
- * a switch beside it would be a second control for the same decision. Once it is
- * on the card is a setting, and the slot carries the switch that turns it back
- * off. It used to carry an "Enabled" badge there instead, which stated a
- * decision the admin could no longer reverse anywhere in the product.
+ * It is a feature-promo card rather than the grey panel it used to be, because
+ * while there is no Knowledge Base there is nothing else on screen telling an
+ * admin the capability exists. The brand-tinted wash and the icon tile give it
+ * enough weight to read as an offer; `mt-auto` and the absence of a nav-style
+ * row keep it from reading as a fifth destination.
  */
-function KnowledgeSuggestionsCard({
-  enabled,
-  hasKnowledgeBase,
-  onEnabledChange,
+function KnowledgeBaseNudge({
   onLearnMore,
-  onManage,
+  onCreateKnowledgeBase,
 }: {
-  enabled: boolean;
-  hasKnowledgeBase: boolean;
-  onEnabledChange: (enabled: boolean) => void;
   onLearnMore: () => void;
-  onManage: () => void;
+  onCreateKnowledgeBase: () => void;
 }) {
   return (
     <div
@@ -218,71 +206,36 @@ function KnowledgeSuggestionsCard({
       )}
     >
       <div className="flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-2">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-brand/10 ring-1 ring-inset ring-brand/10">
-            <IconAaKnowledge className="size-4 shrink-0 text-brand" />
-          </span>
-          {enabled ? (
-            // Toggle spreads `className` onto the input itself, so the optical
-            // centring against the 32px icon tile goes on a wrapper instead —
-            // margin on the track would leave the knob behind.
-            <span className="mt-1.5 inline-flex">
-              <Toggle
-                size="sm"
-                checked
-                onCheckedChange={onEnabledChange}
-                aria-label="Knowledge Base suggestions"
-              />
-            </span>
-          ) : null}
-        </div>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-brand/10 ring-1 ring-inset ring-brand/10">
+          <IconAaKnowledge className="size-4 shrink-0 text-brand" />
+        </span>
 
         <div className="flex flex-col gap-1">
+          {/* Titled with the step rather than the capability: the capability
+              needs no decision, the step does. */}
           <h2 className="text-label-md-semi text-foreground">
-            Knowledge Base suggestions
+            Create a Knowledge Base
           </h2>
           <p className="text-pretty text-paragraph-sm text-muted-foreground">
-            {enabled
-              ? "Agents receive relevant answers from your Knowledge Base during calls."
-              : "Surface relevant answers from your Knowledge Base during calls."}
+            Surface relevant answers from your Knowledge Base during calls.
           </p>
         </div>
 
-        {enabled ? (
-          <Button
-            variant="grey-outline"
-            size="xs"
-            className="w-fit"
-            onClick={onManage}
-          >
-            Manage Knowledge Base
+        {/* The nav column is narrow enough that "Create Knowledge Base" and
+            "Learn more" cannot sit on one line without the link spilling past
+            the card, so the two stack. */}
+        <div className="flex flex-col items-start gap-2">
+          <Button size="xs" onClick={onCreateKnowledgeBase}>
+            Create Knowledge Base
           </Button>
-        ) : (
-          // The nav column is narrow enough that "Create Knowledge Base" and
-          // "Learn more" cannot sit on one line without the link spilling past
-          // the card. Stacking keeps both readable at every label length, so
-          // both states stack rather than only the long one.
-          <div className="flex flex-col items-start gap-2">
-            {/* With no knowledge base in the account there is nothing to
-                enable against — turning the capability on would put agents on
-                calls with an empty shelf. The offer becomes the step that has
-                to happen first, and it hands off to Knowledge to do it. */}
-            <Button
-              size="xs"
-              onClick={hasKnowledgeBase ? () => onEnabledChange(true) : onManage}
-            >
-              {hasKnowledgeBase ? "Enable" : "Create Knowledge Base"}
-            </Button>
-            {/* One line cannot show what an answer arriving mid-call looks
-                like, so "Learn more" opens the picture of it rather than
-                sending the admin off to the Knowledge Base page to guess. */}
-            <Button variant="link" size="xs" onClick={onLearnMore}>
-              Learn more
-            </Button>
-          </div>
-        )}
+          {/* One line cannot show what an answer arriving mid-call looks like,
+              so "Learn more" opens the picture of it rather than sending the
+              admin off to the Knowledge Base page to guess. */}
+          <Button variant="link" size="xs" onClick={onLearnMore}>
+            Learn more
+          </Button>
+        </div>
       </div>
     </div>
   );
 }
-

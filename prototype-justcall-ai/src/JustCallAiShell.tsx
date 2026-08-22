@@ -100,12 +100,6 @@ export function JustCallAiShell({
   const [connectedSources, setConnectedSources] = useState<
     KnowledgeIntegrationRef[]
   >(seeded ? SEED_CONNECTED_SOURCES : []);
-  // Agent Assist's own switch: whether agents may receive knowledge answers
-  // mid-call. Which knowledge bases they draw on is not asked here — that is
-  // assigned in Knowledge.
-  const [knowledgeSuggestionsEnabled, setKnowledgeSuggestionsEnabled] =
-    useState(false);
-
   useEffect(() => {
     setDialerOpen(false);
   }, [activeKey]);
@@ -140,8 +134,6 @@ export function JustCallAiShell({
           seeded={seeded}
           knowledgeSources={knowledgeSources}
           onOpenKnowledge={() => onNavigate?.("knowledge")}
-          knowledgeSuggestionsEnabled={knowledgeSuggestionsEnabled}
-          onKnowledgeSuggestionsEnabledChange={setKnowledgeSuggestionsEnabled}
         />
       ) : activeKey === "knowledge" ? (
         <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-white">
