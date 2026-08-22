@@ -81,16 +81,12 @@ export interface AgentAssistAdminProps {
   knowledgeSources: KnowledgeSourceRecord[];
   /** Leaves Agent Assist for the global Knowledge page. */
   onOpenKnowledge: () => void;
-  knowledgeSuggestionsEnabled: boolean;
-  onKnowledgeSuggestionsEnabledChange: (enabled: boolean) => void;
 }
 
 export function AgentAssistAdmin({
   seeded = true,
   knowledgeSources,
   onOpenKnowledge,
-  knowledgeSuggestionsEnabled,
-  onKnowledgeSuggestionsEnabledChange,
 }: AgentAssistAdminProps) {
   const [area, setArea] = React.useState<AgentAssistArea>("scripts");
   /**
@@ -106,7 +102,7 @@ export function AgentAssistAdmin({
     "idle" | "exiting" | "entering"
   >("idle");
   // "Learn more" on the nav card — the explanation of what agents see on a
-  // live call, and the second place the capability can be turned on.
+  // live call, for an account that has no Knowledge Base to see it with yet.
   const [knowledgeSuggestionsLearnMore, setKnowledgeSuggestionsLearnMore] =
     React.useState(false);
   const { active: takeover, register: registerTakeover } =
@@ -172,23 +168,17 @@ export function AgentAssistAdmin({
           <AgentAssistNav
             activeKey={selectedArea}
             onSelect={selectArea}
-            knowledgeSuggestionsEnabled={knowledgeSuggestionsEnabled}
             hasKnowledgeBase={knowledgeSources.length > 0}
-            onKnowledgeSuggestionsEnabledChange={
-              onKnowledgeSuggestionsEnabledChange
-            }
             onLearnAboutKnowledgeSuggestions={() =>
               setKnowledgeSuggestionsLearnMore(true)
             }
-            onManageKnowledge={onOpenKnowledge}
+            onCreateKnowledgeBase={onOpenKnowledge}
           />
         )}
 
         <KnowledgeSuggestionsModal
           open={knowledgeSuggestionsLearnMore}
           onClose={() => setKnowledgeSuggestionsLearnMore(false)}
-          onEnable={() => onKnowledgeSuggestionsEnabledChange(true)}
-          hasKnowledgeBase={knowledgeSources.length > 0}
           onCreateKnowledgeBase={onOpenKnowledge}
         />
 

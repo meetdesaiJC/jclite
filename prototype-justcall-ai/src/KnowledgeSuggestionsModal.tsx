@@ -23,8 +23,11 @@ import { SEED_KNOWLEDGE_SOURCES, knowledgeFacts } from "./knowledgeData";
  * left half answers only what the picture cannot: what triggers it, what the
  * answer looks like, and where the content comes from.
  *
- * It ends on the decision it opened with, so the modal is a way to say yes
- * rather than a detour on the way back to the card.
+ * It ends on the step the card opened with — authoring the first Knowledge
+ * Base — so the modal is a way to get on with it rather than a detour on the
+ * way back to the card. There is no "enable" here: with a Knowledge Base in the
+ * account the capability is already on, and this modal is only ever reached
+ * from the card that says there is not one yet.
  */
 
 const PRODUCT_KB = SEED_KNOWLEDGE_SOURCES.find(
@@ -48,15 +51,10 @@ const RETENTION_CUE = "keep call recordings?";
 export interface KnowledgeSuggestionsModalProps {
   open: boolean;
   onClose: () => void;
-  /** Turns the capability on. The modal closes itself first. */
-  onEnable: () => void;
   /**
-   * Whether the account has any Knowledge Base at all. With none, there is
-   * nothing for the capability to draw on, so the modal ends on the step that
-   * has to come first instead of on a switch.
+   * Leaves for the Knowledge page to author the first Knowledge Base. The
+   * modal closes itself first.
    */
-  hasKnowledgeBase: boolean;
-  /** Leaves for the Knowledge page to author the first Knowledge Base. */
   onCreateKnowledgeBase: () => void;
 }
 
@@ -81,8 +79,6 @@ const POINTS: Array<{ icon: ReactNode; title: string; body: string }> = [
 export function KnowledgeSuggestionsModal({
   open,
   onClose,
-  onEnable,
-  hasKnowledgeBase,
   onCreateKnowledgeBase,
 }: KnowledgeSuggestionsModalProps) {
   return (
@@ -137,13 +133,10 @@ export function KnowledgeSuggestionsModal({
             <Button
               onClick={() => {
                 onClose();
-                if (hasKnowledgeBase) onEnable();
-                else onCreateKnowledgeBase();
+                onCreateKnowledgeBase();
               }}
             >
-              {hasKnowledgeBase
-                ? "Enable Knowledge Base suggestions"
-                : "Create Knowledge Base"}
+              Create Knowledge Base
             </Button>
           </div>
         </div>
