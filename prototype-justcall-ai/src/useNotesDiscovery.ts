@@ -1,0 +1,282 @@
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+
+/**
+ * Notes' first showing.
+ *
+ * The Notes panel is off by default and lives behind an icon on the call bar,
+ * which is a fine resting state and a terrible starting one: nothing on the
+ * bar says the panel exists. Rather than explain it, the panel is shown once
+ * and then puts itself away in front of the agent — the header travels to the
+ * toolbar icon and the icon lights up as it lands. That is the whole lesson:
+ * *this* is where Notes went, so *this* is where it comes back from.
+ *
+ * It runs once per agent, not once per call, and it only runs when it can be
+ * ignored safely: the workspace has room for the column, no other right-side
+ * panel is up, and the notes are empty. Any real touch of Notes during the
+ * pause ends it — a panel the agent is already using must not be taken away.
+ *
+ * It also waits for someone to be looking. A backgrounded tab still runs its
+ * timers, so without that check the one introduction an agent ever gets could
+ * open, be recorded as seen, and put itself away while the window sat behind
+ * something else. Hidden is a reason to wait, not a reason to give up.
+ */
+
+const STORAGE_KEY = "jcai.dialer.notes-discovery-seen.v1";
+
+export const NOTES_DISCOVERY = {
+  /** A beat after the workspace lands, so Notes is not one more thing arriving. */
+  settleMs: 320,
+  /** Long enough to read the panel, short enough not to feel like a modal. */
+  dwellMs: 1700,
+  /** Textarea, counter and close button clear first; the header stays. */
+  bodyFadeMs: 140,
+  /** The header's trip to the toolbar — inside the column's own 240ms close. */
+  flightMs: 260,
+  /** It only clears once it is over the icon, not on the way there. */
+  fadeMs: 120,
+  fadeDelayMs: 140,
+  /** Toolbar glyph is 20px; the header meets it at roughly its size. */
+  endScale: 0.5,
+  /** Two frames, in case none arrive — the move must not depend on rAF alone. */
+  armMs: 48,
+  /** Confirmation, not a notification — one small pulse and back to rest. */
+  pulseMs: 140,
+  pulseHoldMs: 320,
+} as const;
+
+/** Geometry for the travelling header, in viewport coordinates. */
+export type NotesDiscoveryFlight = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  /** Transform origin inside the box — the mark, not the box's middle. */
+  originX: number;
+  originY: number;
+  dx: number;
+  dy: number;
+  /** False for the frame that paints it in place, true for the one that moves it. */
+  moving: boolean;
+};
+
+export function notesDiscoverySeen() {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === "true";
+  } catch {
+    // Private mode: no memory, so the introduction runs again. Better than
+    // never running it at all.
+    return false;
+  }
+}
+
+export function markNotesDiscoverySeen() {
+  try {
+    localStorage.setItem(STORAGE_KEY, "true");
+  } catch {
+    /* Nothing to keep it in. The call still works. */
+  }
+}
+
+/** `waiting` is the settle beat before the panel opens; `leaving` is the trip. */
+type Stage = "off" | "waiting" | "dwell" | "leaving" | "done";
+
+/** Nobody is looking at a hidden document, so nothing shown in one counts. */
+function pageVisible() {
+  return typeof document === "undefined" || !document.hidden;
+}
+
+export function useNotesDiscovery({
+  ready,
+  reduced,
+  hasRoom,
+  busy,
+  hasContent,
+  headerRef,
+  markRef,
+  targetRef,
+  onOpen,
+  onClose,
+}: {
+  /** The workspace has been measured and is no longer arriving. */
+  ready: boolean;
+  reduced: boolean;
+  /** Enough width for Script, Guidance and the column at once. */
+  hasRoom: boolean;
+  /** Another right-side panel is already up. */
+  busy: boolean;
+  /** Notes already carry something the agent may need in front of them. */
+  hasContent: boolean;
+  /** The header's icon + title group — the element that travels. */
+  headerRef: RefObject<HTMLElement | null>;
+  /** The mark inside that group, which is what has to land on the icon. */
+  markRef: RefObject<HTMLElement | null>;
+  /** The Notes control on the call bar. */
+  targetRef: RefObject<HTMLElement | null>;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  const [flight, setFlight] = useState<NotesDiscoveryFlight | null>(null);
+  const [pulsing, setPulsing] = useState(false);
+  // Re-runs the gate when the window comes back, which is the first moment the
+  // introduction has an audience.
+  const [visible, setVisible] = useState(pageVisible);
+
+  useEffect(() => {
+    const onChange = () => setVisible(pageVisible());
+    document.addEventListener("visibilitychange", onChange);
+    return () => document.removeEventListener("visibilitychange", onChange);
+  }, []);
+
+  // The machine is a ref, not state: nothing renders off it, and a stage that
+  // only settles on the next commit would let a second timer through.
+  const stageRef = useRef<Stage>("off");
+  const openRef = useRef(onOpen);
+  openRef.current = onOpen;
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const reducedRef = useRef(reduced);
+  reducedRef.current = reduced;
+
+  const timersRef = useRef<number[]>([]);
+  const rafRef = useRef(0);
+
+  const clear = useCallback(() => {
+    timersRef.current.forEach((id) => window.clearTimeout(id));
+    timersRef.current = [];
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
+  }, []);
+
+  const later = useCallback((ms: number, run: () => void) => {
+    timersRef.current.push(window.setTimeout(run, ms));
+  }, []);
+
+  // Teardown puts a run that has not started travelling back to the line, so
+  // React's development remount re-arms it instead of swallowing it. Once the
+  // header is in the air there is nothing left to restart.
+  useEffect(
+    () => () => {
+      clear();
+      if (stageRef.current === "waiting" || stageRef.current === "dwell") {
+        stageRef.current = "off";
+      }
+    },
+    [clear]
+  );
+
+  const collapse = useCallback(() => {
+    if (stageRef.current !== "dwell") return;
+    stageRef.current = "leaving";
+
+    // Read the geometry while the panel is still where it was — the close
+    // below is what starts taking it away.
+    const from = headerRef.current?.getBoundingClientRect();
+    const mark = markRef.current?.getBoundingClientRect();
+    const to = targetRef.current?.getBoundingClientRect();
+
+    closeRef.current();
+
+    const pulse = () => {
+      setPulsing(true);
+      later(NOTES_DISCOVERY.pulseHoldMs, () => {
+        setPulsing(false);
+        stageRef.current = "done";
+      });
+    };
+
+    // Reduced motion — or a panel that is no longer on screen to travel from.
+    // The icon lighting up is then the whole of the connection.
+    if (reducedRef.current || !from?.width || !mark?.width || !to?.width) {
+      pulse();
+      return;
+    }
+
+    const originX = mark.left + mark.width / 2 - from.left;
+    const originY = mark.top + mark.height / 2 - from.top;
+    setFlight({
+      top: from.top,
+      left: from.left,
+      width: from.width,
+      height: from.height,
+      originX,
+      originY,
+      dx: to.left + to.width / 2 - (from.left + originX),
+      dy: to.top + to.height / 2 - (from.top + originY),
+      moving: false,
+    });
+
+    // Arm, then move. A transition only runs when the element was already
+    // painted at the value it is travelling from — hence the second frame.
+    // The timer is the same insurance the aside column carries: a window that
+    // stops handing out frames must still leave the machine somewhere sane.
+    let moved = false;
+    const move = () => {
+      if (moved) return;
+      moved = true;
+      setFlight((current) => (current ? { ...current, moving: true } : null));
+    };
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = requestAnimationFrame(move);
+    });
+    later(NOTES_DISCOVERY.armMs, move);
+
+    later(NOTES_DISCOVERY.flightMs, () => {
+      setFlight(null);
+      pulse();
+    });
+  }, [headerRef, later, markRef, targetRef]);
+
+  useEffect(() => {
+    if (stageRef.current !== "off" || !ready) return;
+
+    // Waiting, not declining: the conditions below are about this call, but a
+    // hidden window is about the agent, and they may still be back inside it.
+    if (!visible) return;
+
+    // One shot, taken the moment the workspace settles. If the conditions are
+    // wrong now they are not going to become right in a way worth acting on —
+    // Notes appearing on its own halfway through a call is an interruption,
+    // not an introduction. The flag is left unset so a roomier window, or a
+    // call that starts with empty notes, still gets the introduction later.
+    if (busy || hasContent || !hasRoom || notesDiscoverySeen()) {
+      stageRef.current = "done";
+      return;
+    }
+
+    stageRef.current = "waiting";
+    later(NOTES_DISCOVERY.settleMs, () => {
+      if (stageRef.current !== "waiting") return;
+      // Hidden during the settle beat — back to the line rather than opening
+      // into a window nobody is watching.
+      if (!pageVisible()) {
+        stageRef.current = "off";
+        return;
+      }
+      stageRef.current = "dwell";
+      // Written when the panel is actually on screen: what the flag records is
+      // that the agent has *seen* this, not that we once intended it.
+      markNotesDiscoverySeen();
+      openRef.current();
+      later(NOTES_DISCOVERY.dwellMs, collapse);
+    });
+  }, [busy, collapse, hasContent, hasRoom, later, ready, visible]);
+
+  /**
+   * The agent reached for Notes. Whatever it was — a click in the box, a
+   * keystroke, the close button, another panel — the introduction is over and
+   * the panel is theirs. Never fires once the collapse is already travelling.
+   */
+  const cancel = useCallback(() => {
+    if (stageRef.current !== "waiting" && stageRef.current !== "dwell") return;
+    clear();
+    stageRef.current = "done";
+  }, [clear]);
+
+  return {
+    flight,
+    /** The panel is handing its header over — fade what is not travelling. */
+    handingOff: flight !== null,
+    pulsing,
+    cancel,
+  };
+}

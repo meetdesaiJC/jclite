@@ -11,8 +11,11 @@ export type CallPaneId = (typeof CALL_PANE_IDS)[number];
 
 export const CALL_WORKSPACE_TOKENS = {
   panes: {
-    script: { minPx: 280, defaultFr: 0.42, maxFr: 0.62 },
-    suggestions: { minPx: 300, defaultFr: 0.33, maxFr: 0.55 },
+    // Guidance is the pane the agent reads mid-call, so it carries the weight:
+    // Script sits at 30% of the pair and Guidance at 70% while the aside is
+    // closed (0.225 / 0.525 of the full three-pane row).
+    script: { minPx: 280, defaultFr: 0.225, maxFr: 0.62 },
+    suggestions: { minPx: 300, defaultFr: 0.525, maxFr: 0.78 },
     transcript: { minPx: 320, defaultFr: 0.25, maxFr: 0.4 },
   },
   /** Visual gap between cards — same as the existing `gap-3`. */
@@ -61,7 +64,9 @@ export const DEFAULT_CALL_PANE_FRACTIONS: CallPaneFractions = {
   transcript: CALL_WORKSPACE_TOKENS.panes.transcript.defaultFr,
 };
 
-export const CALL_WORKSPACE_STORAGE_KEY = "jcai.dialer.call-workspace-fractions";
+// Suffixed so a stored drag from the old 56/44 default does not out-vote the
+// new 30/70 split for anyone who has already opened the prototype.
+export const CALL_WORKSPACE_STORAGE_KEY = "jcai.dialer.call-workspace-fractions.v2";
 
 export function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));

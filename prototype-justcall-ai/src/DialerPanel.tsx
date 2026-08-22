@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,7 @@ import { CallWaveform } from "./CallWaveform";
 import { CallWorkspaceResizeHandle } from "./CallWorkspaceResizeHandle";
 import {
   CALL_ASIDE,
+  canResizeWorkspace,
   fractionsForAsideOpen,
   type CallPaneCollapsed,
   type CallPaneId,
@@ -64,6 +66,11 @@ import {
   useAsidePanelSwitch,
   type AsidePanel,
 } from "./useAsidePanelSwitch";
+import {
+  NOTES_DISCOVERY,
+  useNotesDiscovery,
+  type NotesDiscoveryFlight,
+} from "./useNotesDiscovery";
 import {
   CALL_SCENARIOS,
   POST_WRAP_COMPLETED_DELAY_MS,
@@ -95,6 +102,9 @@ type DialerTab = "dialer" | "call-logs" | "contacts" | "messages" | "settings";
 type CallPhase = "idle" | "ringing" | "connecting" | "talking" | "wrapup";
 
 const NOTES_MAX = 1500;
+
+/** One call, one set of notes — the live pane and Wrap up edit the same value. */
+const EMPTY_NOTES: NotesEditorValue = { html: "", text: "" };
 
 /**
  * How long the workspace takes to give the aside column its width — and
@@ -133,6 +143,14 @@ const CALL_OUTCOMES: {
 const RINGING_MS = 2400;
 const DEFAULT_NUMBER = "919773110910";
 
+/**
+ * Keypad and ringing are the same phone, so the card cannot change size when
+ * the agent hits Call — only what is inside it changes. The number is the
+ * ringing state's natural height, since its content is the taller of the two.
+ * The keypad needs less, and spreads its rows into the room left over.
+ */
+const PHONE_SHELL_H = "h-[588px] max-h-full";
+
 /** Tap Call — let the button finish compressing before the dialer turns over. */
 const CALL_PRESS_MS = 120;
 /** Hangup — Agent Assist lets go first, then the phone changes state. */
@@ -166,6 +184,13 @@ const MORPH_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 const BAR_DETAIL_DELAY_MS = 340;
 /** 360–580ms, then 420–640ms — panels land last, left to right. */
 const PANE_REVEAL_DELAYS_MS = [240, 270, 300];
+/**
+ * The stage has finished arriving: the last pane's entrance is over (its delay
+ * plus the 220ms `call-stage-pane-in` runs to), which lands at the same beat
+ * the morph does. Measured from the moment the call goes live, so it holds for
+ * a resumed call that had no phone to morph from.
+ */
+const STAGE_SETTLED_MS = PANE_REVEAL_DELAYS_MS[2] + 220;
 
 const KEYPAD: { digit: string; letters: string }[][] = [
   [
@@ -790,6 +815,7 @@ function IdleDialer({
     <div
       className={cn(
         "flex w-[360px] shrink-0 flex-col overflow-hidden rounded-[16px] bg-white shadow-600",
+        PHONE_SHELL_H,
         className
       )}
     >
@@ -806,7 +832,7 @@ function IdleDialer({
         </div>
       </div>
 
-      <div className="flex w-full flex-col items-center gap-4 p-4">
+      <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-between gap-4 p-4">
         <InputField
           id={inputId}
           variant="prefix"
@@ -933,9 +959,14 @@ function InCallShell({
   const [actionStates, setActionStates] = useState<Record<string, ActionState>>(
     {}
   );
+  // Owned here, above the live/wrap-up swap: the Notes pane during the call and
+  // the Notes field in Wrap up are the same notes, so whatever the agent typed
+  // while the line was open is already in the field they file with.
+  const [notes, setNotes] = useState<NotesEditorValue>(EMPTY_NOTES);
 
   useEffect(() => {
     setActionStates({});
+    setNotes(EMPTY_NOTES);
   }, [scenario.id]);
 
   // Ringing and live are the same surface, so they share a swap key: the phone
@@ -960,6 +991,8 @@ function InCallShell({
             contactMeta={contactMeta}
             scenario={scenario}
             actionStates={actionStates}
+            notes={notes}
+            onNotesChange={setNotes}
             onScenarioChange={onScenarioChange}
             onClose={onCloseWrapUp}
           />
@@ -978,6 +1011,8 @@ function InCallShell({
             tab={tab}
             scenario={scenario}
             assistCollapsing={assistCollapsing}
+            notes={notes}
+            onNotesChange={setNotes}
             onScenarioChange={onScenarioChange}
             onTabChange={onTabChange}
             onMute={onMute}
@@ -1019,6 +1054,8 @@ function CallMorphStage({
   tab,
   scenario,
   assistCollapsing,
+  notes,
+  onNotesChange,
   onScenarioChange,
   onTabChange,
   onMute,
@@ -1039,6 +1076,8 @@ function CallMorphStage({
   tab: DialerTab;
   scenario: CallScenario;
   assistCollapsing: boolean;
+  notes: NotesEditorValue;
+  onNotesChange: (value: NotesEditorValue) => void;
   onScenarioChange: (id: string) => void;
   onTabChange: (tab: DialerTab) => void;
   onMute: () => void;
@@ -1146,6 +1185,8 @@ function CallMorphStage({
           onHold={onHold}
           scenario={scenario}
           assistCollapsing={assistCollapsing}
+          notes={notes}
+          onNotesChange={onNotesChange}
           onScenarioChange={onScenarioChange}
           onMute={onMute}
           onHoldToggle={onHoldToggle}
@@ -1154,7 +1195,7 @@ function CallMorphStage({
         />
       ) : (
         <RingingPhone
-          className="h-[640px] max-h-full"
+          className={PHONE_SHELL_H}
           reduced={reduced}
           connected={connecting}
           elapsedMs={elapsedMs}
@@ -1269,6 +1310,8 @@ function LiveCallStage({
   onHold,
   scenario,
   assistCollapsing,
+  notes,
+  onNotesChange,
   onScenarioChange,
   onMute,
   onHoldToggle,
@@ -1284,6 +1327,8 @@ function LiveCallStage({
   onHold: boolean;
   scenario: CallScenario;
   assistCollapsing: boolean;
+  notes: NotesEditorValue;
+  onNotesChange: (value: NotesEditorValue) => void;
   onScenarioChange: (id: string) => void;
   onMute: () => void;
   onHoldToggle: () => void;
@@ -1291,21 +1336,12 @@ function LiveCallStage({
   onActionStatesChange?: (states: Record<string, ActionState>) => void;
 }) {
   const [asidePanel, setAsidePanel] = useState<AsidePanel | null>(null);
-  const [notes, setNotes] = useState<NotesEditorValue>({ html: "", text: "" });
 
   const liveAssist = useLiveAssist({
     scenarioId: scenario.id,
     elapsedMs,
     panelOpen: asidePanel === "assist",
   });
-
-  useEffect(() => {
-    setAsidePanel(null);
-  }, [scenario.id]);
-
-  useEffect(() => {
-    if (assistCollapsing) setAsidePanel(null);
-  }, [assistCollapsing]);
 
   const asideOpen = asidePanel !== null;
   const aside = useCallAsidePresence(asideOpen, reduced);
@@ -1336,19 +1372,26 @@ function LiveCallStage({
   const notesEditorRef = useRef<NotesEditorHandle>(null);
   // Parent-owned: the editor unmounts with the column, the caret shouldn't.
   const notesCaret = useRef<NotesEditorCaret>({ offset: 0, scroll: 0 });
+  const notesPaneRef = useRef<HTMLDivElement>(null);
+  const notesHeaderRef = useRef<HTMLDivElement>(null);
+  const notesMarkRef = useRef<HTMLSpanElement>(null);
+  const notesControlRef = useRef<HTMLButtonElement>(null);
+
+  const [stageSettled, setStageSettled] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => setStageSettled(true), STAGE_SETTLED_MS);
+    return () => window.clearTimeout(id);
+  }, []);
 
   const saveNotesCaret = () => notesEditorRef.current?.saveCaret();
 
-  const closeAside = () => {
+  /** Close with no opinion about why — the introduction uses this one too. */
+  const dismissAside = () => {
     if (asidePanel === "notes") saveNotesCaret();
     setAsidePanel(null);
   };
 
-  const toggleAside = (next: AsidePanel) => {
-    if (asidePanel === next) {
-      closeAside();
-      return;
-    }
+  const openAside = (next: AsidePanel) => {
     if (asidePanel === "notes") saveNotesCaret();
     if (!asidePanel && workspace.workspaceWidth > 0) {
       closedSnapshotRef.current = {
@@ -1365,6 +1408,63 @@ function LiveCallStage({
     }
     setAsidePanel(next);
   };
+
+  const discovery = useNotesDiscovery({
+    // Nothing introduces itself over an entrance: the panes have to be in and
+    // the phone has to have finished becoming the bar.
+    ready: stageSettled && !morphing && workspace.measured,
+    reduced,
+    // Three panes at their minimums, not two — the column has to have somewhere
+    // to open into or there is nothing to demonstrate.
+    hasRoom: canResizeWorkspace(workspace.workspaceWidth),
+    busy: asidePanel !== null,
+    hasContent: notes.text.trim().length > 0,
+    headerRef: notesHeaderRef,
+    markRef: notesMarkRef,
+    targetRef: notesControlRef,
+    onOpen: () => openAside("notes"),
+    onClose: () => {
+      // The panel opened itself and took the caret with it; it gives both back.
+      // Not to the toolbar icon, tempting as that is — focus there pops the
+      // tooltip, and the move is supposed to make the label unnecessary.
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && notesPaneRef.current?.contains(active)) {
+        active.blur();
+      }
+      dismissAside();
+    },
+  });
+
+  const closeAside = () => {
+    discovery.cancel();
+    dismissAside();
+  };
+
+  const toggleAside = (next: AsidePanel) => {
+    discovery.cancel();
+    if (asidePanel === next) {
+      dismissAside();
+      return;
+    }
+    openAside(next);
+  };
+
+  const scenarioRef = useRef(scenario.id);
+  useEffect(() => {
+    if (scenarioRef.current === scenario.id) return;
+    scenarioRef.current = scenario.id;
+    discovery.cancel();
+    setAsidePanel(null);
+    // `discovery.cancel` is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenario.id]);
+
+  useEffect(() => {
+    if (!assistCollapsing) return;
+    discovery.cancel();
+    setAsidePanel(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assistCollapsing]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1417,6 +1517,14 @@ function LiveCallStage({
         "relative z-0 flex h-[700px] max-h-full min-h-0 w-full max-w-[1504px] flex-col gap-3 overflow-x-hidden px-16",
         className
       )}
+      // Notes' introduction spans the pane and the toolbar icon, so the two
+      // durations both surfaces animate on are published once, here.
+      style={
+        {
+          "--notes-body-fade-ms": `${NOTES_DISCOVERY.bodyFadeMs}ms`,
+          "--notes-pulse-ms": `${NOTES_DISCOVERY.pulseMs}ms`,
+        } as CSSProperties
+      }
     >
       <CallBar
         // Morphing in from the phone, the bar's own entrance would fight the
@@ -1429,6 +1537,8 @@ function LiveCallStage({
         muted={muted}
         onHold={onHold}
         notesOpen={asidePanel === "notes"}
+        notesControlRef={notesControlRef}
+        notesFound={discovery.pulsing}
         transcriptOpen={asidePanel === "transcript"}
         liveAssistOpen={asidePanel === "assist"}
         help={liveAssist}
@@ -1453,7 +1563,7 @@ function LiveCallStage({
           index={0}
           paneId="script"
           reduced={reduced}
-          grow={5}
+          grow={3}
           fraction={workspace.fractions.script}
           widthPx={workspace.resizable ? workspace.widths.script : undefined}
           settling={workspace.settling}
@@ -1477,7 +1587,7 @@ function LiveCallStage({
           index={1}
           paneId="suggestions"
           reduced={reduced}
-          grow={4}
+          grow={7}
           fraction={workspace.fractions.suggestions}
           widthPx={workspace.resizable ? workspace.widths.suggestions : undefined}
           settling={workspace.settling}
@@ -1526,33 +1636,44 @@ function LiveCallStage({
             }
           >
             <div
-              className={cn("call-aside-view", shownNotes && "is-active")}
+              ref={notesPaneRef}
+              className={cn(
+                "call-aside-view",
+                shownNotes && "is-active",
+                discovery.handingOff && "is-notes-handoff"
+              )}
               aria-hidden={!shownNotes}
               inert={!shownNotes || undefined}
+              // Any real touch of Notes ends the introduction: a panel the
+              // agent has started using is theirs, not a demonstration.
+              onPointerDownCapture={discovery.cancel}
+              onKeyDownCapture={discovery.cancel}
             >
               <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[16px] border border-line bg-white">
                 <header className="flex h-11 shrink-0 items-center justify-between gap-1.5 border-b border-line px-4">
-                  <div className="flex items-center gap-1.5">
-                    <NotesPaneIcon className="size-4 shrink-0 text-muted-foreground" />
+                  <div ref={notesHeaderRef} className="notes-pane-mark flex items-center gap-1.5">
+                    <span ref={notesMarkRef} className="flex size-4 shrink-0 items-center justify-center">
+                      <NotesPaneIcon className="size-4 text-muted-foreground" />
+                    </span>
                     <p className="text-label-md-semi text-foreground">Notes</p>
                   </div>
                   <button
                     type="button"
                     aria-label="Close notes"
                     onClick={closeAside}
-                    className="flex size-6 items-center justify-center rounded-[4px] text-muted-foreground outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+                    className="notes-pane-body flex size-6 items-center justify-center rounded-[4px] text-muted-foreground outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
                   >
                     <IconClose size={16} />
                   </button>
                 </header>
-                <div className="flex min-h-0 flex-1 flex-col gap-1 p-4">
+                <div className="notes-pane-body flex min-h-0 flex-1 flex-col gap-1 p-4">
                   <NotesEditor
                     ref={notesEditorRef}
                     caretRef={notesCaret}
                     placeholder="Type your notes here..."
                     maxLength={NOTES_MAX}
                     value={notes}
-                    onChange={setNotes}
+                    onChange={onNotesChange}
                     wrapperClassName="min-h-0 flex-1"
                     className="min-h-0 flex-1"
                     ariaLabel="Call notes"
@@ -1608,7 +1729,48 @@ function LiveCallStage({
           if (asidePanel !== "assist") toggleAside("assist");
         }}
       />
+
+      <NotesDiscoveryGhost flight={discovery.flight} />
     </div>
+  );
+}
+
+/**
+ * The travelling half of Notes' first showing: a copy of the panel header,
+ * pinned to the viewport where the real one stood, on its way to the call
+ * bar's Notes icon. Only the mark travels — the panel itself just gives its
+ * width back, and shrinking a whole column into a 20px circle would read as
+ * the column being thrown away rather than put away.
+ */
+function NotesDiscoveryGhost({ flight }: { flight: NotesDiscoveryFlight | null }) {
+  if (!flight) return null;
+  return createPortal(
+    <div
+      aria-hidden="true"
+      className={cn("notes-discovery-ghost", flight.moving && "is-moving")}
+      style={
+        {
+          top: flight.top,
+          left: flight.left,
+          width: flight.width,
+          height: flight.height,
+          "--ghost-origin-x": `${flight.originX}px`,
+          "--ghost-origin-y": `${flight.originY}px`,
+          "--ghost-dx": `${flight.dx}px`,
+          "--ghost-dy": `${flight.dy}px`,
+          "--ghost-scale": NOTES_DISCOVERY.endScale,
+          "--ghost-ms": `${NOTES_DISCOVERY.flightMs}ms`,
+          "--ghost-fade-ms": `${NOTES_DISCOVERY.fadeMs}ms`,
+          "--ghost-fade-delay": `${NOTES_DISCOVERY.fadeDelayMs}ms`,
+        } as CSSProperties
+      }
+    >
+      <span className="flex size-4 shrink-0 items-center justify-center">
+        <NotesPaneIcon className="size-4 text-muted-foreground" />
+      </span>
+      <p className="text-label-md-semi whitespace-nowrap text-foreground">Notes</p>
+    </div>,
+    document.body
   );
 }
 
@@ -1685,6 +1847,8 @@ function CallBar({
   muted,
   onHold,
   notesOpen,
+  notesControlRef,
+  notesFound,
   transcriptOpen,
   liveAssistOpen,
   help,
@@ -1703,6 +1867,9 @@ function CallBar({
   muted: boolean;
   onHold: boolean;
   notesOpen?: boolean;
+  notesControlRef?: RefObject<HTMLButtonElement | null>;
+  /** The introduction has just landed here — light up, once. */
+  notesFound?: boolean;
   transcriptOpen?: boolean;
   liveAssistOpen?: boolean;
   help: LiveAssistThread;
@@ -1837,8 +2004,13 @@ function CallBar({
           <BarControl
             label={notesOpen ? "Hide notes" : "Notes"}
             pressed={notesOpen}
+            buttonRef={notesControlRef}
             onClick={onNotesToggle}
             {...detail(BAR_DETAIL_DELAY_MS)}
+            className={cn(
+              revealing && "call-bar-detail-in",
+              notesFound && "is-notes-found"
+            )}
           >
             <IconCallNotes size={20} />
           </BarControl>
@@ -1888,6 +2060,7 @@ function BarControl({
   pressed,
   badge,
   morphKey,
+  buttonRef,
   className,
   style,
   onClick,
@@ -1898,6 +2071,7 @@ function BarControl({
   /** Something came back while the panel was shut — a dot, not a count. */
   badge?: boolean;
   morphKey?: string;
+  buttonRef?: RefObject<HTMLButtonElement | null>;
   className?: string;
   style?: CSSProperties;
   onClick?: () => void;
@@ -1910,6 +2084,7 @@ function BarControl({
       className="shrink-0"
     >
       <button
+        ref={buttonRef}
         type="button"
         aria-label={label}
         aria-pressed={pressed}
@@ -2114,6 +2289,10 @@ function RingingPhone({
  * recap keeps the wide pane it had while the line was open, and Wrap up takes
  * the column guidance and the transcript were using. Nothing the agent was
  * reading moves to a different part of the screen when the call ends.
+ *
+ * Call quality sits under Wrap up as its own card, not inside it: filing the
+ * call and telling us how the line sounded are two different jobs, and only the
+ * first one is the customer's record.
  */
 function PostCallStage({
   className,
@@ -2123,6 +2302,8 @@ function PostCallStage({
   contactMeta,
   scenario,
   actionStates,
+  notes,
+  onNotesChange,
   onScenarioChange,
   onClose,
 }: {
@@ -2133,6 +2314,8 @@ function PostCallStage({
   contactMeta: string;
   scenario: CallScenario;
   actionStates?: Record<string, ActionState>;
+  notes: NotesEditorValue;
+  onNotesChange: (value: NotesEditorValue) => void;
   onScenarioChange: (id: string) => void;
   onClose: () => void;
 }) {
@@ -2173,6 +2356,8 @@ function PostCallStage({
           <WrapUpPanel
             key={scenario.id}
             suggestedOutcome={scenario.wrapUp.suggestedOutcome}
+            notes={notes}
+            onNotesChange={onNotesChange}
             onClose={onClose}
           />
         </StagePane>
@@ -2228,47 +2413,28 @@ function EndedCallBar({
         </p>
       </div>
 
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        <BarAction label="Close" onClick={onClose}>
-          <IconClose size={16} className="size-4 shrink-0" />
-        </BarAction>
-      </div>
+      {/* Dismissal reads the same everywhere on this page: a bare cross, no
+          label — only the colours change for the dark surface. */}
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-[4px] text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40"
+      >
+        <IconClose size={20} />
+      </button>
     </div>
   );
 }
 
-/** A labelled action on the dark bar — outlined, so none of the three shouts. */
-function BarAction({
-  label,
-  pressed,
-  onClick,
-  children,
-}: {
-  label: string;
-  pressed?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={cn(
-        "flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-white/25 px-3.5 text-label-sm whitespace-nowrap text-white outline-none transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]",
-        pressed && "border-white/40 bg-white/15"
-      )}
-    >
-      {children}
-      {label}
-    </button>
-  );
-}
-
 /**
- * Wrap up — disposition, notes and rating. The recap next door is the raw
- * material: the agent copies the generated summary from there if they want it
- * in the notes, or writes their own.
+ * Wrap up — disposition and notes. The recap next door is the raw material: the
+ * agent copies the generated summary from there if they want it in the notes,
+ * or writes their own.
+ *
+ * The notes field is the call's notes, not a second set: anything typed in the
+ * live Notes pane is already here, and editing either place edits the same
+ * value. Nobody should have to re-type what they wrote while talking.
  *
  * The disposition arrives already filled: Agent Assist heard the whole call, so
  * making the agent re-derive it from memory is busywork. It stays a plain
@@ -2277,14 +2443,19 @@ function BarAction({
  */
 function WrapUpPanel({
   suggestedOutcome,
+  notes,
+  onNotesChange,
   onClose,
 }: {
   suggestedOutcome: CallOutcomeValue;
+  notes: NotesEditorValue;
+  onNotesChange: (value: NotesEditorValue) => void;
   onClose: () => void;
 }) {
-  const [rating, setRating] = useState(0);
   const [outcome, setOutcome] = useState<string>(suggestedOutcome);
-  const [notes, setNotes] = useState<NotesEditorValue>({ html: "", text: "" });
+  // Read once, on the way in: the field stays labelled as carried over even
+  // after the agent edits it, because that is still where the text came from.
+  const [carriedOver] = useState(() => notes.text.trim().length > 0);
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<number | null>(null);
 
@@ -2368,13 +2539,22 @@ function WrapUpPanel({
         </div>
 
         <div className="flex flex-col gap-2">
-          <p className="text-label-md text-foreground">Notes</p>
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-label-md text-foreground">Notes</p>
+            {/* Says why the field is already full, so a pre-filled box doesn't
+                read as someone else's text. */}
+            {carriedOver ? (
+              <p className="shrink-0 text-label-sm text-muted-foreground">
+                Carried over from the call
+              </p>
+            ) : null}
+          </div>
           <div className="flex flex-col gap-1">
             <NotesEditor
               placeholder="Add your notes about this call..."
               maxLength={NOTES_MAX}
               value={notes}
-              onChange={setNotes}
+              onChange={onNotesChange}
               className="h-32"
               ariaLabel="Notes"
             />
@@ -2383,8 +2563,6 @@ function WrapUpPanel({
             </p>
           </div>
         </div>
-
-        <CallRating value={rating} onChange={setRating} />
       </div>
 
       {/* What closes the call sits on its own edge, not at the end of a scroll. */}
@@ -2411,53 +2589,6 @@ function OutcomeDot({ tone }: { tone: OutcomeTone }) {
       aria-hidden="true"
       className={cn("size-2 shrink-0 rounded-full", OUTCOME_TONE[tone])}
     />
-  );
-}
-
-function CallRating({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <p className="text-label-md text-foreground">Rate this call</p>
-      <div role="radiogroup" aria-label="Call rating" className="flex items-center">
-        {[1, 2, 3, 4, 5].map((star) => {
-          const filled = value >= star;
-          return (
-            <button
-              key={star}
-              type="button"
-              role="radio"
-              aria-checked={value === star}
-              aria-label={`${star} star${star === 1 ? "" : "s"}`}
-              onClick={() => onChange(value === star ? 0 : star)}
-              className="flex size-8 items-center justify-center rounded-[4px] text-muted-foreground outline-none hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/24 active:scale-[0.97]"
-            >
-              <StarIcon filled={filled} />
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function StarIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg viewBox="0 0 20 20" className="size-5" aria-hidden="true">
-      <path
-        d="M10 2.6l2.09 4.24 4.68.68-3.38 3.3.8 4.66L10 13.28 5.81 15.48l.8-4.66-3.38-3.3 4.68-.68L10 2.6z"
-        fill={filled ? "currentColor" : "none"}
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinejoin="round"
-        className={filled ? "text-brand" : "text-disabled-fg"}
-      />
-    </svg>
   );
 }
 
@@ -2549,7 +2680,7 @@ function DialerNav({
   return (
     <nav
       aria-label="Dialer"
-      className={cn("flex w-full items-start bg-brand", className)}
+      className={cn("flex w-full shrink-0 items-start bg-brand", className)}
     >
       {NAV_ITEMS.map((item) => {
         const active = tab === item.id;
