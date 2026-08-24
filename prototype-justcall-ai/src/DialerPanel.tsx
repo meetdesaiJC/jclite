@@ -1893,7 +1893,7 @@ function CallBar({
       data-morph-bar
       className={cn(
         "relative z-30 flex h-[72px] shrink-0 items-center gap-4 rounded-[16px] px-4",
-        morphing ? "bg-transparent" : "bg-[#071532] shadow-600",
+        morphing ? "bg-transparent" : "bg-dialer-surface shadow-600",
         className
       )}
     >
@@ -2105,7 +2105,7 @@ function BarControl({
             aria-hidden="true"
             // Ringed in the bar's own dark so the dot reads as sitting on the
             // icon rather than floating next to it.
-            className="absolute top-1.5 right-1.5 size-2 rounded-full border border-[#071532] bg-brand"
+            className="absolute top-1.5 right-1.5 size-2 rounded-full border border-dialer-surface bg-brand"
           />
         ) : null}
       </button>
@@ -2151,7 +2151,7 @@ function RingingPhone({
     <div
       data-morph-card={ghost ? undefined : true}
       className={cn(
-        "flex w-[360px] shrink-0 flex-col overflow-hidden rounded-[16px] bg-[#071532] shadow-600",
+        "flex w-[360px] shrink-0 flex-col overflow-hidden rounded-[16px] bg-dialer-surface shadow-600",
         className
       )}
     >
@@ -2174,7 +2174,7 @@ function RingingPhone({
         <div className="flex w-full flex-col items-center gap-2">
           <span
             data-morph="avatar"
-            className="relative flex size-10 items-center justify-center overflow-clip rounded-full bg-[#344054]"
+            className="relative flex size-10 items-center justify-center overflow-clip rounded-full bg-gray-700"
           >
             <img src={userIcon} alt="" className="size-6 object-contain" />
           </span>
@@ -2391,7 +2391,7 @@ function EndedCallBar({
   return (
     <div
       className={cn(
-        "flex h-[72px] shrink-0 items-center gap-4 rounded-[16px] bg-[#071532] px-4 shadow-600",
+        "flex h-[72px] shrink-0 items-center gap-4 rounded-[16px] bg-dialer-surface px-4 shadow-600",
         className
       )}
     >

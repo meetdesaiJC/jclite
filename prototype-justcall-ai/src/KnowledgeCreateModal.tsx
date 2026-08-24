@@ -69,7 +69,7 @@ export function KnowledgeCreateModal({
               className={cn(
                 "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-[6px]",
                 option.accent
-                  ? "bg-white text-[#673BFF] shadow-[0_0_0_1px_rgba(103,59,255,0.16)]"
+                  ? "bg-white text-ai shadow-[0_0_0_1px_rgba(103,59,255,0.16)]"
                   : "bg-secondary-bg text-foreground"
               )}
             >

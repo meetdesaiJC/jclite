@@ -511,7 +511,7 @@ export function Dashboard({
                       <KpiCard key={card.label} {...card} />
                     ))}
                   </div>
-                  <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]">
+                  <div className="overflow-hidden rounded-xl border border-line bg-white shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]">
                     <div className="flex items-center justify-between border-b border-line p-4">
                       <p className="text-heading-lg capitalize text-foreground">Calls volume over time</p>
                       <IconDotsVertical size={16} className="size-4 shrink-0 text-foreground" />

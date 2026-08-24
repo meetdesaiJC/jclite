@@ -67,6 +67,9 @@
   --color-bluegray-800: #293056;
   --color-bluegray-900: #101323;
 
+  /* Red */
+  --color-red-400: #f04438;
+
   /* Gray */
   --color-gray-25: #fcfcfd;
   --color-gray-100: #f2f4f7;
@@ -125,6 +128,10 @@
   --color-error: #d92d20; /* error/primary */
   --color-error-hover: #b42318; /* error/primary-hover */
   --color-error-subtle: #fef3f2; /* error/secondary — error outline hover fill */
+  /* Danger *icons* sit one palette step brighter than --color-error, which is
+     the text/fill colour. Figma draws the logout glyph at red-400 while its
+     label is error (#d92d20) — kept distinct rather than flattened. */
+  --color-error-icon: var(--color-red-400);
 
   --color-success: #12b76a; /* success/primary — "Saved" state */
 
@@ -176,7 +183,7 @@
 
   --color-status-available: var(--color-success); /* Available for call */
   --color-status-ooo: var(--color-disabled-fg); /* Disabled / OOO */
-  --color-status-on-call: #f04438; /* On call */
+  --color-status-on-call: var(--color-red-400); /* On call */
   --color-status-wrap-up: var(--color-warning); /* Wrap-up time */
   --color-status-dnd: #d92d20; /* DND */
 
@@ -214,6 +221,45 @@
   --color-tooltip-dark-fg: var(--color-white);
   --color-tooltip-dark-muted: var(--color-disabled-fg); /* text/placeholder #98A2B3 */
   --color-tooltip-dark-action: #4d8bff; /* Inverse/Button-primary */
+
+  /* ---------------------------------------------------------------- */
+  /* AI TOKENS                                                         */
+  /* The JustCall AI accent. Lives here rather than in a prototype so   */
+  /* every prototype and component resolves the same purple.            */
+  /* ---------------------------------------------------------------- */
+  --color-ai: #673bff;
+  --color-ai-surface: var(--color-purple-50); /* #f4f3ff */
+  --color-ai-border: var(--color-purple-200); /* #d9d6fe */
+  --color-ai-gradient-from: #3318ff; /* AI pill / icon gradient */
+  --color-ai-gradient-to: #b46dff;
+
+  /* ---------------------------------------------------------------- */
+  /* SIDENAV TOKENS                                                    */
+  /* The dark navigation rail is its own small theme — a gradient       */
+  /* surface with its own label, active-item and card colours that do   */
+  /* not map onto the light-UI semantics.                               */
+  /* ---------------------------------------------------------------- */
+  --color-sidenav-bg-from: var(--color-gray-900); /* #101828 */
+  --color-sidenav-bg-to: #111b2e;
+  --color-sidenav-accent: #196aff; /* active item border, balance top rule */
+  --color-sidenav-item-active: #111e36;
+  --color-sidenav-label: #b0b0b0; /* section headings */
+  --color-sidenav-card: #1c2838; /* credits card fill */
+  --color-sidenav-balance: #172848; /* usage-balance footer fill */
+
+  /* ---------------------------------------------------------------- */
+  /* HEADER TOKENS                                                     */
+  /* ---------------------------------------------------------------- */
+  --color-header-icon-hover: var(--color-gray-100); /* #f2f4f7 */
+  --color-notification-badge: var(--color-red-400); /* unread count dot */
+  --color-avatar-brand-bg: #2d72ff; /* header profile avatar fill */
+
+  /* ---------------------------------------------------------------- */
+  /* IN-CALL SURFACE TOKENS                                            */
+  /* Dark surfaces used by the dialer and the notes formatting bar.     */
+  /* ---------------------------------------------------------------- */
+  --color-dialer-surface: #071532;
+  --color-editor-toolbar: #2f2f33;
 
   /* Radius */
   --radius-sm: 0.375rem;

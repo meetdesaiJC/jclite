@@ -1,11 +1,8 @@
 @import "../../src/styles/globals.css";
 
-/* JustCall AI — shared guidance-card tone. Same wash + accent on every card. */
+/* JustCall AI — shared guidance-card tone. The --color-ai* trio now lives in
+   the design system (src/styles/globals.css) so every prototype shares it. */
 @theme {
-  --color-ai: #673bff;
-  --color-ai-surface: #f4f3ff;
-  --color-ai-border: #d9d6fe;
-
   /* Coaching cue accents — one hue per signal so agents can scan by category.
      Orange / purple / blue / teal / red match the trigger legend; talk-ratio
      and monologue share blue and split on the icon. Surfaces sit at the same

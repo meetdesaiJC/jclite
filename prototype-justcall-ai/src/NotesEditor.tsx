@@ -885,7 +885,7 @@ function SelectionToolbar({
       {linkDraft !== null ? (
         <div
           ref={barRef}
-          className="flex items-center gap-1 rounded-[10px] bg-[#2f2f33] p-1 shadow-[0_12px_28px_rgba(16,24,40,0.28)]"
+          className="flex items-center gap-1 rounded-[10px] bg-editor-toolbar p-1 shadow-[0_12px_28px_rgba(16,24,40,0.28)]"
         >
           <IconLink className="ml-1.5 size-4 shrink-0 text-white/60" />
           <input
@@ -919,7 +919,7 @@ function SelectionToolbar({
       ) : (
         <div
           ref={barRef}
-          className="flex items-center gap-0.5 rounded-[10px] bg-[#2f2f33] p-1 shadow-[0_12px_28px_rgba(16,24,40,0.28)]"
+          className="flex items-center gap-0.5 rounded-[10px] bg-editor-toolbar p-1 shadow-[0_12px_28px_rgba(16,24,40,0.28)]"
         >
           <BubbleButton
             label={link ? `Edit link — ${MOD}K` : `Add link — ${MOD}K`}
@@ -980,7 +980,7 @@ function SelectionToolbar({
       {menuOpen && linkDraft === null ? (
         <div
           role="menu"
-          className="mt-1.5 w-60 self-start rounded-[10px] bg-[#2f2f33] p-1 shadow-[0_12px_28px_rgba(16,24,40,0.28)]"
+          className="mt-1.5 w-60 self-start rounded-[10px] bg-editor-toolbar p-1 shadow-[0_12px_28px_rgba(16,24,40,0.28)]"
         >
           {BLOCK_ITEMS.map((item) => (
             <button

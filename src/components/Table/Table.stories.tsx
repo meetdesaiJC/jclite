@@ -22,6 +22,8 @@ import {
 /* Demo helpers                                                        */
 /* ------------------------------------------------------------------ */
 
+// Literal flag red, not a design token — story fixture content, the same way a
+// brand logo keeps its own colour. The no-raw-hex rule covers UI, not content.
 function FlagLead() {
   return (
     <div

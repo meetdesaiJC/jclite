@@ -24,9 +24,9 @@ restructured to kill. If prototype A needs something from prototype B, that
 thing is a **design-system component** — promote it to `src/components/`, don't
 reach across.
 
-> Known violation, being fixed in Phase 2 — do not copy this pattern:
-> `prototype-justcall-ai/src/Dashboard.tsx` and `JustCallAiShell.tsx` import
-> `ProfileMenu` and `DashboardToolbarIcons` from `prototype-add-ons-flow`.
+As of the Phase 2 cleanup there are **zero** cross-prototype imports. Keep it
+that way — `grep -rn "prototype-" prototype-*/src src --include='*.tsx'` should
+return nothing.
 
 ---
 
@@ -64,8 +64,11 @@ New design-system component checklist:
 components, not in prototypes. No `bg-[#004ce6]`, no `style={{ color: "#667085" }}`.
 
 The only file that may contain raw color values is
-`src/styles/globals.css`. (SVG assets under `assets/` are exempt — but prefer
-`currentColor` so icons inherit.)
+`src/styles/globals.css`.
+
+Two narrow exemptions: SVG assets under `assets/` (though prefer `currentColor`
+so icons inherit), and literal *content* colors in story fixtures — a flag red,
+a third-party brand logo. Neither is a UI decision, so neither is a token.
 
 Colors are consumed as Tailwind utilities generated from tokens:
 `bg-brand`, `text-foreground`, `border-line`, `text-muted-foreground`,
@@ -99,7 +102,11 @@ everywhere. Don't add more of it.
 `brand-subtle` `line` `surface-hover` `disabled-bg` `disabled-fg` `error`
 `error-hover` `error-subtle` `success` `warning` `info` + `-secondary`/`-border`
 variants, `control-border` `control-disabled-bg`, `avatar-{indigo,purple,pink,orange,grey,bluegrey}-{bg,fg}`,
-`status-{available,ooo,on-call,wrap-up,dnd}`, `badge-*`, `tag-*`, `tooltip-dark-*`
+`status-{available,ooo,on-call,wrap-up,dnd}`, `badge-*`, `tag-*`, `tooltip-dark-*`,
+`error-icon`, `ai` + `ai-{surface,border,gradient-from,gradient-to}`,
+`sidenav-{bg-from,bg-to,accent,item-active,label,card,balance}`,
+`header-icon-hover`, `notification-badge`, `avatar-brand-bg`,
+`dialer-surface`, `editor-toolbar`
 
 Typography: `text-heading-{lg,xl,xxl,xxxl}` · `text-paragraph-{sm,md,lg}` ·
 `text-label-{xs,sm,md,md-semi}` — each sets size + line-height + weight

@@ -416,7 +416,7 @@ function GenerateFromSources({
             }}
             className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-brand/40 bg-brand-subtle/20 px-6 py-10 text-center hover:border-brand hover:bg-brand-subtle/40"
           >
-            <span className="flex size-10 items-center justify-center rounded-[8px] bg-white text-[#673BFF] shadow-[0_0_0_1px_rgba(103,59,255,0.16)]">
+            <span className="flex size-10 items-center justify-center rounded-[8px] bg-white text-ai shadow-[0_0_0_1px_rgba(103,59,255,0.16)]">
               <IconSparkles size={20} />
             </span>
             <span>
@@ -571,7 +571,7 @@ function GeneratingFaqs({
   return (
     <div className="flex min-h-0 flex-1 justify-center overflow-auto px-6 py-16">
       <div className="flex w-full max-w-[480px] flex-col gap-6">
-        <div className="flex items-center gap-2 text-[#673BFF]">
+        <div className="flex items-center gap-2 text-ai">
           <IconSparkles size={16} />
           <p className="text-label-md-semi">Reading sources and drafting answers</p>
         </div>
