@@ -17,6 +17,7 @@ export const DURATION = {
   base: 150,
   moderate: 200,
   slow: 240,
+  emphasis: 600,
 } as const;
 
 export type DurationName = keyof typeof DURATION;

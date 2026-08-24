@@ -78,7 +78,7 @@ export interface AgentAssistAdminProps {
    * puts every list into its empty state and leaves all apps unconnected.
    */
   seeded?: boolean;
-  /** V1 authors Scripts and Response Cards only — see `agentAssistScope`. */
+  /** V1 drops two nav sections — see `agentAssistScope`. */
   scope?: AgentAssistScope;
   /** Read by response-card coverage hints; owned by JustCallAiShell. */
   knowledgeSources: KnowledgeSourceRecord[];

@@ -49,12 +49,17 @@ export const NOTES_DISCOVERY = {
   /** Two frames, in case none arrive — the move must not depend on rAF alone. */
   armMs: 48,
   /**
-   * The icon absorbing the landing: overshoot, dip, settle. On the scale at
-   * `slow` because a bounce covers more ground than a tint does — the three
-   * segments inside it are what keep it quick rather than springy.
+   * The icon absorbing the landing: overshoot, dip, overshoot, settle. Not on
+   * the transition scale at all — this is the one-shot attention pulse
+   * `emphasis` exists for, the same token the assist card's arrival wash uses.
+   * At `slow` the bounce was legible only if you already knew to look for it:
+   * a 14% overshoot inside 240ms is over before the eye has finished
+   * following the header in. The amplitude is what makes it read, and a
+   * bigger travel needs the room — three visible hops decaying from 34%.
    */
-  pulseMs: DURATION.slow,
-  pulseHoldMs: 320,
+  pulseMs: DURATION.emphasis,
+  /** A beat past the bounce, so the highlight is not pulled mid-hop. */
+  pulseHoldMs: DURATION.emphasis + DURATION.micro,
   /**
    * After the cursor leaves. Long enough that crossing the panel on the way
    * somewhere else doesn't hand the agent a collapse under their pointer.

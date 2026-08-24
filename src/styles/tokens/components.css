@@ -108,6 +108,19 @@
   --color-coach-red-text: var(--color-error-hover);
 
   /* ---------------------------------------------------------------- */
+  /* CONVERSATION GUIDANCE TOKENS                                      */
+  /* The one-shot wash a newly generated guidance card wears while the  */
+  /* agent's eye finds it. Translucent on purpose: it is painted over   */
+  /* the card's own content, so an opaque tint would hide the text the  */
+  /* pulse is pointing at.                                              */
+  /* ---------------------------------------------------------------- */
+  --color-guidance-attention: color-mix(
+    in srgb,
+    var(--color-brand) 7%,
+    transparent
+  );
+
+  /* ---------------------------------------------------------------- */
   /* CHART SERIES TOKENS                                               */
   /* Calls-volume series colours. Both prototypes' dashboards drew the  */
   /* same two hexes independently before this.                          */
@@ -135,6 +148,22 @@
   --color-header-icon-hover: var(--color-gray-100); /* #f2f4f7 */
   --color-notification-badge: var(--color-red-500); /* unread count dot */
   --color-avatar-brand-bg: #2d72ff; /* header profile avatar fill */
+
+  /* ---------------------------------------------------------------- */
+  /* FEATURE-PROMO CANVAS TOKENS                                       */
+  /* The brand-tinted wash a feature promo draws its illustration on,   */
+  /* plus the graph-paper rule laid over it. The rule is deliberately   */
+  /* near the floor of visibility: it is texture behind a product       */
+  /* mockup, and anything stronger competes with the thing it frames.   */
+  /* ---------------------------------------------------------------- */
+  --color-promo-canvas-from: var(--color-brand-subtle);
+  --color-promo-canvas-mid: color-mix(
+    in srgb,
+    var(--color-brand-subtle) 50%,
+    var(--color-bluegray-50)
+  );
+  --color-promo-canvas-to: var(--color-background);
+  --color-promo-grid: color-mix(in srgb, var(--color-brand) 3.2%, transparent);
 
   /* ---------------------------------------------------------------- */
   /* IN-CALL SURFACE TOKENS                                            */

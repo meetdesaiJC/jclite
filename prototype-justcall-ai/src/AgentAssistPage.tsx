@@ -439,8 +439,6 @@ export function AgentAssistPlaybooksPage({
     mode: "create" | "edit";
     item: GuidanceItem;
     templateId?: GuidanceTemplateId | null;
-    /** Opens the AI drafting step straight away (§13). */
-    generate?: boolean;
   } | null>(null);
   const [coachingLaunch, setCoachingLaunch] = React.useState<{
     mode: "create" | "edit";
@@ -595,15 +593,6 @@ export function AgentAssistPlaybooksPage({
 
   const handleGuidanceTemplateSelect = (choice: GuidanceStartChoice) => {
     setGuidanceTemplatesOpen(false);
-    if (choice.type === "generate") {
-      // AI proposes the draft; the admin still reviews it in the editor (§13).
-      setGuidanceLaunch({
-        mode: "create",
-        item: createEmptyGuidance(),
-        generate: true,
-      });
-      return;
-    }
     if (choice.type === "scratch") {
       setGuidanceLaunch({ mode: "create", item: createEmptyGuidance() });
       return;
@@ -721,12 +710,7 @@ export function AgentAssistPlaybooksPage({
         mode={guidanceLaunch.mode}
         templateId={guidanceLaunch.templateId}
         knowledgeSources={knowledgeSources}
-        startWithGenerate={guidanceLaunch.generate}
         onUseKnowledgeInstead={() => {
-          setGuidanceLaunch(null);
-          onOpenKnowledge();
-        }}
-        onOpenKnowledge={() => {
           setGuidanceLaunch(null);
           onOpenKnowledge();
         }}

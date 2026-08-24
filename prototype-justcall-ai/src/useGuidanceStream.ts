@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { DURATION } from "@/lib/motion";
 import type { GuidanceSuggestion, ScriptStep } from "./callSimulation";
 
 /**
@@ -8,10 +9,11 @@ import type { GuidanceSuggestion, ScriptStep } from "./callSimulation";
  * decides *when* their attention moves to it. So new guidance surfaces, it
  * never interrupts:
  *
- *   · one card expanded at a time — the active card
- *   · an arriving card queues collapsed under the active card, never steals it
+ *   · a card arrives open and stays open — mid-call, a title alone is not
+ *     guidance, and making the agent click to read it costs them the sentence
+ *   · collapsing is the agent's move, never the stream's: nothing the agent
+ *     opened, or was given open, closes itself
  *   · order only changes on an agent action, so nothing moves while they read
- *   · finish a card and the next unread opens on its own
  *
  * The only sanctioned interruption is critical (compliance) guidance, and even
  * that announces itself instead of appearing silently.
@@ -21,11 +23,31 @@ import type { GuidanceSuggestion, ScriptStep } from "./callSimulation";
  * script or in its own column without the two paths drifting apart.
  */
 
-export const CARD_ENTER_MS = 200;
-export const CARD_ATTENTION_MS = 700;
+/**
+ * The three motion timings the hook has to know as numbers, taken off the
+ * scale rather than re-typed: the classes that play them are cleared here, so
+ * a literal would let the animation and its unmount timer drift (CLAUDE.md §4).
+ */
+export const CARD_ENTER_MS = DURATION.moderate;
+/** One `fast` step per card in a burst — enough to read as a sequence (§12). */
+export const CARD_STAGGER_MS = DURATION.fast;
+/** Pulse starts as the reveal settles, so its total overlaps by one step. */
+export const CARD_ATTENTION_MS = DURATION.base + DURATION.emphasis;
 export const AGENT_SCROLL_IDLE_MS = 2000;
 /** How long "Relevant again" stays on a re-triggered card (§9). */
 export const RELEVANT_AGAIN_MS = 2400;
+/**
+ * How long the word "New" rides alongside the unread dot. The dot is the
+ * durable marker; the word is only there to teach it, so it leaves once the
+ * agent has plainly had a chance to look (§12).
+ */
+export const NEW_LABEL_MS = 4000;
+/**
+ * A burst this size or larger pulses only its first card. Three washes firing
+ * down the column at once is the visual noise the pulse exists to avoid — the
+ * rest arrive with their unread dot and nothing more (§12).
+ */
+const QUIET_BURST_FROM = 3;
 /** Active card plus three queued suggestions; the rest compresses (§4). */
 export const MAX_VISIBLE_CARDS = 4;
 /**
@@ -36,11 +58,12 @@ export const MAX_VISIBLE_CARDS = 4;
 const EXPIRE_AFTER_STEPS = 3;
 
 /**
- * new     — arrived, not opened yet
- * seen    — the agent has had it open at least once
+ * new     — landed recently; the agent hasn't touched it yet
+ * seen    — the agent has worked it: collapsed it, or reopened it
  * expired — the conversation moved past the topic; sits in Earlier
  *
- * "active" isn't a status: it's whichever card is currently expanded.
+ * Cards arrive open, so this is an arrival marker rather than an unread flag —
+ * the dot it drives only shows on a card the agent chose to collapse.
  */
 export type GuidanceCardStatus = "new" | "seen" | "expired";
 
@@ -65,31 +88,13 @@ export interface GuidanceStreamCard {
 }
 
 /** Where an arriving card lands so nothing above it moves (§3, §7). */
-function arrivalIndex(
-  list: GuidanceStreamCard[],
-  activeId: string | null,
-  critical: boolean
-): number {
-  if (critical) {
-    // Directly under the card being read — announced, never in its place.
-    const active = list.findIndex((entry) => entry.suggestion.id === activeId);
-    return active >= 0 ? active + 1 : 0;
-  }
-  // At the end of the unread run: below the active card and anything already
-  // queued, above everything the agent has finished with.
+function arrivalIndex(list: GuidanceStreamCard[]): number {
+  // At the end of the recent run: below anything else that just landed, above
+  // everything the conversation has already moved past.
   for (let index = list.length - 1; index >= 0; index -= 1) {
-    const entry = list[index]!;
-    if (entry.status === "new" || entry.suggestion.id === activeId) {
-      return index + 1;
-    }
+    if (list[index]!.status !== "expired") return index + 1;
   }
   return 0;
-}
-
-/** Head of the finished run — where a card the agent just closed belongs (§10). */
-function seenIndex(list: GuidanceStreamCard[]): number {
-  const first = list.findIndex((entry) => entry.status !== "new");
-  return first < 0 ? list.length : first;
 }
 
 function moveEntry(
@@ -133,9 +138,21 @@ export function useGuidanceStream({
   handledIds?: string[];
 }) {
   const [entries, setEntries] = useState<GuidanceStreamCard[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [arrivingIds, setArrivingIds] = useState<Set<string>>(new Set());
+  /**
+   * Only what the agent has closed. Absence is the default, so a card is open
+   * from the frame it arrives — there is no state to set to open it, and
+   * therefore no path by which the stream can quietly close one.
+   */
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  /**
+   * Cards mid-entrance, each mapped to its place in the burst it arrived with.
+   * A Map rather than a Set because the stagger index has to reach the slot's
+   * `--assist-stagger` — `.has()` still reads the same at every call site.
+   */
+  const [arrivingIds, setArrivingIds] = useState<Map<string, number>>(new Map());
   const [attentionIds, setAttentionIds] = useState<Set<string>>(new Set());
+  /** Arrived recently enough that the dot still spells itself out as "New". */
+  const [newLabelIds, setNewLabelIds] = useState<Set<string>>(new Set());
   const [relevantAgainIds, setRelevantAgainIds] = useState<Set<string>>(new Set());
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
   const [criticalAlertId, setCriticalAlertId] = useState<string | null>(null);
@@ -148,7 +165,7 @@ export function useGuidanceStream({
 
   const cardEls = useRef(new Map<string, HTMLElement>());
   const entriesRef = useRef(entries);
-  const expandedIdRef = useRef(expandedId);
+  const collapsedIdsRef = useRef(collapsedIds);
   const interactingRef = useRef(interacting);
   const suggestionsRef = useRef(suggestions);
   const pointerInCard = useRef(false);
@@ -159,7 +176,7 @@ export function useGuidanceStream({
   const repeatSeen = useRef(new Map<string, number>());
 
   entriesRef.current = entries;
-  expandedIdRef.current = expandedId;
+  collapsedIdsRef.current = collapsedIds;
   interactingRef.current = interacting;
   suggestionsRef.current = suggestions;
 
@@ -225,15 +242,21 @@ export function useGuidanceStream({
     if (arriving.length === 0 && repeats.length === 0 && !dropped) return;
 
     const interactingNow = interactingRef.current;
-    let nextExpanded = expandedIdRef.current;
-    let interrupted: string | null = null;
+    /** The card the column should scroll to, if any — the last thing to land. */
+    let scrollTo: string | null = null;
+    let announce: string | null = null;
     const attention = new Set<string>();
 
-    // Built here rather than inside the setter: placement depends on which card
-    // is open, and that changes as we walk the arrivals.
+    // Built here rather than inside the setter: each arrival is placed relative
+    // to the ones before it, so the list has to exist while we walk them.
     let next = dropped
       ? entriesRef.current.filter((entry) => live.has(entry.suggestion.id))
       : entriesRef.current;
+
+    // A burst pulses in full only while it is small enough to follow; past
+    // that, one card carries the signal for all of them (§12).
+    const quietBurst = arriving.length >= QUIET_BURST_FROM;
+    let pulsed = false;
 
     for (const suggestion of arriving) {
       const critical = suggestion.priority === "critical";
@@ -242,23 +265,25 @@ export function useGuidanceStream({
         insertAfter: insertAfterIndex(steps, playhead, suggestion),
         status: "new",
       };
-      const at = arrivalIndex(next, nextExpanded, critical);
+      const at = arrivalIndex(next);
       next = [...next.slice(0, at), entry, ...next.slice(at)];
 
-      if (!nextExpanded && !interactingNow) {
-        // Nothing open and nobody mid-sentence: open the first useful card
-        // straight away so it's actionable (§2).
-        nextExpanded = suggestion.id;
-        next = withStatus(next, suggestion.id, "seen");
-      } else if (critical) {
-        // The one sanctioned interruption. The card that was open collapses
-        // where it sits — it is not moved out from under the agent (§7).
-        interrupted = nextExpanded;
-        nextExpanded = suggestion.id;
-        next = withStatus(next, suggestion.id, "seen");
+      // Arrives open and readable (§2) — the pulse is what says "this one just
+      // landed", and it is the only thing that says it. Every arrival gets one
+      // unless the burst is big enough that a column of washes would be the
+      // noise the pulse exists to avoid (§12).
+      if (critical || !quietBurst || !pulsed) {
         attention.add(suggestion.id);
+        pulsed = true;
       }
-      // Anything else stays collapsed and marked New (§3).
+
+      if (critical && interactingNow) {
+        // Compliance guidance can't wait to be noticed, but the agent is
+        // mid-sentence: say it out loud rather than dragging the column (§7).
+        announce = suggestion.id;
+      } else if (!interactingNow) {
+        scrollTo = suggestion.id;
+      }
     }
 
     for (const suggestion of repeats) {
@@ -268,12 +293,11 @@ export function useGuidanceStream({
       next = next.map((item) =>
         item.suggestion.id === id ? { ...item, suggestion } : item
       );
-      if (id === nextExpanded) continue;
-      // Bring it back into the queue only if that won't shuffle the column
+        // Bring it back into the queue only if that won't shuffle the column
       // under the agent's hands.
       if (entry.status === "expired" && !interactingNow) {
         next = withStatus(next, id, "new");
-        next = moveEntry(next, id, (rest) => arrivalIndex(rest, nextExpanded, false));
+        next = moveEntry(next, id, arrivalIndex);
       }
     }
 
@@ -282,8 +306,23 @@ export function useGuidanceStream({
     entriesRef.current = next;
     setEntries(next);
 
+    if (dropped) {
+      // Nothing collapsed should outlive the card it belonged to.
+      setCollapsedIds((current) => {
+        const kept = new Set([...current].filter((id) => live.has(id)));
+        return kept.size === current.size ? current : kept;
+      });
+    }
+
     if (arriving.length > 0) {
       setArrivingIds(
+        (current) =>
+          new Map([
+            ...current,
+            ...arriving.map((item, order) => [item.id, order] as const),
+          ])
+      );
+      setNewLabelIds(
         (current) => new Set([...current, ...arriving.map((item) => item.id)])
       );
     }
@@ -295,12 +334,20 @@ export function useGuidanceStream({
     if (attention.size > 0) {
       setAttentionIds((current) => new Set([...current, ...attention]));
     }
-    if (interrupted && nextExpanded) {
-      setCriticalAlertId(nextExpanded);
+    if (arriving.length > 0) {
+      // A replay reuses ids, so a card the agent closed last time round would
+      // otherwise come back closed.
+      setCollapsedIds((current) => {
+        if (!arriving.some((item) => current.has(item.id))) return current;
+        const nextSet = new Set(current);
+        arriving.forEach((item) => nextSet.delete(item.id));
+        return nextSet;
+      });
     }
-    if (nextExpanded !== expandedIdRef.current) {
-      setExpandedId(nextExpanded);
-      if (nextExpanded) setScrollTargetId(nextExpanded);
+    if (announce) {
+      setCriticalAlertId(announce);
+    } else if (scrollTo) {
+      setScrollTargetId(scrollTo);
     }
     // Arrival is the trigger; the suggestion list itself is derived from
     // elapsed time and changes identity on every tick.
@@ -310,15 +357,15 @@ export function useGuidanceStream({
   // ---- expiry ------------------------------------------------------------
   // Relevance decides when guidance moves aside — not a countdown. A card the
   // agent covered, or one whose topic the script has moved well past, drops its
-  // New state and sinks into Earlier. Never the card that's open, and never
-  // while the agent is working the column (§6, §8).
+  // New state and sinks into Earlier. Expiry only ever reorders and relabels:
+  // a card that sinks stays as open as the agent left it, and none of it
+  // happens while they are working the column (§6, §8).
   useEffect(() => {
     if (interacting) return;
     const handled = new Set(handledIds);
     setEntries((current) => {
       const stale = current.filter((entry) => {
         if (entry.status === "expired") return false;
-        if (entry.suggestion.id === expandedId) return false;
         return (
           handled.has(entry.suggestion.id) ||
           playhead - entry.insertAfter >= EXPIRE_AFTER_STEPS
@@ -331,36 +378,55 @@ export function useGuidanceStream({
         ...stale.map((entry) => ({ ...entry, status: "expired" as const })),
       ];
     });
-  }, [handledSig, playhead, interacting, expandedId]);
+  }, [handledSig, playhead, interacting]);
 
   // The alert asks for one acknowledgement — it is not a permanent banner. It
-  // clears once the agent has covered the guidance or moved off the card.
+  // clears once the agent has covered the guidance, or once the column settles
+  // enough that the card it points at is plainly there to be read.
   useEffect(() => {
     if (!criticalAlertId) return;
-    if (expandedId !== criticalAlertId || handledIds.includes(criticalAlertId)) {
+    if (handledIds.includes(criticalAlertId)) {
       setCriticalAlertId(null);
+      return;
     }
+    if (interacting) return;
+    setCriticalAlertId(null);
+    setScrollTargetId(criticalAlertId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [criticalAlertId, expandedId, handledSig]);
+  }, [criticalAlertId, interacting, handledSig]);
 
   // ---- motion timers -----------------------------------------------------
+  // These classes carry `animation-fill-mode: both`, so pulling one before its
+  // animation finishes snaps the card. Everything below therefore waits for
+  // the *last* card in the burst, stagger included.
+  const burstTailMs = arrivingIds.size === 0
+    ? 0
+    : Math.max(...arrivingIds.values()) * CARD_STAGGER_MS;
+
   useEffect(() => {
     if (arrivingIds.size === 0) return;
     const timer = window.setTimeout(
-      () => setArrivingIds(new Set()),
-      reduced ? 0 : CARD_ENTER_MS + 10
+      () => setArrivingIds(new Map()),
+      reduced ? 0 : burstTailMs + CARD_ENTER_MS + 10
     );
     return () => window.clearTimeout(timer);
-  }, [arrivingIds, reduced]);
+  }, [arrivingIds, burstTailMs, reduced]);
 
   useEffect(() => {
     if (attentionIds.size === 0) return;
     const timer = window.setTimeout(
       () => setAttentionIds(new Set()),
-      reduced ? 0 : CARD_ATTENTION_MS
+      reduced ? 0 : burstTailMs + CARD_ATTENTION_MS + 10
     );
     return () => window.clearTimeout(timer);
-  }, [attentionIds, reduced]);
+  }, [attentionIds, burstTailMs, reduced]);
+
+  // The dot stays; only the word it arrived with is on a clock.
+  useEffect(() => {
+    if (newLabelIds.size === 0) return;
+    const timer = window.setTimeout(() => setNewLabelIds(new Set()), NEW_LABEL_MS);
+    return () => window.clearTimeout(timer);
+  }, [newLabelIds]);
 
   useEffect(() => {
     if (relevantAgainIds.size === 0) return;
@@ -388,15 +454,19 @@ export function useGuidanceStream({
   }, [scrollTargetId, reduced]);
 
   // ---- derived -----------------------------------------------------------
-  const newCount = entries.filter((entry) => entry.status === "new").length;
+  /**
+   * How many just landed — not how many are unread. Cards arrive open, so a
+   * running total of "new" guidance would only ever climb while the agent read
+   * every word of it. The count therefore rides the same short window as the
+   * word "New" on the card itself, and leaves with it (§3, §12).
+   */
+  const newCount = entries.filter((entry) =>
+    newLabelIds.has(entry.suggestion.id)
+  ).length;
 
   let visible = entries;
   if (!showAll && entries.length > MAX_VISIBLE_CARDS) {
     visible = entries.slice(0, MAX_VISIBLE_CARDS);
-    if (expandedId && !visible.some((entry) => entry.suggestion.id === expandedId)) {
-      const active = entries.find((entry) => entry.suggestion.id === expandedId);
-      if (active) visible = [...visible.slice(0, MAX_VISIBLE_CARDS - 1), active];
-    }
   }
   const hiddenCount = entries.length - visible.length;
 
@@ -405,32 +475,21 @@ export function useGuidanceStream({
       ? null
       : entries.find((entry) => entry.suggestion.id === criticalAlertId) ?? null;
 
-  /** Header chevron — one card open at a time, or none. */
+  /**
+   * Header chevron. Closing and reopening are symmetrical and local: the card
+   * the agent clicked is the only one that changes, and it stays exactly where
+   * they found it — no other card opens, closes, or moves in response (§5).
+   */
   const toggleCard = (id: string) => {
     markInteracting();
     setCriticalAlertId(null);
-    const closing = expandedIdRef.current === id;
-
-    if (!closing) {
-      // Opening a card: it stops being unread, and it stays exactly where the
-      // agent found it. The one it replaces collapses in place.
-      setEntries((current) => withStatus(current, id, "seen"));
-      setExpandedId(id);
-      return;
-    }
-
-    // Finished with it: the card sinks under anything still unread, and the
-    // next unread suggestion opens itself (§5).
-    const list = entriesRef.current;
-    const nextUp = list.find(
-      (entry) => entry.status === "new" && entry.suggestion.id !== id
-    );
-    setEntries((current) => {
-      let next = moveEntry(current, id, seenIndex);
-      if (nextUp) next = withStatus(next, nextUp.suggestion.id, "seen");
+    setEntries((current) => withStatus(current, id, "seen"));
+    setCollapsedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
-    setExpandedId(nextUp ? nextUp.suggestion.id : null);
   };
 
   return {
@@ -441,13 +500,17 @@ export function useGuidanceStream({
     hiddenCount,
     showAll,
     showAllCards: () => setShowAll(true),
-    /** Unread suggestions waiting — drives "Live suggestions · 2 new". */
+    /** Suggestions that just landed — drives "Conversation guidance · 2 new". */
     newCount,
     /** Set when critical guidance queued under a card the agent was reading. */
     criticalAlert,
-    expandedId,
+    /** Cards the agent has closed — everything else is open (§2). */
+    collapsedIds,
+    isExpanded: (id: string) => !collapsedIds.has(id),
     arrivingIds,
     attentionIds,
+    /** Cards still spelling the unread dot out as "New" (§12). */
+    newLabelIds,
     relevantAgainIds,
     interacting,
     toggleCard,

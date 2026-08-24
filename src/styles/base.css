@@ -746,3 +746,115 @@ input[type="radio"]:not(:disabled) {
     transition-duration: var(--duration-micro);
   }
 }
+
+/* ================================================================== */
+/* WAVEFORM LOADER                                                     */
+/* Four bars breathing out of phase — a processing indicator for a     */
+/* wait with no measurable progress. It runs for as long as the wait   */
+/* does, which is why the loop is slower and shallower than anything   */
+/* on the §4 interaction scale: at 20px a quick pulse reads as a       */
+/* meter reacting to sound, and this reacts to nothing.                */
+/*                                                                     */
+/* The spec asks for `ease-in-out`; `ease-standard` is the "moving in  */
+/* place" curve and is the closest thing on the scale — near-symmetric */
+/* and already carrying every indicator in the library. It sits on the */
+/* `animation` shorthand rather than inside a keyframe stop, because a */
+/* stop's `animation-timing-function` cannot read a token: Chrome      */
+/* keeps the declaration and ignores it, and every segment silently    */
+/* goes linear (§4).                                                   */
+/* ================================================================== */
+
+/* 0.55 is the resting trough and 1 is the listed bar height, so the dip is
+   45% — the ceiling the spec sets on variation. The pulse takes the first
+   half of the loop and the bar waits out the second, which is what turns
+   four staggered pulses into one wave that sweeps and then breathes. */
+@keyframes waveform-loader-pulse {
+  0% {
+    transform: scaleY(0.55);
+  }
+  25% {
+    transform: scaleY(1);
+  }
+  50%,
+  100% {
+    transform: scaleY(0.55);
+  }
+}
+
+@keyframes waveform-loader-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes waveform-loader-out {
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/* Enter at `base`, leave at `fast` — the §4 pairing rule. */
+.waveform-loader {
+  animation: waveform-loader-in var(--duration-base) var(--ease-entrance) both;
+}
+
+.waveform-loader[data-phase="exiting"] {
+  animation: waveform-loader-out var(--duration-fast) var(--ease-exit) both;
+}
+
+/* `backwards` matters: without it a staggered bar sits at its full unanimated
+   height until its delay elapses, so the first cycle opens with three bars
+   dropping — a downward cascade before the upward wave has said anything. */
+.waveform-loader-bar {
+  transform-origin: center;
+  animation: waveform-loader-pulse var(--duration-ambient-loop)
+    var(--ease-standard) infinite backwards;
+}
+
+/* The stagger is what makes it travel left to right. Declared off one token
+   so the four offsets cannot drift apart. */
+.waveform-loader-bar:nth-child(2) {
+  animation-delay: var(--duration-ambient-stagger);
+}
+
+.waveform-loader-bar:nth-child(3) {
+  animation-delay: calc(var(--duration-ambient-stagger) * 2);
+}
+
+.waveform-loader-bar:nth-child(4) {
+  animation-delay: calc(var(--duration-ambient-stagger) * 3);
+}
+
+/* Reduced motion: the bars stop and sit at their resting heights, and the
+   indicator arrives and leaves on opacity alone. The loop is the part that
+   has to go — an indicator that runs for a whole minute is exactly the kind
+   of persistent movement the preference is asking about. Presence is on a
+   JS timer rather than `transitionend`, so dropping the scale here cannot
+   strand the unmount. */
+@media (prefers-reduced-motion: reduce) {
+  .waveform-loader-bar {
+    animation: none;
+  }
+
+  .waveform-loader {
+    animation-name: waveform-loader-fade-in;
+  }
+
+  .waveform-loader[data-phase="exiting"] {
+    animation-name: waveform-loader-fade-out;
+  }
+}
+
+@keyframes waveform-loader-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes waveform-loader-fade-out {
+  to {
+    opacity: 0;
+  }
+}

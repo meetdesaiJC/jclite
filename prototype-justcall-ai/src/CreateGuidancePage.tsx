@@ -1,16 +1,10 @@
 import * as React from "react";
 import { Banner } from "@/components/Banner";
 import { Button } from "@/components/Button";
-import { Checkbox } from "@/components/Checkbox";
 import { Dropdown } from "@/components/Dropdown";
 import { InputField } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
-import {
-  IconClose,
-  IconEye,
-  IconFile,
-  IconSparkles,
-} from "@/components/Icon";
+import { IconClose, IconEye, IconFile } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import { useAgentAssistTakeover } from "./agentAssistTakeover";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
@@ -23,7 +17,6 @@ import {
   guidanceTriggeredBy,
   placeholdersForGuidance,
   priorityForGuidance,
-  proposeGuidanceFromKnowledge,
   stanceForGuidance,
   type GuidanceItem,
   type GuidanceResource,
@@ -33,9 +26,6 @@ import {
 import {
   SEED_KNOWLEDGE_SOURCES,
   knowledgeCoverageForTrigger,
-  knowledgeEntryCount,
-  knowledgeRetrievableEntries,
-  liveKnowledgeSources,
   type KnowledgeSourceRecord,
 } from "./knowledgeData";
 import { IconKnowledge } from "./LiveAgentAssistPanel";
@@ -47,17 +37,10 @@ export interface CreateGuidancePageProps {
   /** Defaults to edit when `initial` is set, create otherwise. */
   mode?: "create" | "edit";
   templateId?: GuidanceTemplateId | null;
-  /** Sources AI can draft response cards from (§13). */
+  /** Read by the coverage hint — what Knowledge already answers on its own. */
   knowledgeSources?: KnowledgeSourceRecord[];
-  /** Opens the AI drafting flow immediately — "Generate from Knowledge Base" (§13). */
-  startWithGenerate?: boolean;
   /** Offered when Knowledge already covers the trigger. Optional escape hatch. */
   onUseKnowledgeInstead?: () => void;
-  /**
-   * Leaves for the Knowledge page. The way out when AI drafting has nothing to
-   * draw on — no Knowledge Base, none on for Agent Assist, or none with answers.
-   */
-  onOpenKnowledge?: () => void;
   onClose: () => void;
   onSave: (item: GuidanceItem) => void;
 }
@@ -145,9 +128,7 @@ export function CreateGuidancePage({
   mode,
   templateId = null,
   knowledgeSources = SEED_KNOWLEDGE_SOURCES,
-  startWithGenerate = false,
   onUseKnowledgeInstead,
-  onOpenKnowledge,
   onClose,
   onSave,
 }: CreateGuidancePageProps) {
@@ -157,7 +138,6 @@ export function CreateGuidancePage({
   const [draft, setDraft] = React.useState<GuidanceItem>(
     () => initial ?? createEmptyGuidance()
   );
-  const [generateOpen, setGenerateOpen] = React.useState(startWithGenerate);
   const [linkOpen, setLinkOpen] = React.useState(false);
   const [linkName, setLinkName] = React.useState("");
   const [linkUrl, setLinkUrl] = React.useState("");
@@ -331,28 +311,17 @@ export function CreateGuidancePage({
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-auto pr-1">
           {/* Response cards can cover anything the business wants control over —
-              including integrations and FAQs. AI drafting stays available
-              rather than being the thing that decides what's allowed. */}
+              objections, policies, integrations, FAQs. What they never are is
+              generated: the wording is the whole point, so it is authored. */}
           {!isEditing ? (
-            <div className="flex items-center gap-4 rounded-lg border border-line bg-secondary-bg px-3.5 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-label-md-semi text-foreground">
-                  Build a response card
-                </p>
-                <p className="mt-0.5 text-pretty text-paragraph-md text-foreground">
-                  For anything you want agents to handle a particular way —
-                  objections, policies, integrations, FAQs.
-                </p>
-              </div>
-              <Button
-                variant="link"
-                size="sm"
-                className="shrink-0"
-                leftIcon={<IconSparkles size={16} />}
-                onClick={() => setGenerateOpen(true)}
-              >
-                Generate from Knowledge Base
-              </Button>
+            <div className="rounded-lg border border-line bg-secondary-bg px-3.5 py-3">
+              <p className="text-label-md-semi text-foreground">
+                Build a response card
+              </p>
+              <p className="mt-0.5 text-pretty text-paragraph-md text-foreground">
+                For anything you want agents to handle a particular way —
+                objections, policies, integrations, FAQs.
+              </p>
             </div>
           ) : null}
 
@@ -558,33 +527,6 @@ export function CreateGuidancePage({
           </SectionCard>
         </div>
       </div>
-
-      <GenerateFromKnowledgeModal
-        open={generateOpen}
-        sources={knowledgeSources}
-        onGoToKnowledge={
-          onOpenKnowledge
-            ? () => {
-                setGenerateOpen(false);
-                onOpenKnowledge();
-              }
-            : undefined
-        }
-        onClose={() => setGenerateOpen(false)}
-        onApply={(proposal) => {
-          // AI fills the form; the admin still reviews and publishes.
-          setDraft((current) => ({
-            ...current,
-            name: proposal.name,
-            trigger: proposal.trigger,
-            examplePhrases: proposal.examplePhrases,
-            suggestedResponse: proposal.suggestedResponse,
-            talkingPoints: proposal.talkingPoints,
-            resources: proposal.resources,
-          }));
-          setGenerateOpen(false);
-        }}
-      />
 
       <Modal
         open={linkOpen}
@@ -864,246 +806,6 @@ function KnowledgeCoverageHint({
           </Button>
         </div>
       </div>
-    </div>
-  );
-}
-
-/**
- * Generate from Knowledge Base (§13). The admin picks the Knowledge Bases to draw
- * from, AI proposes the whole draft — name, trigger, response, talking points,
- * relevant resources — and the admin reviews every field before publishing.
- */
-function GenerateFromKnowledgeModal({
-  open,
-  sources,
-  onClose,
-  onApply,
-  onGoToKnowledge,
-}: {
-  open: boolean;
-  sources: KnowledgeSourceRecord[];
-  onClose: () => void;
-  onApply: (proposal: GuidanceItem) => void;
-  /** Leaves for the Knowledge page — the only place the gap can be closed. */
-  onGoToKnowledge?: () => void;
-}) {
-  const live = liveKnowledgeSources(sources);
-  const usable = live.filter((source) => knowledgeEntryCount(source) > 0);
-  const [sourceIds, setSourceIds] = React.useState<string[]>([]);
-  const [proposals, setProposals] = React.useState<GuidanceItem[]>([]);
-
-  React.useEffect(() => {
-    if (!open) {
-      setSourceIds([]);
-      setProposals([]);
-    }
-  }, [open]);
-
-  const picked = usable.filter((item) => sourceIds.includes(item.id));
-
-  const toggleSource = (id: string) =>
-    setSourceIds((current) =>
-      current.includes(id)
-        ? current.filter((value) => value !== id)
-        : [...current, id]
-    );
-
-  const generate = () => {
-    // A proposal per answer, capped so the review list stays scannable.
-    setProposals(
-      picked
-        .flatMap((source) =>
-          proposeGuidanceFromKnowledge(
-            knowledgeRetrievableEntries(source),
-            source.name
-          )
-        )
-        .slice(0, 6)
-    );
-  };
-
-  // Nothing to draft from. Which step is missing decides the copy and the
-  // button, so the modal never ends on a disabled Generate.
-  const gap =
-    usable.length > 0
-      ? null
-      : sources.length === 0
-        ? {
-            title: "No Knowledge Base yet",
-            body: "AI drafts response cards from the answers in a Knowledge Base. Create one from a help centre, files, or typed Q&A, and it can propose the trigger and the response for you.",
-            action: "Create Knowledge Base",
-          }
-        : live.length === 0
-          ? {
-              title: "No Knowledge Base is on for Agent Assist",
-              body: `You have ${sources.length === 1 ? "a Knowledge Base" : `${sources.length} Knowledge Bases`}, but none of ${sources.length === 1 ? "it is" : "them are"} switched on for Agent Assist yet. Turn one on and AI can draft response cards from its answers.`,
-              action: "Go to Knowledge Base",
-            }
-          : {
-              title: "No answers to draft from yet",
-              body: "The Knowledge Bases on for Agent Assist have no answers in them yet. Add pages, files, or Q&A, and AI can draft response cards from them.",
-              action: "Add knowledge",
-            };
-
-  if (gap) {
-    return (
-      <Modal
-        open={open}
-        onClose={onClose}
-        size="md"
-        title="Generate response cards from Knowledge Base"
-        footer={
-          <>
-            <Button variant="grey-outline" size="sm" onClick={onClose}>
-              Cancel
-            </Button>
-            {onGoToKnowledge ? (
-              <Button size="sm" onClick={onGoToKnowledge}>
-                {gap.action}
-              </Button>
-            ) : null}
-          </>
-        }
-      >
-        <div className="flex flex-col items-center gap-4 px-4 py-6 text-center">
-          <span className="flex size-12 items-center justify-center rounded-full bg-secondary-bg text-muted-foreground">
-            <IconKnowledge className="size-5" />
-          </span>
-          <div className="flex max-w-[400px] flex-col gap-1">
-            <p className="text-label-md-semi text-foreground">{gap.title}</p>
-            <p className="text-pretty text-paragraph-md text-muted-foreground">
-              {gap.body}
-            </p>
-          </div>
-        </div>
-      </Modal>
-    );
-  }
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      size="md"
-      title="Generate response cards from Knowledge Base"
-      description="Pick the Knowledge Bases to draw from. AI proposes a full draft and you review it before anything publishes."
-      footer={
-        <>
-          <Button variant="grey-outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            leftIcon={<IconSparkles size={16} />}
-            disabled={picked.length === 0}
-            onClick={generate}
-          >
-            {proposals.length > 0 ? "Regenerate" : "Generate"}
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <span className="text-label-md text-foreground">Knowledge Bases</span>
-          <ul className="flex flex-col gap-1 rounded-lg border border-line p-1">
-            {usable.map((source) => (
-              <li key={source.id}>
-                <label className="flex cursor-pointer items-center gap-2 rounded-[4px] px-2 py-1.5 hover:bg-secondary-bg">
-                  <Checkbox
-                    checked={sourceIds.includes(source.id)}
-                    onCheckedChange={() => toggleSource(source.id)}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-paragraph-md text-foreground">
-                    {source.name}
-                  </span>
-                  <span className="shrink-0 text-label-sm text-muted-foreground tabular-nums">
-                    {knowledgeEntryCount(source)} answers
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {proposals.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            <p className="text-label-md text-foreground">
-              {proposals.length} drafts — load one to review and edit
-            </p>
-            <ul className="flex flex-col gap-2">
-              {proposals.map((proposal) => (
-                <li key={proposal.id}>
-                  <ProposalCard proposal={proposal} onApply={() => onApply(proposal)} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </div>
-    </Modal>
-  );
-}
-
-/** The AI draft laid out field by field, so review is possible before loading. */
-function ProposalCard({
-  proposal,
-  onApply,
-}: {
-  proposal: GuidanceItem;
-  onApply: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-3 rounded-lg border border-line bg-white p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-label-sm text-muted-foreground">Response card name</p>
-          <p className="text-pretty text-label-md-semi text-foreground">
-            {proposal.name}
-          </p>
-        </div>
-        <Button size="sm" variant="grey-outline" className="shrink-0" onClick={onApply}>
-          Review draft
-        </Button>
-      </div>
-
-      <ProposalField label="Trigger" value={proposal.trigger} />
-      <ProposalField
-        label="Suggested response"
-        value={`“${proposal.suggestedResponse}”`}
-      />
-
-      {proposal.talkingPoints.length > 0 ? (
-        <div className="flex flex-col gap-1">
-          <p className="text-label-sm text-muted-foreground">Talking points</p>
-          <ul className="flex flex-col gap-0.5">
-            {proposal.talkingPoints.map((point, index) => (
-              <li
-                key={`${proposal.id}-point-${index}`}
-                className="text-pretty text-paragraph-sm text-foreground"
-              >
-                • {point}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {proposal.resources.length > 0 ? (
-        <ProposalField
-          label="Relevant resources"
-          value={proposal.resources.map((resource) => resource.name).join(", ")}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function ProposalField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <p className="text-label-sm text-muted-foreground">{label}</p>
-      <p className="text-pretty text-paragraph-sm text-foreground">{value}</p>
     </div>
   );
 }
