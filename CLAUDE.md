@@ -158,10 +158,21 @@ almost none.
 | `duration-base` | 150ms | **Default.** Colour state, indicators, small enters |
 | `duration-moderate` | 200ms | Content swaps, panel-internal movement |
 | `duration-slow` | 240ms | Large travel — sidesheet, drawer |
+| `duration-emphasis` | 600ms | **Not a transition.** A one-shot attention pulse that plays once and is gone — the new-guidance wash. Never for an enter or an exit. |
 
 `duration-base` is deliberately 150ms because that is Tailwind's own
 `transition-colors` default — a bare `transition-colors` is already on-scale,
 so the 20 components that use one need no duration added.
+
+**Loops are off this scale.** A transition answers "how far did it travel?";
+an ambient loop answers "how calm should a wait read?", and the fastest step
+that still reads as calm is slower than the slowest step that still reads as
+responsive. `--duration-ambient-loop` (1200ms, one breath of a processing
+indicator) and `--duration-ambient-stagger` (100ms, the offset between
+neighbours) live in `motion.css` beside the rest. They get **no** `@utility`
+companion — the `duration-*` classes set `transition-duration` and these drive
+`animation`, so a class would be wrong in a way that looks right. Consume them
+as `var()` from a rule in `base.css`. `WaveformLoader` is the worked example.
 
 Three easing curves, chosen by **direction** rather than by component. The
 asymmetry is the point: the eye reads decelerating-in and accelerating-out as

@@ -17,6 +17,7 @@ const SCALE: { name: DurationName; use: string }[] = [
   { name: "base", use: "Default — colour state, indicators, small enters" },
   { name: "moderate", use: "Content swaps, panel-internal movement" },
   { name: "slow", use: "Large travel — sidesheet, drawer" },
+  { name: "emphasis", use: "One-shot attention pulse — not a transition" },
 ];
 
 const EASES = [

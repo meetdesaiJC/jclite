@@ -73,43 +73,35 @@ function PrototypeGroup({
   );
 }
 
-function LauncherSection({
+function ScopePanel({
   title,
   description,
-  muted = false,
   children,
 }: {
   title: string;
   /**
-   * With the badges gone this is the only copy separating the two versions.
-   * V1 lists its contents outright; V2 states itself as V1 plus the pieces
-   * it adds, which is shorter to scan than repeating the shared four.
+   * The only copy separating the two panels. Current Scope lists its contents
+   * outright; Target Experience states itself as that plus what it adds, which
+   * is shorter to scan than repeating the shared four.
    */
   description: string;
-  /**
-   * Softens the heading so V1 stays the louder of the two. The cards are
-   * identical in both sections, so this and the gap are what carry the split.
-   */
-  muted?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col items-start gap-8">
-      <div className="flex max-w-[560px] flex-col items-start gap-3">
-        <h2
-          className={cn(
-            "text-heading-xxl",
-            muted ? "text-muted-foreground" : "text-foreground"
-          )}
-        >
-          {title}
-        </h2>
-        <p className="text-paragraph-md text-muted-foreground">{description}</p>
+    <section className="flex flex-col items-start gap-6 sm:w-[333px]">
+      <div className="flex flex-col items-start gap-2">
+        <h2 className="text-heading-xxxl text-foreground">{title}</h2>
+        {/* Two lines reserved either way, so the SETUP label sits at the same
+            height in both columns however the copy wraps. */}
+        <p className="text-paragraph-md text-muted-foreground sm:min-h-10 sm:w-[333px]">
+          {description}
+        </p>
       </div>
 
-      {/* One column per category, so the categories read as siblings rather
-          than as one long queue. */}
-      <div className="flex flex-wrap items-start gap-[31px]">{children}</div>
+      {/* One stack per category, with more air between the categories than
+          between a category's own cards, so the break reads as a new group
+          rather than as one long queue. */}
+      <div className="flex w-full flex-col items-start gap-10">{children}</div>
     </section>
   );
 }
@@ -124,18 +116,18 @@ export function PrototypeLauncher({
 }: PrototypeLauncherProps) {
   return (
     <div className="h-screen overflow-y-auto bg-white">
-      <main className="flex flex-col items-start gap-12 px-6 pb-[42px] pt-[42px] md:px-[75px]">
+      <main className="flex flex-col items-start gap-10 px-6 pb-[42px] pt-[42px] md:px-[75px]">
         <h1 className="text-heading-xxxl text-foreground">
           Agent Assist Prototypes
         </h1>
 
-        {/* V1 first — it is the direction being designed for implementation.
-            The gap between the two is wider than anything inside a section so
-            the split is legible before you read either heading. */}
-        <div className="flex flex-col items-start gap-16 md:gap-20">
-          <LauncherSection
-            title="V1"
-            description="Includes Scripts, Response Cards, and Knowledge Base."
+        {/* Side by side, identical weight — the two scopes are read against
+            each other, so neither column gets to look like the answer. The
+            gutter rule is what the removed panel borders were really doing. */}
+        <div className="flex flex-col items-start gap-12 lg:flex-row lg:gap-16">
+          <ScopePanel
+            title="Current Scope"
+            description="Scripts, Response Cards, and Knowledge Base"
           >
             <PrototypeGroup label="Setup">
               {/* Same flow as 02, walked on a day-one account so every list
@@ -159,12 +151,16 @@ export function PrototypeLauncher({
                 onClick={onStartV1InCall}
               />
             </PrototypeGroup>
-          </LauncherSection>
+          </ScopePanel>
 
-          <LauncherSection
-            title="V2"
-            description="V1 + Behavioral Coaching, Next Best Actions, and Live Assist."
-            muted
+          <div
+            aria-hidden="true"
+            className="hidden w-px self-stretch bg-line lg:block"
+          />
+
+          <ScopePanel
+            title="Target Experience"
+            description="Current Scope + Behavioral Coaching, Next Best Actions, and Live Assist"
           >
             <PrototypeGroup label="Setup">
               <PrototypeCard
@@ -186,7 +182,7 @@ export function PrototypeLauncher({
                 onClick={onStartInCall}
               />
             </PrototypeGroup>
-          </LauncherSection>
+          </ScopePanel>
         </div>
       </main>
     </div>

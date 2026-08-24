@@ -12,11 +12,26 @@
   --duration-base: 150ms; /* default — colour state, indicators, small enters */
   --duration-moderate: 200ms; /* content swaps, panel-internal movement */
   --duration-slow: 240ms; /* large travel — sidesheet, drawer */
+  /* Off the transition scale on purpose: a one-shot signal the eye is meant
+     to follow and lose interest in, not a state change. Only for an
+     attention pulse that plays once — never for an enter or an exit. */
+  --duration-emphasis: 600ms; /* one-shot attention pulse */
 
   /* Three curves, chosen by direction rather than by component. */
   --ease-entrance: cubic-bezier(0, 0, 0.38, 0.9); /* arriving — fast, then settles */
   --ease-exit: cubic-bezier(0.2, 0, 1, 0.9); /* leaving — slow, then accelerates away */
   --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9); /* moving in place — an indicator sliding */
+
+  /* Ambient loops. Deliberately off the scale above: nothing here is a
+     response to a click, so the question is not "how far did it travel?"
+     but "how calm should a wait read?". A loop that ran at `slow` would
+     read as a meter reacting to something.
+
+     No `@utility` companions — the `duration-*` classes set
+     `transition-duration`, and these drive `animation`. Consume them as
+     `var()` from a rule in base.css. */
+  --duration-ambient-loop: 1200ms; /* one full breath of a processing indicator */
+  --duration-ambient-stagger: 100ms; /* offset between neighbours in a loop */
 }
 
 /* Tailwind themes `--ease-*` into `ease-*` utilities on its own, but there is
@@ -46,4 +61,8 @@
 
 @utility duration-slow {
   transition-duration: var(--duration-slow);
+}
+
+@utility duration-emphasis {
+  transition-duration: var(--duration-emphasis);
 }

@@ -38,6 +38,7 @@ import {
 } from "@/components/Table";
 import { cn } from "@/lib/utils";
 import knowledgeEmptyIllustration from "./assets/knowledge-empty.svg";
+import webPagesEmptyIllustration from "./assets/webpages-empty.svg";
 import { useAgentAssistTakeover } from "./agentAssistTakeover";
 import { AssignmentAvatarStack } from "./AssignmentAvatarStack";
 import { AssignTeamAndGroups } from "./AssignTeamAndGroups";
@@ -561,20 +562,20 @@ function KnowledgeStatusCell({
   }
   if (status === "live") {
     return (
-      <Tag size="sm" color="green">
+      <Tag size="sm" color="green" className="rounded-full">
         Success
       </Tag>
     );
   }
   if (status === "failed") {
     return (
-      <Tag size="sm" color="red">
+      <Tag size="sm" color="red" className="rounded-full">
         Failed
       </Tag>
     );
   }
   return (
-    <Tag size="sm" color="blue-grey">
+    <Tag size="sm" color="blue-grey" className="rounded-full">
       Draft
     </Tag>
   );
@@ -1220,7 +1221,7 @@ function ContentPanel({
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-heading-lg text-foreground">{meta.addTitle}</h2>
-            <Tag size="sm" color="grey" outline>
+            <Tag size="sm" color="grey" outline className="rounded-full">
               {meta.limitLabel}
             </Tag>
           </div>
@@ -1262,15 +1263,21 @@ function ContentCard({
 /**
  * The nothing-here state: a stack of blank cards behind the tab's own glyph,
  * with the add affordance repeated as the primary button.
+ *
+ * `illustrationSrc` is the drawn version of that same card stack, straight
+ * from Figma. Where one exists for the tab it wins — the CSS build is the
+ * stand-in for tabs whose illustration hasn't been drawn yet.
  */
 function ContentEmptyState({
   glyph,
+  illustrationSrc,
   title,
   body,
   actionLabel,
   onAction,
 }: {
   glyph: React.ReactNode;
+  illustrationSrc?: string;
   title: string;
   body: string;
   actionLabel: string;
@@ -1278,16 +1285,26 @@ function ContentEmptyState({
 }) {
   return (
     <div className="flex flex-col items-center gap-6 px-6 py-14 text-center">
-      <div className="relative flex size-[132px] items-center justify-center rounded-full bg-secondary-bg">
-        <span className="absolute bottom-[34px] left-2 size-12 -rotate-[16deg] rounded-[10px] border border-line bg-white" />
-        <span className="absolute bottom-[34px] right-2 size-12 rotate-[16deg] rounded-[10px] border border-line bg-white" />
-        <span className="absolute bottom-[30px] flex h-[72px] w-[76px] items-center justify-center rounded-[10px] border border-line bg-white text-muted-foreground shadow-100">
-          {glyph}
-        </span>
-        <span className="absolute bottom-[18px] flex size-8 items-center justify-center rounded-full border-2 border-white bg-brand text-white">
-          <IconPlus size={16} />
-        </span>
-      </div>
+      {illustrationSrc ? (
+        <img
+          src={illustrationSrc}
+          alt=""
+          width={96}
+          height={96}
+          className="size-24 shrink-0"
+        />
+      ) : (
+        <div className="relative flex size-[132px] items-center justify-center rounded-full bg-secondary-bg">
+          <span className="absolute bottom-[34px] left-2 size-12 -rotate-[16deg] rounded-[10px] border border-line bg-white" />
+          <span className="absolute bottom-[34px] right-2 size-12 rotate-[16deg] rounded-[10px] border border-line bg-white" />
+          <span className="absolute bottom-[30px] flex h-[72px] w-[76px] items-center justify-center rounded-[10px] border border-line bg-white text-muted-foreground shadow-100">
+            {glyph}
+          </span>
+          <span className="absolute bottom-[18px] flex size-8 items-center justify-center rounded-full border-2 border-white bg-brand text-white">
+            <IconPlus size={16} />
+          </span>
+        </div>
+      )}
       <div className="flex max-w-[420px] flex-col gap-1">
         <p className="text-heading-lg text-foreground">{title}</p>
         <p className="text-pretty text-paragraph-md text-muted-foreground">{body}</p>
@@ -1394,6 +1411,7 @@ function WebPagesTab({
       {empty ? (
         <ContentEmptyState
           glyph={<IconWebToDevice size={20} />}
+          illustrationSrc={webPagesEmptyIllustration}
           title={meta.emptyTitle}
           body={meta.emptyBody}
           actionLabel="Add Source"

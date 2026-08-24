@@ -89,39 +89,48 @@ export function KnowledgeSuggestionsModal({
       showCloseButton={false}
       bodyClassName="p-0"
     >
-      <div className="relative grid md:min-h-[640px] md:grid-cols-[minmax(0,1fr)_minmax(0,1.06fr)]">
+      {/* 46/54 only once there is room for it. Between md and lg the modal
+          is narrow enough that a 46% column makes the heading wrap badly, so
+          the split stays even there and the illustration gives the width
+          back. */}
+      <div className="relative grid md:grid-cols-2 lg:grid-cols-[minmax(0,46fr)_minmax(0,54fr)]">
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-4 top-4 z-10 flex size-8 items-center justify-center rounded-full bg-white/70 text-muted-foreground backdrop-blur-sm transition-colors hover:bg-white hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24"
+          className="absolute right-5 top-5 z-10 flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <IconClose size={20} />
         </button>
 
-        <div className="flex h-full flex-col gap-8 p-8 pb-10">
-          <div className="flex flex-col gap-3">
-            <h2 className="text-pretty text-heading-xxl text-foreground">
-              Your Knowledge Base, right when agents need it
-            </h2>
-            <p className="text-pretty text-paragraph-md text-muted-foreground">
-              Surface relevant answers from your Knowledge Base automatically
-              during live calls, so agents can respond without searching or
-              switching tabs.
-            </p>
-          </div>
+        {/* One left edge for all four blocks, and the CTA spaced off the
+            benefits rather than pinned to the bottom — it is the last step of
+            the argument, not a footer. */}
+        <div className="flex flex-col px-10 pb-8 pt-9">
+          {/* Balanced rather than pretty: the shortest width that still fits
+              two lines breaks after the comma, which is the break the copy
+              wants. A max-width would hardcode the same number and drift the
+              first time the type scale moves. */}
+          <h2 className="text-balance text-heading-xxl text-foreground">
+            Your Knowledge Base, right when agents need it
+          </h2>
+          <p className="mt-4 text-pretty text-paragraph-md text-gray-600">
+            Surface relevant answers from your Knowledge Base automatically
+            during live calls, so agents can respond without searching or
+            switching tabs.
+          </p>
 
-          <ul className="flex flex-col gap-5">
+          <ul className="mt-8 flex flex-col gap-6">
             {POINTS.map((point) => (
               <li key={point.title} className="flex gap-3">
-                <span className="mt-px flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-brand">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-subtle text-brand">
                   {point.icon}
                 </span>
                 <span className="min-w-0">
                   <span className="block text-label-md-semi text-foreground">
                     {point.title}
                   </span>
-                  <span className="mt-0.5 block text-pretty text-paragraph-md text-muted-foreground">
+                  <span className="mt-0.5 block text-pretty text-paragraph-md text-gray-600">
                     {point.body}
                   </span>
                 </span>
@@ -129,7 +138,7 @@ export function KnowledgeSuggestionsModal({
             ))}
           </ul>
 
-          <div className="mt-auto">
+          <div className="mt-9">
             <Button
               onClick={() => {
                 onClose();
@@ -158,6 +167,11 @@ export function KnowledgeSuggestionsModal({
  * policy. What stays readable is the chain: the asked words, the card's title
  * and lead line, and the page it came from. The 200ms `assist-card-enter` is
  * staggered so the question still lands before the answer does.
+ *
+ * Everything that is setting rather than chain — the call chrome, the agent's
+ * reply — is dimmed as a group rather than dropped, because the mock has to
+ * still read as a call for the moment to mean anything. Dimming leaves the
+ * frame and takes the competition.
  */
 function KnowledgeSurfacingIllustration() {
   const { summary, points } = knowledgeFacts(RETENTION_ENTRY);
@@ -169,14 +183,27 @@ function KnowledgeSurfacingIllustration() {
   return (
     <div
       aria-hidden="true"
-      className="relative isolate hidden min-h-[640px] select-none items-center overflow-hidden border-l border-line bg-[linear-gradient(202deg,var(--color-brand-subtle)_0%,#f3f7fd_44%,#ffffff_100%)] md:flex"
+      className="relative isolate hidden min-h-[520px] select-none items-center justify-center overflow-hidden border-l border-line bg-[linear-gradient(202deg,var(--color-promo-canvas-from)_0%,var(--color-promo-canvas-mid)_44%,var(--color-promo-canvas-to)_100%)] md:flex"
     >
-      <div className="pointer-events-none absolute inset-0 [background-image:linear-gradient(to_right,rgba(0,76,230,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,76,230,0.05)_1px,transparent_1px)] [background-size:28px_28px]" />
+      <div className="pointer-events-none absolute inset-0 [background-image:linear-gradient(to_right,var(--color-promo-grid)_1px,transparent_1px),linear-gradient(to_bottom,var(--color-promo-grid)_1px,transparent_1px)] [background-size:28px_28px]" />
       <div className="pointer-events-none absolute -right-16 top-8 size-64 rounded-full bg-brand/10 blur-3xl" />
 
-      <div className="relative w-full py-8 pl-8">
-        <div className="assist-card-enter overflow-hidden rounded-l-[12px] border border-r-0 border-line bg-white shadow-400">
-          <div className="flex items-center gap-2 border-b border-line px-3.5 py-2.5">
+      {/* Framed rather than bled off the right edge. Running the mock past the
+          modal made it read as a screenshot that had been cropped by accident;
+          sitting it in the middle of its own canvas with air on both sides
+          says the framing was chosen. The air costs ~11% of the mock's width,
+          which the card content absorbs without dropping below readable.
+
+          Top padding is the deeper one because the close button lives in that
+          corner: with even padding the mock's top edge lands a few pixels
+          under it and the two read as touching. Reserving the button's row
+          moves the centre down by ~12px, which on this canvas is invisible —
+          crowding the button is not. */}
+      <div className="relative w-full px-8 pb-8 pt-14 lg:px-14 lg:pb-10 lg:pt-16">
+        <div className="assist-card-enter overflow-hidden rounded-lg border border-line bg-white shadow-400">
+          {/* Call chrome — the setting, not the story. Dimmed as a group so
+              the eye starts at the question. */}
+          <div className="flex items-center gap-2 border-b border-line px-3.5 py-2.5 opacity-60">
             <span className="size-1.5 rounded-full bg-error" />
             <span className="text-label-xs uppercase tracking-[0.06em] text-muted-foreground">
               Live call
@@ -186,7 +213,7 @@ function KnowledgeSurfacingIllustration() {
             </span>
           </div>
 
-          <div className="flex flex-col gap-3.5 px-3.5 py-3.5 pr-6">
+          <div className="flex flex-col gap-3.5 p-3.5">
             <div className="flex gap-2.5">
               <Avatar
                 size="sm"
@@ -204,7 +231,7 @@ function KnowledgeSurfacingIllustration() {
                     RETENTION_QUESTION
                   ) : (
                     <>
-                      <mark className="rounded-[3px] bg-brand/12 text-foreground">
+                      <mark className="rounded-[3px] bg-brand/15 text-foreground">
                         {RETENTION_CUE}
                       </mark>
                       {cueAfter}
@@ -223,7 +250,7 @@ function KnowledgeSurfacingIllustration() {
             </div>
 
             <article
-              className="assist-card-enter overflow-hidden rounded-lg border border-info-border bg-white"
+              className="assist-card-enter overflow-hidden rounded-lg border border-info-border bg-white shadow-200"
               style={{ animationDelay: "260ms" }}
             >
               <div className="flex items-center gap-2 bg-info-secondary px-3 py-2">
@@ -246,7 +273,7 @@ function KnowledgeSurfacingIllustration() {
                   <ul className="flex flex-col gap-2.5 pl-1">
                     {points.map((point) => (
                       <li key={point.heading} className="flex items-center gap-2.5">
-                        <span className="size-1 shrink-0 rounded-full bg-gray-400/70" />
+                        <span className="size-1 shrink-0 rounded-full bg-gray-400/60" />
                         <TextBar style={{ width: barWidth(point.heading) }} />
                       </li>
                     ))}
@@ -267,7 +294,7 @@ function KnowledgeSurfacingIllustration() {
             {/* The payoff, and the reason the mock keeps going past the card:
                 the agent answers from it without leaving the call. */}
             <div
-              className="assist-card-enter flex gap-2.5"
+              className="assist-card-enter flex gap-2.5 opacity-55"
               style={{ animationDelay: "460ms" }}
             >
               <Avatar
@@ -299,7 +326,7 @@ function TextBar({
 }) {
   return (
     <span
-      className={cn("block h-2 rounded-full bg-gray-300/70", className)}
+      className={cn("block h-2 rounded-full bg-gray-300/60", className)}
       style={style}
     />
   );
