@@ -215,8 +215,8 @@ export function InCallGuidanceSlot({
   arriving: boolean;
   /**
    * Place in the burst this card arrived with. Cards that land together enter
-   * one `fast` step apart so the column reads as a sequence rather than a
-   * shove — see `--assist-stagger` in styles.css (§12).
+   * one `micro` step apart so the column reads as a sequence rather than a
+   * shove — see `--assist-stagger` in styles.css (§10).
    */
   arrivalIndex?: number;
   attention: boolean;
@@ -245,7 +245,7 @@ export function InCallGuidanceSlot({
       style={
         arriving && arrivalIndex > 0
           ? ({
-              "--assist-stagger": `calc(${arrivalIndex} * var(--duration-fast))`,
+              "--assist-stagger": `calc(${arrivalIndex} * var(--duration-micro))`,
             } as CSSProperties)
           : undefined
       }

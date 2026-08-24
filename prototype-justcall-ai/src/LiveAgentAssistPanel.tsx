@@ -1,8 +1,14 @@
-import { useEffect, useRef, useState, type SVGProps } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type Ref,
+  type SVGProps,
+} from "react";
 import {
   IconAlertTriangleFilled,
   IconChevronDown,
-  IconChevronUp,
   IconInfoCircle,
 } from "@/components/Icon";
 import { WaveformLoader } from "@/components/WaveformLoader";
@@ -66,6 +72,7 @@ import {
   useGuidanceStream,
   type GuidanceStreamCard,
 } from "./useGuidanceStream";
+import { isAtFeedGrowthEdge, useGuidanceFeed } from "./useGuidanceFeed";
 
 /**
  * In-call Agent Assist — one panel for everything the agent gets in real time.
@@ -73,6 +80,15 @@ import {
  * it fired. Guidance, knowledge, and actions stay; coaching is a live nudge
  * about this moment, so a new cue replaces the last one instead of stacking.
  */
+
+/**
+ * The newest card lands at the top of this column — see `useStableStreamOrder`.
+ * Mid-call the thing that just became relevant is the thing to read, so it goes
+ * where the agent's eye already is. Every rule about not disturbing their
+ * reading position depends on knowing that, because it means an arrival always
+ * lands *above* whatever they have scrolled down to.
+ */
+const FEED_GROWTH = "top" as const;
 
 /** Executed actions confirm, then collapse out of the way. */
 const ACTION_DONE_HOLD_MS = 4200;
@@ -317,12 +333,19 @@ function KnowledgeCard({
   arriving,
   reduced,
   onToggle,
+  cardRef,
 }: {
   surface: KnowledgeSurface;
   expanded: boolean;
   arriving: boolean;
   reduced: boolean;
   onToggle: () => void;
+  /**
+   * Registered with the feed's reading state, same as a guidance card: the
+   * agent has one column and one unread count, so knowledge has to be visible
+   * to the same observer that decides what has been read (§22).
+   */
+  cardRef?: Ref<HTMLElement>;
 }) {
   const [feedback, setFeedback] = useState<GuidanceFeedback>(null);
   const uncertain = surface.confidence === "low";
@@ -330,6 +353,7 @@ function KnowledgeCard({
 
   return (
     <article
+      ref={cardRef}
       className={cn(
         // shrink-0 matters: `overflow-hidden` zeroes the flex automatic
         // minimum size, so without it the card collapses to its borders
@@ -355,7 +379,14 @@ function KnowledgeCard({
           className="-mr-1 flex size-6 shrink-0 items-center justify-center text-muted-foreground"
           aria-hidden="true"
         >
-          {expanded ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+          {/* Turns rather than swaps — see GuidanceAiHeader. */}
+          <IconChevronDown
+            size={16}
+            className={cn(
+              "transition-[rotate] duration-moderate ease-standard motion-reduce:transition-none",
+              expanded && "rotate-180"
+            )}
+          />
         </span>
       </button>
 
@@ -853,11 +884,31 @@ export function LiveAgentAssistPanel({
   const [viewingResource, setViewingResource] = useState<GuidanceResource | null>(null);
   const [collapsedKnowledge, setCollapsedKnowledge] = useState<Set<string>>(new Set());
   const [knownIds, setKnownIds] = useState<Set<string>>(new Set());
+  /**
+   * Knowledge cards mid-entrance. Opt-in, like the guidance stream's own set:
+   * the card mounts still and is only then told to animate, because whether it
+   * may animate at all depends on where the agent is reading — and that is a
+   * question you can only answer once the card is in the DOM.
+   *
+   * The guidance stream decides this for its own cards; knowledge arrives by a
+   * different path and has to be held to the same rule, or the two card types
+   * would answer the agent's scroll position differently (§3, §18).
+   */
+  const [enteringKnowledgeIds, setEnteringKnowledgeIds] = useState<Set<string>>(
+    new Set()
+  );
   const [actionRuntimes, setActionRuntimes] = useState<Record<string, ActionRuntime>>({});
   /** Done receipts leave the stream; the outcome still has to survive hangup. */
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(
     () => new Set()
   );
+
+  /**
+   * The scrolling column. Both hooks read it: the stream to decide whether the
+   * agent is watching the end of the feed, the feed to decide what has been
+   * read and to hold the reading position steady across arrivals.
+   */
+  const feedRef = useRef<HTMLDivElement | null>(null);
 
   const stream = useGuidanceStream({
     suggestions: snapshot.suggestions,
@@ -865,6 +916,8 @@ export function LiveAgentAssistPanel({
     playhead: Math.min(snapshot.scriptIndex, scenario.steps.length),
     reduced,
     handledIds: snapshot.handledIds,
+    feedRef,
+    feedGrowth: FEED_GROWTH,
   });
   const coaching = useCoachingStack(snapshot.coaching, scenario.id, reduced);
 
@@ -873,6 +926,7 @@ export function LiveAgentAssistPanel({
     setActionRuntimes({});
     setCollapsedActionIds(new Set());
     setKnownIds(new Set());
+    setEnteringKnowledgeIds(new Set());
     setCollapsedKnowledge(new Set());
   }, [scenario.id]);
 
@@ -880,9 +934,18 @@ export function LiveAgentAssistPanel({
   // stays open — the agent closes it when they're done with it, and an answer
   // arriving for the next question doesn't fold the last one away (§32).
   const knowledgeSig = snapshot.knowledge.map((item) => item.id).join("|");
-  useEffect(() => {
+  // Layout, not post-paint: the entrance class has to be on the card before the
+  // browser paints it, or it shows one frame of its settled state and then
+  // fades in from nothing. Reading the scroll position here also gets it before
+  // the feed's anchor correction moves it.
+  useLayoutEffect(() => {
     const arriving = snapshot.knowledge.filter((item) => !knownIds.has(item.id));
     if (arriving.length === 0) return;
+    if (isAtFeedGrowthEdge(feedRef.current, FEED_GROWTH)) {
+      setEnteringKnowledgeIds(
+        (current) => new Set([...current, ...arriving.map((item) => item.id)])
+      );
+    }
     setKnownIds(new Set(snapshot.knowledge.map((item) => item.id)));
     // A replay reuses ids, so an id the agent closed last time has to be let go.
     setCollapsedKnowledge((current) => {
@@ -894,6 +957,17 @@ export function LiveAgentAssistPanel({
     // Arrival drives this; the list itself is derived from elapsed time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [knowledgeSig]);
+
+  // `animation-fill-mode: both` means pulling the class early snaps the card,
+  // so it stays for the length of the entrance and no longer.
+  useEffect(() => {
+    if (enteringKnowledgeIds.size === 0) return;
+    const timer = window.setTimeout(
+      () => setEnteringKnowledgeIds(new Set()),
+      reduced ? 0 : CARD_ENTER_MS + 10
+    );
+    return () => window.clearTimeout(timer);
+  }, [enteringKnowledgeIds, reduced]);
 
   const runtimeFor = (id: string): ActionRuntime =>
     actionRuntimes[id] ?? { state: "suggested", filled: {}, attempted: false };
@@ -1076,7 +1150,7 @@ export function LiveAgentAssistPanel({
       onViewResource={setViewingResource}
       onEngage={stream.engage}
       onDisengage={stream.disengage}
-      cardRef={(node) => stream.registerCard(entry.suggestion.id, node)}
+      cardRef={feed.cardRef(entry.suggestion.id)}
     />
   );
 
@@ -1117,6 +1191,42 @@ export function LiveAgentAssistPanel({
 
   const ordered = useStableStreamOrder(streamStack);
 
+  /**
+   * Guidance and knowledge share one unread count. They are matched by
+   * different machinery and drawn differently, but the agent has one column and
+   * one question about it, so a response card and a knowledge card are the same
+   * kind of thing to the "2 new" indicator (§22).
+   *
+   * Coaching cues and suggested actions stay out of it: a cue is about this
+   * second and is gone by the time an unread count would matter, and an action
+   * carries its own state in the row itself.
+   */
+  const readableIds = ordered
+    .filter((item) => item.kind === "guidance" || item.kind === "knowledge")
+    .map((item) => item.id);
+
+  const feed = useGuidanceFeed({
+    feedRef,
+    cardIds: readableIds,
+    growth: FEED_GROWTH,
+    reduced,
+    onNode: stream.registerCard,
+  });
+
+  /**
+   * The header acknowledges an arrival once and then stops — one pulse per
+   * event, however many cards the event brought, and nothing that keeps moving
+   * while unread cards remain (§5).
+   */
+  const [cuePulse, setCuePulse] = useState(0);
+  const seenCardCount = useRef(0);
+  useEffect(() => {
+    if (readableIds.length > seenCardCount.current) {
+      setCuePulse((current) => current + 1);
+    }
+    seenCardCount.current = readableIds.length;
+  }, [readableIds.length]);
+
   const nothingYet =
     stream.cards.length === 0 &&
     snapshot.knowledge.length === 0 &&
@@ -1143,8 +1253,9 @@ export function LiveAgentAssistPanel({
     <KnowledgeCard
       key={surface.id}
       surface={surface}
+      cardRef={feed.cardRef(surface.id)}
       expanded={!collapsedKnowledge.has(surface.id)}
-      arriving={!knownIds.has(surface.id)}
+      arriving={enteringKnowledgeIds.has(surface.id)}
       reduced={reduced}
       onToggle={() =>
         setCollapsedKnowledge((current) => {
@@ -1171,23 +1282,54 @@ export function LiveAgentAssistPanel({
           !reduced && "assist-head-in"
         )}
       >
-        <GuidanceSparklesIcon className="size-4 shrink-0" />
+        {/* Remounted on each arrival so the pulse restarts — re-setting
+            `animation-name` on a finished run is a no-op (§5). */}
+        <span
+          key={cuePulse}
+          className={cn(
+            "flex shrink-0",
+            !reduced && cuePulse > 0 && "assist-cue-pulse"
+          )}
+        >
+          <GuidanceSparklesIcon className="size-4 shrink-0" />
+        </span>
         <p className="text-label-md-semi text-foreground">Conversation guidance</p>
-        {/* Something just landed — said once, quietly, then gone (§3). */}
-        {stream.newCount > 0 ? (
-          <p
+        {/* Unread cards, both kinds, counted together. It is a control rather
+            than a label: the count is only useful if it also takes the agent
+            to the card it is counting (§7). The arrow appears when the unread
+            cards are further down the column, so the agent knows which way to
+            look before they click. */}
+        {feed.unseenCount > 0 ? (
+          <button
+            type="button"
             aria-live="polite"
+            aria-label={`${feed.unseenCount} unread ${
+              feed.unseenCount === 1 ? "card" : "cards"
+            } — go to the first`}
+            onClick={feed.revealFirstUnseen}
             className={cn(
-              "text-label-md text-muted-foreground tabular-nums",
+              "flex cursor-pointer items-center gap-0.5 rounded-[4px] px-0.5 text-label-md text-muted-foreground tabular-nums",
+              "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
               !reduced && "assist-badge-in"
             )}
           >
-            · {stream.newCount} new
-          </p>
+            <span aria-hidden="true">·</span>
+            {feed.unseenDirection ? (
+              <IconChevronDown
+                size={16}
+                className={cn(
+                  "size-4 shrink-0",
+                  feed.unseenDirection === "up" && "rotate-180"
+                )}
+              />
+            ) : null}
+            {feed.unseenCount} new
+          </button>
         ) : null}
       </header>
 
       <div
+        ref={feedRef}
         className={cn(
           "call-pane-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-2.5",
           !reduced && exiting && "assist-stream-out"

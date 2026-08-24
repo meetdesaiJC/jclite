@@ -382,16 +382,22 @@ function AssistStream({
   onViewResource: (resource: GuidanceResource) => void;
 }) {
   const playhead = Math.min(snapshot.scriptIndex, scenario.steps.length);
+  /** Guidance sits inline in the script here, so the script's scroller is the
+   *  feed — the same rule applies either way: a card that lands while the agent
+   *  is reading further up does not drag the column to itself (§6, §8). */
+  const feedRef = useRef<HTMLDivElement | null>(null);
   const stream = useGuidanceStream({
     suggestions: guidanceDetached ? EMPTY_SUGGESTIONS : snapshot.suggestions,
     steps: scenario.steps,
     playhead,
     reduced,
     handledIds: snapshot.handledIds,
+    feedRef,
   });
 
   return (
     <div
+      ref={feedRef}
       className={cn(
         "call-pane-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3",
         !reduced && collapsing && "assist-stream-out"

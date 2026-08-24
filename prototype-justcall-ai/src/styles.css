@@ -25,19 +25,25 @@
   }
 }
 
-/* In-call guidance cards — make space, reveal, pulse once, then sit still.
+/* In-call guidance cards — make space, reveal, hold the highlight, let go.
    Every timing comes off the motion scale (CLAUDE.md §4). A burst of arrivals
-   staggers one `fast` step per card, carried as --assist-stagger so the JS
+   staggers one `micro` step per card, carried as --assist-stagger so the JS
    that clears these classes and the CSS that plays them cannot disagree about
-   how long the whole arrival takes. */
+   how long the whole arrival takes.
+
+   The card rises 10px and grows the last 1.5% of its size rather than sliding
+   in from the edge: at this distance the eye reads it as surfacing out of the
+   feed, which is the difference between "help became available" and "something
+   was pushed at me". Scale and translate are one `transform` so the compositor
+   handles both on the same frame. */
 @keyframes assist-card-enter {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(10px) scale(0.985);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -53,12 +59,15 @@
 /* A signal, not a notification flash: the card wears a brand ring and a wash
    long enough to be found, then lets go of it. Drawn as an overlay rather than
    on the card's own border and background because those already carry state —
-   animating them made an expanded card drop its open tint mid-pulse. Holding
-   at full for the first stretch and releasing over the rest is what separates
-   "this is here" from a blink. */
+   animating them made an expanded card drop its open tint mid-pulse.
+
+   Two phases over `settle`: held at full for the first quarter (~400ms — long
+   enough for the eye to land on it) and released over the remaining ~1200ms.
+   One hold, one release, no repeat: a card must not read as more important
+   for the rest of the call just because it is newer. */
 @keyframes assist-card-attention {
   0%,
-  55% {
+  25% {
     opacity: 1;
   }
   100% {
@@ -66,19 +75,37 @@
   }
 }
 
+/* Making room and filling it run on the same step, so the gap never opens
+   ahead of the card that is arriving into it. */
 .assist-space-in {
   display: grid;
-  animation: assist-space-in var(--duration-moderate) var(--ease-entrance)
+  animation: assist-space-in var(--duration-slow) var(--ease-entrance)
     var(--assist-stagger, 0ms) both;
 }
 
 .assist-card-enter {
-  animation: assist-card-enter var(--duration-moderate) var(--ease-entrance)
+  animation: assist-card-enter var(--duration-slow) var(--ease-entrance)
     var(--assist-stagger, 0ms) both;
 }
 
+/* Leaving. Barely travels — a card that is going away has no business
+   sweeping across the column — and takes a step less than it took to arrive,
+   per §4's pairing rule. The class is here and correct but currently unused:
+   guidance and knowledge cards are never dismissed in this prototype, so
+   nothing in the panel has an exit to play yet. */
+@keyframes assist-card-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
 .assist-card-exit {
-  animation: assist-card-exit var(--duration-fast) var(--ease-exit) both;
+  animation: assist-card-exit var(--duration-base) var(--ease-exit) both;
 }
 
 .assist-card-attention::after {
@@ -91,15 +118,17 @@
   box-shadow: inset 0 0 0 1px var(--color-brand);
   /* Starts as the reveal settles rather than after it, so the arrival reads as
      one movement instead of two. */
-  animation: assist-card-attention var(--duration-emphasis) var(--ease-standard)
+  animation: assist-card-attention var(--duration-settle) var(--ease-standard)
     calc(var(--assist-stagger, 0ms) + var(--duration-base)) both;
 }
 
-/* Expand reads a touch slower than collapse — opening is the moment that
- * matters, closing should just get out of the way (§11). */
+/* Expand reads a step slower than collapse — opening is the moment that
+ * matters, closing should just get out of the way (§4 pairing rule). Cards
+ * below ride the same grid-row change, so they travel with the panel rather
+ * than jumping to their new position. */
 .assist-card-body {
   display: grid;
-  transition: grid-template-rows 200ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition: grid-template-rows var(--duration-moderate) var(--ease-entrance);
 }
 
 .assist-card-body-open {
@@ -108,7 +137,8 @@
 
 .assist-card-body-closed {
   grid-template-rows: 0fr;
-  transition-duration: 180ms;
+  transition-duration: var(--duration-base);
+  transition-timing-function: var(--ease-exit);
 }
 
 /* Nothing has landed yet — quietly active, not empty. One slow sparkle and
@@ -356,6 +386,27 @@
 
 .assist-head-in {
   animation: assist-head-in 160ms ease both;
+}
+
+/* Header cue — the panel's icon acknowledges an arrival once and then stops.
+   One iteration, no fill mode: the glyph is left exactly as it was, so a
+   column with unseen cards in it is not a column with something wobbling at
+   the top of it for the rest of the call. Re-triggered by remounting under a
+   bumped key — `animation-name` alone will not restart a finished run. */
+@keyframes assist-cue-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.assist-cue-pulse {
+  animation: assist-cue-pulse var(--duration-slow) var(--ease-entrance) 1;
 }
 
 .assist-prep-in {
@@ -1578,7 +1629,8 @@ button.call-bar-control[data-help="active"] {
 
   .assist-space-in,
   .assist-card-enter,
-  .assist-badge-in {
+  .assist-badge-in,
+  .assist-cue-pulse {
     animation: none !important;
   }
 

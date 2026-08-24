@@ -1,7 +1,6 @@
 import * as React from "react";
 import {
   IconChevronDown,
-  IconChevronUp,
   IconCircleCheckFilled,
   IconMessageCircle2,
 } from "@/components/Icon";
@@ -256,7 +255,17 @@ export function GuidanceAiHeader({
         className="-mr-1 flex size-6 shrink-0 items-center justify-center text-muted-foreground"
         aria-hidden="true"
       >
-        {expanded ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
+        {/* One glyph that turns rather than two that swap: the swap has no
+            in-between state to animate, so the control snapped while the body
+            it opens travelled. Tailwind v4 emits `rotate` as its own property,
+            so `transition-transform` would match nothing here (§4). */}
+        <IconChevronDown
+          size={16}
+          className={cn(
+            "transition-[rotate] duration-moderate ease-standard motion-reduce:transition-none",
+            expanded && "rotate-180"
+          )}
+        />
       </span>
     </button>
   );
