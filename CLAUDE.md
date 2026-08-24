@@ -63,8 +63,8 @@ New design-system component checklist:
 **Never write a hex, `rgb()`, or `hsl()` in a `.tsx` or `.css` file.** Not in
 components, not in prototypes. No `bg-[#004ce6]`, no `style={{ color: "#667085" }}`.
 
-The only file that may contain raw color values is
-`src/styles/globals.css`.
+The only files that may contain raw color values are the primitive and
+component token files under `src/styles/tokens/`.
 
 Two narrow exemptions: SVG assets under `assets/` (though prefer `currentColor`
 so icons inherit), and literal *content* colors in story fixtures — a flag red,
@@ -76,14 +76,19 @@ Colors are consumed as Tailwind utilities generated from tokens:
 
 ### Adding a color
 
-Three tiers in `src/styles/globals.css`, and you add to the *shallowest* one
-that fits:
+Three tiers, one file each under `src/styles/tokens/`. Add to the
+*shallowest* one that fits:
 
-| Tier | Block | Example | When |
+| Tier | File | Example | When |
 |---|---|---|---|
-| **Primitive** | `@theme static` | `--color-blue-500: #2e90fa` | A new raw palette step from Figma. Rare. |
-| **Semantic** | `@theme` | `--color-brand: var(--color-blue-...)` | A *role*: brand, error, border, disabled. Prefer these everywhere. |
-| **Component** | `@theme` | `--color-badge-pink`, `--color-tooltip-dark-bg` | Only when one component needs a value no semantic role covers. |
+| **Primitive** | `tokens/primitives.css` | `--color-blue-500: #2e90fa` | A new raw palette step from Figma. Rare — check the scale exists first. |
+| **Semantic** | `tokens/semantic.css` | `--color-brand: var(--color-blue-...)` | A *role*: brand, error, border, disabled. Prefer these everywhere. |
+| **Component** | `tokens/components.css` | `--color-badge-pink`, `--color-dialer-surface` | Only when one component needs a value no semantic role covers. |
+
+Also there: `tokens/typography.css`, `tokens/elevation.css`, and
+`tokens/index.css` which imports the five in order. `styles/globals.css` is now
+just an entry point — Tailwind, the tokens, then `styles/base.css` (cursor
+defaults, skeleton shimmer, dropdown and sidesheet motion).
 
 **Component tokens must reference a primitive or semantic token, not a new hex.**
 
@@ -128,8 +133,8 @@ Radius: `rounded-sm|md|lg`. Elevation: `shadow-100`…`shadow-600`,
 `prototype-*/src/styles.css` imports the design system, then may add
 **motion/keyframes only**. Do not declare new `--color-*` there — a token
 defined in a prototype can never be reused, so the next prototype re-invents it.
-Color tokens belong in `src/styles/globals.css` even when only one prototype
-uses them today.
+Color tokens belong in `src/styles/tokens/` even when only one prototype uses
+them today.
 
 ---
 
@@ -139,8 +144,9 @@ uses them today.
 |---|---|
 | Reusable component | `src/components/<Name>/` |
 | Shared hook | `src/components/<Name>/use*.ts`, or `src/lib/` |
-| Tokens | `src/styles/globals.css` |
-| Token documentation stories | `src/tokens/*.stories.tsx` |
+| Primitive / semantic / component tokens | `src/styles/tokens/*.css` |
+| Non-token CSS (base, motion) | `src/styles/base.css` |
+| Token documentation stories | `src/docs/*.stories.tsx` |
 | Generated icon components | `src/components/Icon/icons.generated.tsx` (**generated**) |
 | Icon SVG source | `src/icons/svg/{slug}/{16,20,24}.svg` |
 | Prototype screen / page | `prototype-*/src/` |
@@ -206,6 +212,12 @@ npm run build           # justcall-ai prototype
 npm run build:add-ons   # add-ons prototype
 npm run build-storybook
 ```
+
+`npm run typecheck:all` additionally covers the prototypes. It is **not** in
+`verify` yet: it reports 25 pre-existing type errors in prototype code that Vite
+never surfaces, because Vite transpiles without type-checking. Fix them
+opportunistically and wire it into `verify` once it's clean — several are
+discriminated-union property accesses that can throw at runtime.
 
 `npm run lint` is the machine-checked version of §1 and §3. It currently
 reports 0 errors and 8 `exhaustive-deps` warnings — pre-existing, deliberately

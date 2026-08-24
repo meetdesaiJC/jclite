@@ -20,7 +20,10 @@ npm run dev
 | `npm run dev` | JustCall AI prototype (:5679) |
 | `npm run proto:add-ons` | Add-ons / billing flow prototype |
 | `npm run storybook` | Design system component explorer (:6006) |
+| `npm run verify` | Everything CI runs: lint + typecheck + both builds + Storybook |
+| `npm run lint` | Architecture rules: layer boundaries, no raw colours |
 | `npm run typecheck` | Type-check `src/` — note: **not** the prototypes |
+| `npm run typecheck:all` | Includes the prototypes (25 known pre-existing errors) |
 | `npm run build` | Production build of the JustCall AI prototype |
 | `npm run build:lib` | Build the design system as a package |
 | `npm run icons:sync-used` | Re-sync icons from Figma → generated components |
@@ -29,10 +32,11 @@ npm run dev
 
 ```
 src/                        Design system — components, tokens, icons
-  components/               23 components, each with a Storybook story
-  styles/globals.css        All design tokens (primitive → semantic → component)
+  components/               24 components, each with a Storybook story
+  styles/tokens/            Design tokens: primitives → semantic → components
+  styles/base.css           Non-token CSS (cursor, skeleton, motion)
   icons/svg/                Icon sources, 16/20/24
-  tokens/                   Token documentation stories
+  docs/                     Token documentation stories
 prototype-justcall-ai/      Agent Assist prototype (setup + in-call)
 prototype-add-ons-flow/     Add-ons, billing, call logs prototype
 scripts/icons/              Figma → SVG → React icon pipeline
