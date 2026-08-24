@@ -172,22 +172,6 @@
   }
 }
 
-@keyframes thumb-press {
-  0% {
-    transform: scale(1);
-  }
-  40% {
-    transform: scale(0.88);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-.thumb-press {
-  animation: thumb-press 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
 @keyframes thumb-thanks {
   0% {
     opacity: 0;
@@ -558,6 +542,129 @@ button.call-bar-control[aria-pressed="true"] {
   animation-delay: var(--pane-delay, 0ms);
 }
 
+/* ── Completed call → dialer ────────────────────────────────────────────
+   Closing the recap is not a navigation. The session collapses toward the
+   header it hung under while the dialer arrives underneath it from the same
+   horizontal centre, the two overlapping so the screen is never empty and
+   the workspace reads as one surface folding up.
+
+   Only `transform` and `opacity` move. The recap's real width, its pane
+   grid and the notes textarea all hold still, so a 700px stage carrying a
+   live transcript collapses without a single reflow.
+
+   Durations are composed out of the scale rather than invented: the panes
+   go at `base`, the dark bar outlasts them at `moderate` so the session
+   reads as leaving after its own contents, and the dialer waits one `micro`
+   beat before taking `moderate` — 80 + 200 is the whole move. Keep in step
+   with POST_CALL_CLOSE_MS in DialerPanel.tsx, which reads the same tokens. */
+@keyframes post-call-collapse {
+  from {
+    transform: translateY(0) scale(1);
+  }
+  to {
+    transform: translateY(-8px) scale(0.97);
+  }
+}
+
+@keyframes post-call-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes post-call-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes post-call-dialer-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes post-call-nav-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Anchored near the completed-call bar rather than the middle of a very tall
+   stage, so the collapse folds toward the call being put away. */
+.post-call-stage {
+  transform-origin: 50% 15%;
+}
+
+/* `[data-closing]` rather than a second class: it outranks the entrance
+   animation on this same element, so the two can never argue about who owns
+   `animation` if the agent closes the recap while it is still arriving. */
+.post-call-stage[data-closing="true"] {
+  animation: post-call-collapse var(--duration-moderate) var(--ease-exit) both;
+}
+
+.post-call-stage[data-closing="true"] .post-call-body {
+  animation: post-call-fade-out var(--duration-base) var(--ease-exit) both;
+}
+
+.post-call-stage[data-closing="true"] .post-call-bar {
+  animation: post-call-fade-out var(--duration-moderate) var(--ease-exit) both;
+}
+
+/* A recap closed within half a second of hangup still has pane entrances in
+   flight. They hand over to the collapse instead of fading in underneath it. */
+.post-call-stage[data-closing="true"] .call-stage-pane-in {
+  animation: none;
+}
+
+/* The dialer, arriving under the recap. Scaled from its own centre, so the
+   card grows into place instead of sliding in from the stage's midpoint. */
+.post-call-dialer-in {
+  animation: post-call-dialer-in var(--duration-moderate) var(--ease-entrance)
+    var(--duration-micro) both;
+}
+
+/* The nav lands a beat behind the card it sits in. Any more separation and a
+   navigation an agent runs dozens of times a day starts to read as a
+   sequence of things happening rather than one object arriving. */
+.post-call-dialer-in .dialer-nav {
+  animation: post-call-nav-in var(--duration-base) var(--ease-entrance)
+    var(--duration-fast) both;
+}
+
+/* The × answers the pointer before the screen starts to leave: the icon
+   takes the press, the button takes the tint. Two speeds on one element, so
+   it is declared here rather than in `className` (see CLAUDE.md §4). */
+.call-close-press {
+  transition:
+    color var(--duration-base) var(--ease-standard),
+    background-color var(--duration-base) var(--ease-standard);
+}
+
+.call-close-press > .call-close-icon {
+  transition: scale var(--duration-micro) var(--ease-standard);
+}
+
+.call-close-press:active > .call-close-icon {
+  scale: 0.9;
+}
+
 /* ── Live-call pane resize ──────────────────────────────────────────────
    Keep these tokens in lockstep with `callWorkspaceLayout.ts`.
    Divider stays invisible until hover / focus / drag; one handle never
@@ -684,6 +791,36 @@ button.call-bar-control[aria-pressed="true"] {
   opacity: 0;
 }
 
+/* The card compresses a little as it goes, from a top-right origin — the
+   corner the toolbar is in, so the give points at the icon rather than at the
+   middle of nothing. The column's own close is what takes the width; this is
+   only the card, and it is deliberately nowhere near shrinking into the icon.
+   Implying the direction is the whole job. */
+.call-aside-view.is-notes-handoff {
+  translate: 6px -6px;
+  scale: 0.96;
+  opacity: 0;
+  transform-origin: top right;
+  transition:
+    translate var(--notes-flight-ms, 240ms) var(--ease-exit),
+    scale var(--notes-flight-ms, 240ms) var(--ease-exit),
+    opacity var(--notes-flight-ms, 240ms) var(--ease-exit);
+}
+
+/* Coming back is its own move, not the introduction played backwards: the
+   column re-opens the way any panel does and the card arrives out of the edge
+   it left through. Entrance curve, because this one is arriving. */
+@keyframes notes-reopen {
+  from {
+    opacity: 0;
+    translate: 12px 0;
+  }
+}
+
+.call-aside-view.is-notes-reopening {
+  animation: notes-reopen var(--duration-slow) var(--ease-entrance);
+}
+
 .notes-discovery-ghost {
   position: fixed;
   z-index: 130;
@@ -707,24 +844,60 @@ button.call-bar-control[aria-pressed="true"] {
     opacity var(--ghost-fade-ms) linear var(--ghost-fade-delay);
 }
 
-/* It arrived. One pulse at the pressed treatment, then back to rest — a
-   confirmation, not a notification. */
+/* It arrived, and the icon gives under it. The panel's header decelerates into
+   the icon and stops dead; without something absorbing that, the landing reads
+   as a cut. So the glyph overshoots on impact, dips under its resting size, and
+   settles — the bounce is what makes the two halves read as one move rather
+   than as a panel closing near an icon.
+
+   A decaying overshoot, shaped by the stops rather than by a curve per
+   segment: `animation-timing-function` inside a keyframe block cannot read a
+   custom property — Chrome leaves the declaration in the sheet and ignores it,
+   so `var(--ease-*)` there silently flattens every segment to linear. The
+   stops carry the shape and the rule's own easing rounds each hop.
+
+   `scale`, not `transform` — Tailwind v4 emits the standalone properties, and
+   the button's own `active:scale-[0.97]` lives on the button rather than here,
+   so the two never write to the same property. */
 @keyframes notes-discovery-pulse {
   0% {
-    transform: scale(1);
+    scale: 1;
   }
-  55% {
-    transform: scale(1.08);
+  34% {
+    scale: 1.14;
+  }
+  52% {
+    scale: 1.03;
+  }
+  68% {
+    scale: 0.965;
+  }
+  84% {
+    scale: 1.012;
   }
   100% {
-    transform: scale(1);
+    scale: 1;
   }
 }
 
 button.call-bar-control.is-notes-found {
   background-color: rgb(255 255 255 / 0.28);
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.38);
-  animation: notes-discovery-pulse var(--notes-pulse-ms, 140ms) ease-out;
+}
+
+/* The pulse rides the glyph's box, not the button. The button already carries
+   the bar's entrance animation (`call-bar-detail-in`, 160ms behind a 340ms
+   delay, `both`), and a second `animation` on the same element replaces it —
+   so the moment the pulse class comes off, that entrance restarts and holds
+   the icon at opacity 0 through its delay. The icon the whole move points at
+   would blink out for half a second exactly as the header lands on it.
+   The glyph box clips for the morph at call start; nothing is morphing by the
+   time this runs, and 8% needs the room. */
+button.call-bar-control.is-notes-found > span:first-of-type {
+  overflow: visible;
+  /* One curve, applied to every hop — each leg of the bounce eases in and out
+     of its stop instead of arriving at a corner. */
+  animation: notes-discovery-pulse var(--notes-pulse-ms, 240ms) var(--ease-standard);
 }
 
 .call-pane-resize.is-collapsing {
@@ -1473,13 +1646,50 @@ button.call-bar-control[data-help="active"] {
 
   /* Notes still shows itself and still hands over to the toolbar — the icon
      just lights up where it stands instead of being flown to. */
-  button.call-bar-control.is-notes-found {
+  button.call-bar-control.is-notes-found > span:first-of-type {
     animation: none !important;
   }
 
   .call-aside-view.is-notes-handoff .notes-pane-body,
   .notes-discovery-ghost.is-moving {
     transition: none !important;
+  }
+
+  /* Completed call → dialer becomes a straight crossfade: no collapse, no
+     travel, both halves at `fast`. The two still overlap — one screen has to
+     be leaving while the other arrives, or the stage flashes empty — they
+     just stop moving. Keep in step with POST_CALL_CLOSE_REDUCED_MS. */
+  .post-call-stage[data-closing="true"] {
+    animation: post-call-fade-out var(--duration-fast) linear both;
+  }
+
+  .post-call-stage[data-closing="true"] .post-call-body,
+  .post-call-stage[data-closing="true"] .post-call-bar,
+  .post-call-dialer-in .dialer-nav {
+    animation: none !important;
+  }
+
+  .post-call-dialer-in {
+    animation: post-call-fade-in var(--duration-fast) linear both;
+  }
+
+  /* The press stays legible as a tint; only the squeeze goes. */
+  .call-close-press > .call-close-icon {
+    transition: none !important;
+  }
+
+  .call-close-press:active > .call-close-icon {
+    scale: none;
+  }
+
+  /* The panel still fades — it is the movement that goes, not the exit. */
+  .call-aside-view.is-notes-handoff {
+    translate: none;
+    scale: none;
+  }
+
+  .call-aside-view.is-notes-reopening {
+    animation: none !important;
   }
 
   .aa-filter-row-inner {
@@ -1510,7 +1720,6 @@ button.call-bar-control[data-help="active"] {
   }
 
   .ai-suggest-in,
-  .thumb-press,
   .thumb-thanks {
     animation: none !important;
   }

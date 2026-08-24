@@ -18,10 +18,10 @@ import { Badge } from "@/components/Badge";
  * inactive) so switching tabs doesn't reflow.
  *
  * The brand underline is a single element that slides between tabs
- * (position + width animate together, 150ms cubic-bezier(0.2,0,0.38,0.9))
+ * (position + width animate together, --duration-base / --ease-standard)
  * rather than each tab owning its own underline — this reads as one
  * indicator moving, not one fading out while another fades in. Label
- * colour crossfades separately over 100ms. Both respect
+ * colour crossfades separately at --duration-fast. Both respect
  * prefers-reduced-motion by snapping instantly.
  */
 
@@ -153,7 +153,7 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
             >
               <span
                 className={cn(
-                  "inline-flex items-center gap-2 transition-colors duration-100 motion-reduce:transition-none",
+                  "inline-flex items-center gap-2 transition-colors duration-fast motion-reduce:transition-none",
                   selected
                     ? "text-foreground"
                     : "text-muted-foreground group-hover:text-foreground"
@@ -188,9 +188,9 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
           <span
             aria-hidden
             className={cn(
-              "pointer-events-none absolute h-1 rounded-t-lg bg-brand motion-reduce:transition-none motion-reduce:duration-0",
+              "pointer-events-none absolute h-1 rounded-t-lg bg-brand motion-reduce:transition-none motion-reduce:duration-instant",
               canAnimate &&
-                "transition-[transform,width] duration-150 ease-[cubic-bezier(0.2,0,0.38,0.9)]"
+                "transition-[transform,width] duration-base ease-standard"
             )}
             style={{
               top: indicator.top,

@@ -1,6 +1,8 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { DURATION } from "@/lib/motion";
+import { usePresence } from "@/lib/usePresence";
 import {
   IconAlertTriangleFilled,
   IconInfoCircleFilled,
@@ -35,6 +37,9 @@ const alertVariants = cva(
   }
 );
 
+/* Exit step for `.dismissible[data-state="closed"]` in base.css. */
+const DISMISS_EXIT_MS = DURATION.base;
+
 type Variant = NonNullable<VariantProps<typeof alertVariants>["variant"]>;
 
 const ICONS: Record<
@@ -63,6 +68,16 @@ export interface AlertProps
   onClose?: () => void;
   /** Override the leading status icon. */
   icon?: React.ReactNode;
+  /**
+   * Presence. Omit it and the component renders exactly as before — the
+   * consumer mounts and unmounts it, and there is no animation, because a
+   * node React has already removed cannot animate.
+   *
+   * Pass it and the component owns its own enter/exit instead: it stays
+   * mounted through the exit before removing itself. `onClose` still just
+   * reports the click; flipping `open` to false is the caller's move.
+   */
+  open?: boolean;
 }
 
 export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
@@ -75,21 +90,33 @@ export const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
       action,
       onClose,
       icon,
+      open,
       ...props
     },
     ref
   ) => {
+    const controlled = open !== undefined;
+    const { mounted, state } = usePresence(open ?? true, DISMISS_EXIT_MS);
     const resolved: Variant = variant ?? "info";
     const { Icon, color } = ICONS[resolved];
     // Error/warning are assertive; success/info are polite.
     const role =
       resolved === "error" || resolved === "warning" ? "alert" : "status";
 
+    if (controlled && !mounted) return null;
+
     return (
       <div
         ref={ref}
         role={role}
-        className={cn(alertVariants({ variant: resolved }), className)}
+        // Uncontrolled callers get no `data-state`, so the motion rules
+        // never match and behaviour is byte-for-byte what it was.
+        data-state={controlled ? state : undefined}
+        className={cn(
+          controlled && "dismissible",
+          alertVariants({ variant: resolved }),
+          className
+        )}
         {...props}
       >
         <span className={cn("inline-flex shrink-0", color)}>

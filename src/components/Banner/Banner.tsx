@@ -1,6 +1,8 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { DURATION } from "@/lib/motion";
+import { usePresence } from "@/lib/usePresence";
 import {
   IconAlertTriangleFilled,
   IconInfoCircleFilled,
@@ -102,7 +104,20 @@ export interface BannerProps
   onClose?: () => void;
   /** Override the leading status icon. */
   icon?: React.ReactNode;
+  /**
+   * Presence. Omit it and the component renders exactly as before — the
+   * consumer mounts and unmounts it, and there is no animation, because a
+   * node React has already removed cannot animate.
+   *
+   * Pass it and the component owns its own enter/exit instead: it stays
+   * mounted through the exit before removing itself. `onClose` still just
+   * reports the click; flipping `open` to false is the caller's move.
+   */
+  open?: boolean;
 }
+
+/* Exit step for `.dismissible[data-state="closed"]` in base.css. */
+const DISMISS_EXIT_MS = DURATION.base;
 
 export const Banner = React.forwardRef<HTMLDivElement, BannerProps>(
   (
@@ -116,10 +131,13 @@ export const Banner = React.forwardRef<HTMLDivElement, BannerProps>(
       actions,
       onClose,
       icon,
+      open,
       ...props
     },
     ref
   ) => {
+    const controlled = open !== undefined;
+    const { mounted, state } = usePresence(open ?? true, DISMISS_EXIT_MS);
     const resolved: BannerVariant = variant ?? "warning";
     const isFull = width !== "page";
     const role =
@@ -136,11 +154,20 @@ export const Banner = React.forwardRef<HTMLDivElement, BannerProps>(
       </p>
     );
 
+    if (controlled && !mounted) return null;
+
     return (
       <div
         ref={ref}
         role={role}
-        className={cn(bannerVariants({ variant: resolved, width }), className)}
+        // Uncontrolled callers get no `data-state`, so the motion rules
+        // never match and behaviour is byte-for-byte what it was.
+        data-state={controlled ? state : undefined}
+        className={cn(
+          controlled && "dismissible",
+          bannerVariants({ variant: resolved, width }),
+          className
+        )}
         {...props}
       >
         {isFull ? (

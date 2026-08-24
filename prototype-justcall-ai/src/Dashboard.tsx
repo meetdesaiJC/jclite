@@ -12,6 +12,7 @@ import {
 import { ProfileMenu } from "@/components/ProfileMenu";
 import { IconCalendarTime, IconMailShare } from "@/components/Icon";
 import { DialerPanel } from "./DialerPanel";
+import { type AgentAssistScope } from "./agentAssistScope";
 
 /**
  * Dashboard — landing content for the JustCall AI prototype.
@@ -251,9 +252,14 @@ const INBOUND_CALLS_CARDS: KpiCardData[] = [
 export interface DashboardProps {
   /** Signed-in user's full name shown in the profile dropdown header. */
   profileName?: string;
+  /** Passed straight to the dialer — see `agentAssistScope`. */
+  scope?: AgentAssistScope;
 }
 
-export function Dashboard({ profileName = "Sarah Johnson" }: DashboardProps) {
+export function Dashboard({
+  profileName = "Sarah Johnson",
+  scope = "v2",
+}: DashboardProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);
 
@@ -281,7 +287,7 @@ export function Dashboard({ profileName = "Sarah Johnson" }: DashboardProps) {
       />
 
       {dialerOpen ? (
-        <DialerPanel onClose={() => setDialerOpen(false)} />
+        <DialerPanel scope={scope} onClose={() => setDialerOpen(false)} />
       ) : (
         <>
       <div className="flex items-center gap-8 border-b border-line px-6">

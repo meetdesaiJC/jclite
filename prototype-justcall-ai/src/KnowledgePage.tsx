@@ -6,6 +6,11 @@ import { Checkbox } from "@/components/Checkbox";
 import { Dropdown, useDropdownPresence } from "@/components/Dropdown";
 import { InputField, TextArea } from "@/components/InputField";
 import { Modal } from "@/components/Modal";
+import {
+  SegmentedPanel,
+  SegmentedTabs,
+  type SegmentedTabItem,
+} from "@/components/SegmentedTabs";
 import { Tag } from "@/components/Tag";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import {
@@ -14,9 +19,12 @@ import {
   IconDotsVertical,
   IconFile,
   IconFilter,
+  IconMessages,
   IconPencil,
   IconSearch,
   IconTeamManagement,
+  IconWebToDevice,
+  type IconProps,
 } from "@/components/Icon";
 import {
   Table,
@@ -943,7 +951,7 @@ const CONTENT_TABS: {
   blurb: string;
   emptyTitle: string;
   emptyBody: string;
-  icon: (props: { size?: number }) => React.ReactElement;
+  icon: (props: IconProps) => React.ReactElement;
 }[] = [
   {
     key: "web",
@@ -954,7 +962,7 @@ const CONTENT_TABS: {
     emptyTitle: "Add Web Pages to create Knowledge Base",
     emptyBody:
       "Add Web Pages containing information that can be used on live conversations",
-    icon: IconGlobe,
+    icon: IconWebToDevice,
   },
   {
     key: "text",
@@ -975,7 +983,7 @@ const CONTENT_TABS: {
     emptyTitle: "Add Q&A to create Knowledge Base",
     emptyBody:
       "Add question and answer pairs that can be used on live conversations",
-    icon: IconQa,
+    icon: IconMessages,
   },
   {
     key: "files",
@@ -990,6 +998,15 @@ const CONTENT_TABS: {
 ];
 
 type ContentTabMeta = (typeof CONTENT_TABS)[number];
+
+/**
+ * The same tabs as `SegmentedTabItem`s. Icons render at 20px here rather than
+ * the 16px the hand-rolled bar used — that is the size the DS component is
+ * drawn around.
+ */
+const CONTENT_TAB_ITEMS: SegmentedTabItem[] = CONTENT_TABS.map(
+  ({ key, label, icon: Glyph }) => ({ key, label, icon: <Glyph size={20} /> })
+);
 
 /**
  * Knowledge base setup — content on the right, everything about who it serves
@@ -1112,8 +1129,22 @@ function KnowledgeSourcePage({
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-6 overflow-y-auto pb-2">
-          <ContentTabsBar value={tab} onValueChange={setTab} />
-          <ContentPanel draft={draft} tab={tab} patch={patch} />
+          <SegmentedTabs
+            aria-label="Knowledge Base content"
+            className="shrink-0"
+            items={CONTENT_TAB_ITEMS}
+            value={tab}
+            onValueChange={(next) => setTab(next as KnowledgeContentTab)}
+          />
+          <SegmentedPanel activeKey={tab} className="min-w-0">
+            {(key) => (
+              <ContentPanel
+                draft={draft}
+                tab={key as KnowledgeContentTab}
+                patch={patch}
+              />
+            )}
+          </SegmentedPanel>
         </div>
       </div>
 
@@ -1166,66 +1197,6 @@ function contentSummary(source: KnowledgeSourceRecord): string {
     parts.push(`${source.files.length} ${source.files.length === 1 ? "file" : "files"}`);
   }
   return parts.join(", ") || "Nothing added yet";
-}
-
-/**
- * Segmented control over the content kinds. The dividers sit between
- * unselected neighbours only, so the white pill never grows a seam.
- */
-function ContentTabsBar({
-  value,
-  onValueChange,
-}: {
-  value: KnowledgeContentTab;
-  onValueChange: (next: KnowledgeContentTab) => void;
-}) {
-  const activeIndex = CONTENT_TABS.findIndex((item) => item.key === value);
-  return (
-    <div
-      role="tablist"
-      aria-label="Knowledge Base content"
-      className="grid shrink-0 grid-cols-4 rounded-lg border border-line bg-secondary-bg p-1"
-    >
-      {CONTENT_TABS.map((item, index) => {
-        const selected = index === activeIndex;
-        const Glyph = item.icon;
-        const showDivider =
-          index > 0 && index !== activeIndex && index - 1 !== activeIndex;
-        return (
-          <div key={item.key} className="relative flex items-center">
-            {showDivider ? (
-              <span
-                aria-hidden="true"
-                className="absolute left-0 h-5 w-px bg-line"
-              />
-            ) : null}
-            <button
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              onClick={() => onValueChange(item.key)}
-              className={cn(
-                "flex h-10 w-full items-center justify-center gap-2 rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
-                selected
-                  ? "bg-white text-foreground shadow-100"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Glyph size={16} />
-              <span
-                className={cn(
-                  "truncate",
-                  selected ? "text-label-md" : "text-paragraph-md"
-                )}
-              >
-                {item.label}
-              </span>
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 function ContentPanel({
@@ -1422,7 +1393,7 @@ function WebPagesTab({
     >
       {empty ? (
         <ContentEmptyState
-          glyph={<IconGlobe size={20} />}
+          glyph={<IconWebToDevice size={20} />}
           title={meta.emptyTitle}
           body={meta.emptyBody}
           actionLabel="Add Source"
@@ -1435,7 +1406,7 @@ function WebPagesTab({
               {draft.webPages.map((page) => (
                 <ContentRow
                   key={page.id}
-                  icon={<IconGlobe size={16} />}
+                  icon={<IconWebToDevice size={16} />}
                   title={page.url}
                   onRemove={() =>
                     patch({
@@ -1574,7 +1545,7 @@ function QaTab({
     >
       {draft.qaPairs.length === 0 ? (
         <ContentEmptyState
-          glyph={<IconQa size={20} />}
+          glyph={<IconMessages size={20} />}
           title={meta.emptyTitle}
           body={meta.emptyBody}
           actionLabel="Add Q&A"
@@ -1743,25 +1714,6 @@ function IconPlus({ size = 16 }: { size?: number }) {
   );
 }
 
-function IconGlobe({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <circle cx="10" cy="10" r="7.083" stroke="currentColor" strokeWidth="1.2" />
-      <path
-        d="M2.917 10h14.166"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M10 2.917c1.806 1.944 2.708 4.305 2.708 7.083S11.806 15.14 10 17.083C8.194 15.14 7.292 12.778 7.292 10S8.194 4.861 10 2.917Z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 /** The "Tt" glyph JustCall uses for pasted text. */
 function IconTextSize({ size = 16 }: { size?: number }) {
@@ -1783,25 +1735,6 @@ function IconTextSize({ size = 16 }: { size?: number }) {
   );
 }
 
-function IconQa({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path
-        d="M16.667 3.333H6.667a1.667 1.667 0 0 0-1.667 1.667v5a1.667 1.667 0 0 0 1.667 1.667h1.666v2.5l3.334-2.5h5A1.667 1.667 0 0 0 18.333 10V5a1.667 1.667 0 0 0-1.666-1.667Z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M5 14.167H3.333A1.667 1.667 0 0 1 1.667 12.5V8.333"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 function IconFileUp({ size = 16 }: { size?: number }) {
   return (

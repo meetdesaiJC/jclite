@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Button } from "@/components/Button";
 import { cn } from "@/lib/utils";
+import { type AgentAssistScope } from "./agentAssistScope";
 import {
   IconAaActions,
   IconAaCoaching,
@@ -55,12 +56,21 @@ export const AGENT_ASSIST_NAV_ITEMS: AgentAssistNavItem[] = [
   { key: "actions", label: "In-call Actions", icon: <IconAaActions /> },
 ];
 
+/** Authoring surfaces V1 does not ship — see `agentAssistScope`. */
+const V2_ONLY_AREAS: ReadonlySet<AgentAssistArea> = new Set(["coaching", "actions"]);
+
+export function navItemsForScope(scope: AgentAssistScope): AgentAssistNavItem[] {
+  if (scope === "v2") return AGENT_ASSIST_NAV_ITEMS;
+  return AGENT_ASSIST_NAV_ITEMS.filter((item) => !V2_ONLY_AREAS.has(item.key));
+}
+
 export function AgentAssistNav({
   activeKey,
   onSelect,
   hasKnowledgeBase,
   onLearnAboutKnowledgeSuggestions,
   onCreateKnowledgeBase,
+  scope = "v2",
   className,
 }: {
   activeKey: AgentAssistArea;
@@ -68,8 +78,10 @@ export function AgentAssistNav({
   hasKnowledgeBase: boolean;
   onLearnAboutKnowledgeSuggestions: () => void;
   onCreateKnowledgeBase: () => void;
+  scope?: AgentAssistScope;
   className?: string;
 }) {
+  const items = navItemsForScope(scope);
   const listRef = React.useRef<HTMLDivElement>(null);
   const itemRefs = React.useRef(new Map<AgentAssistArea, HTMLButtonElement>());
   const [pill, setPill] = React.useState<{ top: number; height: number } | null>(
@@ -92,7 +104,9 @@ export function AgentAssistNav({
 
   React.useLayoutEffect(() => {
     measurePill();
-  }, [measurePill]);
+    // `items.length` is in here because V1 renders two rows and V2 four; the
+    // pill has to re-measure when the list itself is a different length.
+  }, [measurePill, items.length]);
 
   React.useEffect(() => {
     const frame = requestAnimationFrame(() => setCanAnimate(true));
@@ -127,7 +141,7 @@ export function AgentAssistNav({
         ) : null}
 
         <ul className="flex w-full flex-col">
-          {AGENT_ASSIST_NAV_ITEMS.map((item) => {
+          {items.map((item) => {
             const active = item.key === activeKey;
             return (
               <li key={item.key}>

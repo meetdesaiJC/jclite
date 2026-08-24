@@ -1,0 +1,49 @@
+/* ================================================================== */
+/* MOTION TOKENS                                                      */
+/* Durations and easing, named by the job a transition does rather    */
+/* than by its millisecond value. Mirrored in `src/lib/motion.ts` for */
+/* the presence timers that need the number in JS — change one,       */
+/* change the other. The Tokens/Motion story renders both.            */
+/* ================================================================== */
+@theme static {
+  --duration-instant: 0ms; /* reduced motion, deliberate snaps */
+  --duration-micro: 80ms; /* hover tint on a dense row */
+  --duration-fast: 120ms; /* small overlay exits, checks, chevrons */
+  --duration-base: 150ms; /* default — colour state, indicators, small enters */
+  --duration-moderate: 200ms; /* content swaps, panel-internal movement */
+  --duration-slow: 240ms; /* large travel — sidesheet, drawer */
+
+  /* Three curves, chosen by direction rather than by component. */
+  --ease-entrance: cubic-bezier(0, 0, 0.38, 0.9); /* arriving — fast, then settles */
+  --ease-exit: cubic-bezier(0.2, 0, 1, 0.9); /* leaving — slow, then accelerates away */
+  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9); /* moving in place — an indicator sliding */
+}
+
+/* Tailwind themes `--ease-*` into `ease-*` utilities on its own, but there is
+   no duration namespace — `--duration-*` in `@theme` emits the variable and
+   no class. So the classes are declared by hand. Add a step above, add its
+   utility here, then grep the built CSS: a missing one fails silently as an
+   element that simply doesn't animate. */
+@utility duration-instant {
+  transition-duration: var(--duration-instant);
+}
+
+@utility duration-micro {
+  transition-duration: var(--duration-micro);
+}
+
+@utility duration-fast {
+  transition-duration: var(--duration-fast);
+}
+
+@utility duration-base {
+  transition-duration: var(--duration-base);
+}
+
+@utility duration-moderate {
+  transition-duration: var(--duration-moderate);
+}
+
+@utility duration-slow {
+  transition-duration: var(--duration-slow);
+}

@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import * as React from "react";
 import type { ReactNode } from "react";
 import { Tag, type TagColor } from "./Tag";
 import { Avatar } from "@/components/Avatar";
 import { IconFile } from "@/components/Icon";
+import { DURATION } from "@/lib/motion";
 
 const COLORS = [
   "grey",
@@ -254,3 +256,46 @@ function Section({
     </div>
   );
 }
+
+/**
+ * `open` hands presence to the Tag. It scales rather than slides — sliding
+ * one tag out of a row reads as the whole row drifting.
+ */
+export const Dismissible: Story = {
+  render: () => {
+    const [tags, setTags] = React.useState(["Design", "Engineering", "Sales"]);
+    const [closing, setClosing] = React.useState<string[]>([]);
+    return (
+      <div className="flex items-center gap-2">
+        {tags.map((t) => (
+          <Tag
+            key={t}
+            open={!closing.includes(t)}
+            onClose={() => {
+              setClosing((c) => [...c, t]);
+              // Drop it from the list only once the exit has played.
+              window.setTimeout(
+                () => setTags((list) => list.filter((x) => x !== t)),
+                DURATION.fast
+              );
+            }}
+          >
+            {t}
+          </Tag>
+        ))}
+        {tags.length === 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setClosing([]);
+              setTags(["Design", "Engineering", "Sales"]);
+            }}
+            className="text-label-md text-brand hover:underline"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+    );
+  },
+};

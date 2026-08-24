@@ -6,13 +6,16 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent,
   type ReactNode,
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { DURATION } from "@/lib/motion";
 import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
+import { FeedbackThumbs, type FeedbackVote } from "@/components/FeedbackThumbs";
 import { InputField } from "@/components/InputField";
 import { AvatarIndicator } from "@/components/Avatar";
 import {
@@ -45,6 +48,7 @@ import {
   type NotesEditorValue,
 } from "./NotesEditor";
 import { LiveAgentAssistPanel } from "./LiveAgentAssistPanel";
+import { type AgentAssistScope } from "./agentAssistScope";
 import {
   LiveAssistControl,
   LiveAssistPanel,
@@ -71,6 +75,7 @@ import {
   useNotesDiscovery,
   type NotesDiscoveryFlight,
 } from "./useNotesDiscovery";
+import { trackNotes } from "./notesTelemetry";
 import {
   CALL_SCENARIOS,
   POST_WRAP_COMPLETED_DELAY_MS,
@@ -191,6 +196,28 @@ const PANE_REVEAL_DELAYS_MS = [240, 270, 300];
  * a resumed call that had no phone to morph from.
  */
 const STAGE_SETTLED_MS = PANE_REVEAL_DELAYS_MS[2] + 220;
+
+/* ── Completed call → dialer ────────────────────────────────────────────
+   Putting a finished call away. The recap collapses toward the completed-call
+   bar while the dialer arrives underneath it from the same horizontal centre,
+   overlapping so the stage is never empty: one workspace folding up, not a
+   page change. The choreography itself lives in `styles.css`; what JS needs
+   is when the recap stops being on screen and when the dialer starts taking
+   clicks.
+
+   Composed from the scale rather than re-typed — the panes leave at `base`,
+   the dark bar outlasts them at `moderate`, and the dialer waits a `micro`
+   beat before taking `moderate`. Nothing here is a new duration (CLAUDE.md §4). */
+/** The whole move: the dialer's beat of overlap plus its arrival. */
+const POST_CALL_CLOSE_MS = DURATION.micro + DURATION.moderate;
+/**
+ * The dialer takes clicks once its entrance is all but done — early enough
+ * that a fast agent isn't typing into a dead card, late enough that a click
+ * aimed at the recap can't land on the dialer under it.
+ */
+const DIALER_ARM_MS = DURATION.micro + DURATION.base;
+/** Reduced motion: one crossfade, no collapse, no travel, nothing to wait out. */
+const POST_CALL_CLOSE_REDUCED_MS = DURATION.fast;
 
 const KEYPAD: { digit: string; letters: string }[][] = [
   [
@@ -437,11 +464,18 @@ function runMorph(
 function ShellSwap({
   swapKey,
   reduced,
+  instant = false,
   className,
   children,
 }: {
   swapKey: string;
   reduced: boolean;
+  /**
+   * Hand the next card over with no dissolve. The post-call close runs its
+   * own choreography across both cards, and a generic crossfade laid on top
+   * of it reads as the recap flashing back in on its way out.
+   */
+  instant?: boolean;
   className?: string;
   children: (enterClassName: string) => ReactNode;
 }) {
@@ -449,17 +483,18 @@ function ShellSwap({
   const [outgoing, setOutgoing] = useState<ReactNode>(null);
   const onScreen = useRef<ReactNode>(null);
   const timer = useRef<number | null>(null);
+  const cut = reduced || instant;
 
   // Commit the entering state in the same render as the swap, so the incoming
   // card never lands at full opacity for a frame before the dissolve starts.
-  if (live.key !== swapKey) setLive({ key: swapKey, entering: !reduced });
+  if (live.key !== swapKey) setLive({ key: swapKey, entering: !cut });
   const rendered = children(
     live.key === swapKey && live.entering ? "dialer-shell-in" : ""
   );
 
   useEffect(() => {
     const previous = onScreen.current;
-    if (!previous || reduced) return;
+    if (!previous || cut) return;
     setOutgoing(previous);
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setOutgoing(null), SHELL_CROSSFADE_MS);
@@ -494,12 +529,19 @@ function ShellSwap({
 }
 
 export interface DialerPanelProps {
+  /** V1 has no Live Assist, coaching cues or suggested actions. */
+  scope?: AgentAssistScope;
   className?: string;
   onCall?: (number: string) => void;
   onClose?: () => void;
 }
 
-export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
+export function DialerPanel({
+  className,
+  onCall,
+  onClose,
+  scope = "v2",
+}: DialerPanelProps) {
   const inputId = useId();
   const [number, setNumber] = useState("");
   const [tab, setTab] = useState<DialerTab>("dialer");
@@ -509,8 +551,17 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
   const [onHold, setOnHold] = useState(false);
   const [scenarioId, setScenarioId] = useState(CALL_SCENARIOS[0].id);
   const [assistCollapsing, setAssistCollapsing] = useState(false);
+  // The completed call is on its way out: the recap is collapsing and the
+  // dialer is arriving under it. Also the transition lock — one close runs,
+  // however many × clicks, Escapes or Save & closes arrive while it does.
+  const [closing, setClosing] = useState(false);
+  // The arriving dialer stops being a picture and starts taking clicks.
+  const [dialerArmed, setDialerArmed] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const collapseTimer = useRef<number | null>(null);
+  const closeTimers = useRef<number[]>([]);
+  // Where the close came from decides where focus lands afterwards.
+  const closedByKeyboard = useRef(false);
   const callStartedAt = useRef<number | null>(null);
   const holdStartedAt = useRef<number | null>(null);
   const pausedMs = useRef(0);
@@ -533,6 +584,9 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
       // the whole dialer). A dialog opened from inside the call — the battle
       // card zoom, say — still owns Escape first.
       if (talking) return;
+      // A close is already running. Leaving mid-collapse would cut the
+      // screen in half; the transition is short enough to wait out.
+      if (closing) return;
       const dialogs = document.querySelectorAll('[role="dialog"]');
       const topmost = dialogs[dialogs.length - 1];
       if (topmost && topmost !== rootRef.current) return;
@@ -540,7 +594,7 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose, talking]);
+  }, [onClose, talking, closing]);
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
@@ -628,6 +682,53 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
     setScenarioId(CALL_SCENARIOS[0].id);
   };
 
+  const clearCloseTimers = () => {
+    closeTimers.current.forEach((id) => window.clearTimeout(id));
+    closeTimers.current = [];
+  };
+
+  const finishClose = () => {
+    clearCloseTimers();
+    resetToIdle();
+  };
+
+  /**
+   * × on the completed-call bar, and Save & close after it has confirmed.
+   *
+   * Anything the agent could lose is settled here, before the first frame:
+   * a recap that animates away and then asks about unsaved notes has already
+   * told them the call was filed. The outcome and the notes are held above
+   * this swap — the notes are the same value the live pane was writing — so
+   * there is nothing to hold the transition back for. Nor does a summary
+   * still being generated: the agent should never wait on the model to be
+   * allowed to make their next call.
+   */
+  const closeRecap = (fromKeyboard = false) => {
+    if (closing) return;
+    closedByKeyboard.current = fromKeyboard;
+    const reduced = prefersReducedMotion();
+    setClosing(true);
+    // A crossfade has no travel to protect the dialer from.
+    setDialerArmed(reduced);
+    if (!reduced) {
+      closeTimers.current.push(
+        window.setTimeout(() => setDialerArmed(true), DIALER_ARM_MS)
+      );
+    }
+    closeTimers.current.push(
+      window.setTimeout(
+        finishClose,
+        reduced ? POST_CALL_CLOSE_REDUCED_MS : POST_CALL_CLOSE_MS
+      )
+    );
+  };
+
+  /** Dialled straight out of the arriving dialer — the close has been overtaken. */
+  const callFromArrival = () => {
+    clearCloseTimers();
+    startCall();
+  };
+
   const endToWrapUp = () => {
     collapseTimer.current = null;
     holdStartedAt.current = null;
@@ -673,9 +774,30 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
   useEffect(
     () => () => {
       if (collapseTimer.current) window.clearTimeout(collapseTimer.current);
+      closeTimers.current.forEach((id) => window.clearTimeout(id));
     },
     []
   );
+
+  /**
+   * The close is over — either the dialer landed, or a call was dialled out of
+   * it before it did. Drop the lock, then put focus somewhere defensible.
+   *
+   * Only a keyboard close earns the caret: filling the number field after a
+   * pointer close would open the OS keyboard on a phone, and on desktop it
+   * hands the next keystroke to a field the agent never asked for. The
+   * container takes focus instead, so the dialog still owns the keyboard.
+   */
+  useEffect(() => {
+    if (!closing || phase === "wrapup") return;
+    setClosing(false);
+    setDialerArmed(false);
+    if (phase !== "idle") return;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const input = document.getElementById(inputId) as HTMLInputElement | null;
+    if (closedByKeyboard.current && !coarse) input?.focus();
+    else rootRef.current?.focus({ preventScroll: true });
+  }, [closing, phase, inputId]);
 
   const resetCallClock = () => {
     if (callStartedAt.current == null) return;
@@ -693,11 +815,14 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
       role="dialog"
       aria-modal="true"
       aria-label="Dialer"
+      // Focusable so a closed recap has somewhere to leave focus that isn't
+      // the number field (see the close effect above).
+      tabIndex={-1}
       className={cn(
         // Page-level surface, so it sits under dialogs (Modal/Sidesheet, z-50)
         // and popovers (tooltips, z-100) — otherwise anything opened from
         // inside the call workspace, like the battle card zoom, renders behind it.
-        "fixed inset-0 z-40 flex flex-col items-center overflow-hidden bg-secondary-bg pt-8 pb-8",
+        "fixed inset-0 z-40 flex flex-col items-center overflow-hidden bg-secondary-bg pt-8 pb-8 outline-none",
         className
       )}
     >
@@ -705,11 +830,39 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
         <button
           type="button"
           aria-label="Close dialer"
-          onClick={onClose}
-          className="absolute top-4 right-4 z-10 flex size-8 items-center justify-center rounded-[4px] text-muted-foreground outline-none transition-colors hover:bg-white hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+          // Above the stage, which claims a layer of its own while a recap
+          // is collapsing over the arriving dialer.
+          onClick={() => {
+            if (closing) return;
+            onClose();
+          }}
+          className="absolute top-4 right-4 z-20 flex size-8 items-center justify-center rounded-[4px] text-muted-foreground outline-none transition-colors hover:bg-white hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
         >
           <IconClose size={20} />
         </button>
+      ) : null}
+
+      {/* The dialer, already on stage underneath the recap that is collapsing
+          off it — same horizontal centre, same top edge it will keep, so the
+          hand-over reads as one workspace rather than two screens. Inert
+          until its entrance is all but done, so a click meant for the recap
+          cannot fall through to the keypad. */}
+      {closing && wrapping ? (
+        <div
+          inert={!dialerArmed}
+          className="absolute inset-0 flex items-start justify-center pt-8 pb-8"
+        >
+          <IdleDialer
+            className="post-call-dialer-in"
+            inputId={`${inputId}-arriving`}
+            number={number}
+            tab={tab}
+            onNumberChange={setNumber}
+            onTabChange={setTab}
+            onDigit={appendDigit}
+            onCall={callFromArrival}
+          />
+        </div>
       ) : null}
 
       {/* Dialing → ringing: the dialer transforms into the dark call state
@@ -717,12 +870,14 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
       <ShellSwap
         swapKey={inCall ? "call" : "idle"}
         reduced={prefersReducedMotion()}
-        className="flex h-full min-h-0 w-full flex-1 items-center justify-center"
+        instant={closing}
+        className="relative z-10 flex h-full min-h-0 w-full flex-1 items-center justify-center"
       >
         {(enter) =>
           inCall ? (
             <InCallShell
               className={enter}
+              scope={scope}
               talking={talking}
               connecting={connecting}
               wrapping={wrapping}
@@ -742,7 +897,8 @@ export function DialerPanel({ className, onCall, onClose }: DialerPanelProps) {
               onMute={() => setMuted((value) => !value)}
               onHoldToggle={() => setOnHold((value) => !value)}
               onHangup={hangup}
-              onCloseWrapUp={resetToIdle}
+              closing={closing}
+              onCloseWrapUp={closeRecap}
             />
           ) : (
             // Compact phone (idle keypad, and ringing via CallMorphStage)
@@ -917,6 +1073,7 @@ function IdleDialer({
 
 function InCallShell({
   className,
+  scope,
   talking,
   connecting,
   wrapping,
@@ -933,9 +1090,11 @@ function InCallShell({
   onMute,
   onHoldToggle,
   onHangup,
+  closing,
   onCloseWrapUp,
 }: {
   className?: string;
+  scope: AgentAssistScope;
   talking: boolean;
   connecting: boolean;
   wrapping: boolean;
@@ -952,7 +1111,9 @@ function InCallShell({
   onMute: () => void;
   onHoldToggle: () => void;
   onHangup: () => void;
-  onCloseWrapUp: () => void;
+  /** The recap is collapsing off the stage — see POST_CALL_CLOSE_MS. */
+  closing: boolean;
+  onCloseWrapUp: (fromKeyboard?: boolean) => void;
 }) {
   const reduced = prefersReducedMotion();
   const localTime = formatLocalTime(new Date());
@@ -976,6 +1137,10 @@ function InCallShell({
     <ShellSwap
       swapKey={wrapping ? "wrapup" : "call"}
       reduced={reduced}
+      // A call dialled out of the arriving dialer leaves wrap-up mid-close;
+      // the recap is already invisible by then, so it goes without a second
+      // dissolve rather than snapshotting itself back into view.
+      instant={closing}
       className={cn(
         "flex h-full min-h-0 w-full items-center justify-center",
         className
@@ -994,11 +1159,13 @@ function InCallShell({
             notes={notes}
             onNotesChange={setNotes}
             onScenarioChange={onScenarioChange}
+            closing={closing}
             onClose={onCloseWrapUp}
           />
         ) : (
           <CallMorphStage
             className={enter}
+            scope={scope}
             reduced={reduced}
             live={talking}
             connecting={connecting}
@@ -1042,6 +1209,7 @@ function InCallShell({
  */
 function CallMorphStage({
   className,
+  scope,
   reduced,
   live,
   connecting,
@@ -1064,6 +1232,7 @@ function CallMorphStage({
   onActionStatesChange,
 }: {
   className?: string;
+  scope: AgentAssistScope;
   reduced: boolean;
   live: boolean;
   connecting: boolean;
@@ -1177,6 +1346,7 @@ function CallMorphStage({
       {live ? (
         <LiveCallStage
           className="call-morph-stage"
+          scope={scope}
           reduced={reduced}
           morphing={morphing}
           elapsedMs={elapsedMs}
@@ -1302,6 +1472,7 @@ function useCallAsidePresence(open: boolean, reduced: boolean) {
  */
 function LiveCallStage({
   className,
+  scope,
   reduced,
   morphing,
   elapsedMs,
@@ -1319,6 +1490,7 @@ function LiveCallStage({
   onActionStatesChange,
 }: {
   className?: string;
+  scope: AgentAssistScope;
   reduced: boolean;
   morphing?: boolean;
   elapsedMs: number;
@@ -1377,6 +1549,20 @@ function LiveCallStage({
   const notesMarkRef = useRef<HTMLSpanElement>(null);
   const notesControlRef = useRef<HTMLButtonElement>(null);
 
+  /**
+   * Notes coming back is its own move, not a repeat of the introduction: the
+   * column re-opens the way any panel does, and the card fades up out of the
+   * edge it left through. Only ever set for an open the agent asked for.
+   */
+  const [notesReopening, setNotesReopening] = useState(false);
+  const reopenTimerRef = useRef(0);
+  /** The introduction has run and put the panel away, so an open is a re-open. */
+  const introClosedRef = useRef(false);
+  /** First keystroke of the call — reported once, whoever opened the panel. */
+  const notesTypedRef = useRef(false);
+
+  useEffect(() => () => window.clearTimeout(reopenTimerRef.current), []);
+
   const [stageSettled, setStageSettled] = useState(false);
   useEffect(() => {
     const id = window.setTimeout(() => setStageSettled(true), STAGE_SETTLED_MS);
@@ -1385,10 +1571,36 @@ function LiveCallStage({
 
   const saveNotesCaret = () => notesEditorRef.current?.saveCaret();
 
+  /**
+   * Anything that changes the notes ends the introduction — a paste from the
+   * menu never reaches the panel's key handler, and content arriving is the
+   * clearest possible sign the agent is using the panel rather than reading it.
+   */
+  const handleNotesChange = (value: NotesEditorValue) => {
+    discovery.cancel();
+    if (!notesTypedRef.current && value.text.trim().length > 0) {
+      notesTypedRef.current = true;
+      trackNotes("notes_first_input_started");
+    }
+    onNotesChange(value);
+  };
+
   /** Close with no opinion about why — the introduction uses this one too. */
   const dismissAside = () => {
     if (asidePanel === "notes") saveNotesCaret();
     setAsidePanel(null);
+  };
+
+  /** Every open of Notes the agent asked for — the introduction's own is not one. */
+  const openNotesManually = () => {
+    if (introClosedRef.current) trackNotes("notes_panel_reopened");
+    if (reduced) return;
+    window.clearTimeout(reopenTimerRef.current);
+    setNotesReopening(true);
+    reopenTimerRef.current = window.setTimeout(
+      () => setNotesReopening(false),
+      DURATION.slow
+    );
   };
 
   const openAside = (next: AsidePanel) => {
@@ -1432,6 +1644,7 @@ function LiveCallStage({
         active.blur();
       }
       dismissAside();
+      introClosedRef.current = true;
     },
   });
 
@@ -1446,6 +1659,7 @@ function LiveCallStage({
       dismissAside();
       return;
     }
+    if (next === "notes") openNotesManually();
     openAside(next);
   };
 
@@ -1453,6 +1667,7 @@ function LiveCallStage({
   useEffect(() => {
     if (scenarioRef.current === scenario.id) return;
     scenarioRef.current = scenario.id;
+    notesTypedRef.current = false;
     discovery.cancel();
     setAsidePanel(null);
     // `discovery.cancel` is stable.
@@ -1522,6 +1737,7 @@ function LiveCallStage({
       style={
         {
           "--notes-body-fade-ms": `${NOTES_DISCOVERY.bodyFadeMs}ms`,
+          "--notes-flight-ms": `${NOTES_DISCOVERY.flightMs}ms`,
           "--notes-pulse-ms": `${NOTES_DISCOVERY.pulseMs}ms`,
         } as CSSProperties
       }
@@ -1540,12 +1756,16 @@ function LiveCallStage({
         notesControlRef={notesControlRef}
         notesFound={discovery.pulsing}
         transcriptOpen={asidePanel === "transcript"}
+        scope={scope}
         liveAssistOpen={asidePanel === "assist"}
         help={liveAssist}
         onMute={onMute}
         onHoldToggle={onHoldToggle}
         onHangup={onHangup}
-        onNotesToggle={() => toggleAside("notes")}
+        onNotesToggle={() => {
+          trackNotes("notes_icon_clicked", { opening: asidePanel !== "notes" });
+          toggleAside("notes");
+        }}
         onTranscriptToggle={() => toggleAside("transcript")}
         onLiveAssistToggle={() => toggleAside("assist")}
       />
@@ -1594,6 +1814,7 @@ function LiveCallStage({
         >
           <LiveAgentAssistPanel
             key={scenario.id}
+            scope={scope}
             elapsedMs={elapsedMs}
             scenario={scenario}
             exiting={assistCollapsing}
@@ -1640,7 +1861,8 @@ function LiveCallStage({
               className={cn(
                 "call-aside-view",
                 shownNotes && "is-active",
-                discovery.handingOff && "is-notes-handoff"
+                discovery.handingOff && "is-notes-handoff",
+                notesReopening && "is-notes-reopening"
               )}
               aria-hidden={!shownNotes}
               inert={!shownNotes || undefined}
@@ -1648,6 +1870,10 @@ function LiveCallStage({
               // agent has started using is theirs, not a demonstration.
               onPointerDownCapture={discovery.cancel}
               onKeyDownCapture={discovery.cancel}
+              // Hover is attention, not use: it holds the collapse instead of
+              // ending the introduction, and leaving is what releases it.
+              onPointerEnter={discovery.onPanelEnter}
+              onPointerLeave={discovery.onPanelLeave}
             >
               <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[16px] border border-line bg-white">
                 <header className="flex h-11 shrink-0 items-center justify-between gap-1.5 border-b border-line px-4">
@@ -1673,7 +1899,7 @@ function LiveCallStage({
                     placeholder="Type your notes here..."
                     maxLength={NOTES_MAX}
                     value={notes}
-                    onChange={onNotesChange}
+                    onChange={handleNotesChange}
                     wrapperClassName="min-h-0 flex-1"
                     className="min-h-0 flex-1"
                     ariaLabel="Call notes"
@@ -1722,7 +1948,7 @@ function LiveCallStage({
       </div>
 
       <LiveAssistToast
-        toast={liveAssist.toast}
+        toast={scope === "v2" ? liveAssist.toast : null}
         onDismiss={liveAssist.dismissToast}
         onView={() => {
           liveAssist.dismissToast();
@@ -1851,6 +2077,7 @@ function CallBar({
   notesFound,
   transcriptOpen,
   liveAssistOpen,
+  scope = "v2",
   help,
   onMute,
   onHoldToggle,
@@ -1872,6 +2099,7 @@ function CallBar({
   notesFound?: boolean;
   transcriptOpen?: boolean;
   liveAssistOpen?: boolean;
+  scope?: AgentAssistScope;
   help: LiveAssistThread;
   onMute: () => void;
   onHoldToggle: () => void;
@@ -1995,12 +2223,14 @@ function CallBar({
 
         {/* In-call tools — each opens a surface; none touch the call. */}
         <div className="ml-3 flex items-center gap-1.5">
-          <LiveAssistControl
-            help={help}
-            panelOpen={Boolean(liveAssistOpen)}
-            revealing={revealing}
-            onToggle={onLiveAssistToggle}
-          />
+          {scope === "v2" ? (
+            <LiveAssistControl
+              help={help}
+              panelOpen={Boolean(liveAssistOpen)}
+              revealing={revealing}
+              onToggle={onLiveAssistToggle}
+            />
+          ) : null}
           <BarControl
             label={notesOpen ? "Hide notes" : "Notes"}
             pressed={notesOpen}
@@ -2305,6 +2535,7 @@ function PostCallStage({
   notes,
   onNotesChange,
   onScenarioChange,
+  closing,
   onClose,
 }: {
   className?: string;
@@ -2317,28 +2548,37 @@ function PostCallStage({
   notes: NotesEditorValue;
   onNotesChange: (value: NotesEditorValue) => void;
   onScenarioChange: (id: string) => void;
-  onClose: () => void;
+  closing: boolean;
+  onClose: (fromKeyboard?: boolean) => void;
 }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   return (
     <div
+      // One visual group: recap, Wrap up and the completed-call bar leave as
+      // the session they were, not as three panels being dismissed. `inert`
+      // both takes the pointer off it and drops it out of the accessibility
+      // tree the moment it starts leaving.
+      data-closing={closing ? "true" : undefined}
+      inert={closing}
       className={cn(
         // Same geometry the live stage settles at, so hanging up doesn't
         // resize the surface the agent is already reading.
-        "flex h-[700px] max-h-full min-h-0 w-full max-w-[1504px] flex-col gap-3 px-16",
+        "post-call-stage flex h-[700px] max-h-full min-h-0 w-full max-w-[1504px] flex-col gap-3 px-16",
         className
       )}
     >
       <EndedCallBar
-        className={!reduced ? "call-bar-in" : undefined}
+        // The bar outlasts the panes on the way out, so the session reads as
+        // leaving after its own contents.
+        className={cn("post-call-bar", !reduced && "call-bar-in")}
         elapsedMs={elapsedMs}
         contactName={contactName}
         contactMeta={contactMeta}
         onClose={onClose}
       />
 
-      <div className="flex min-h-0 flex-1 gap-3">
+      <div className="post-call-body flex min-h-0 flex-1 gap-3">
         <StagePane index={0} reduced={reduced} grow={7}>
           <AgentAssistCallSheet
             key={scenario.id}
@@ -2368,8 +2608,19 @@ function PostCallStage({
 
 /**
  * The call bar after hangup. Same surface, same geometry — the live controls
- * give way to the one thing left to do with the bar itself: leave. Reading the
- * call is the recap pane's own business.
+ * give way to the two things left to do with the bar itself: say how the line
+ * sounded, and leave. Reading the call is the recap pane's own business.
+ *
+ * Call quality lives here rather than in Wrap up on purpose. Wrap up is the
+ * customer's record — what happened on the call and what we do next. How the
+ * audio held up is our record, about our infrastructure, and folding it into
+ * the disposition form would put a question the agent can answer in half a
+ * second behind one they have to think about. The bar is also the thing that
+ * was carrying the call, so it is the honest place to ask about the call.
+ *
+ * Deliberately not a survey: two thumbs, no comment box, no submit. The vote
+ * stays local because it is the prototype's — there is no backend to file it
+ * against, and re-mounting per call is exactly the lifetime it should have.
  */
 function EndedCallBar({
   className,
@@ -2382,11 +2633,12 @@ function EndedCallBar({
   elapsedMs: number;
   contactName: string;
   contactMeta: string;
-  onClose: () => void;
+  onClose: (fromKeyboard?: boolean) => void;
 }) {
   // The contact's clock stops being useful the moment the line drops — what
   // the agent is filing against now is when this call ended, stamped once.
   const [endedAt] = useState(() => formatLocalTime(new Date()));
+  const [quality, setQuality] = useState<FeedbackVote>(null);
 
   return (
     <div
@@ -2413,16 +2665,45 @@ function EndedCallBar({
         </p>
       </div>
 
-      {/* Dismissal reads the same everywhere on this page: a bare cross, no
-          label — only the colours change for the dark surface. */}
-      <button
-        type="button"
-        aria-label="Close"
-        onClick={onClose}
-        className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-[4px] text-white/70 outline-none transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40"
-      >
-        <IconClose size={20} />
-      </button>
+      <div className="ml-auto flex shrink-0 items-center gap-3">
+        {/* The label stays put once a thumb is picked. Swapping it for a
+            thank-you would shift the buttons out from under the cursor at the
+            exact moment the agent might want to correct a mis-tap — and the
+            filled thumb already says it was heard. */}
+        <span className="text-[13px] leading-5 whitespace-nowrap text-white/60">
+          How was the call quality?
+        </span>
+        <FeedbackThumbs
+          tone="dark"
+          size="md"
+          shape="rounded"
+          value={quality}
+          onChange={setQuality}
+          upLabel="Call quality was good"
+          downLabel="Call quality was poor"
+        />
+
+        {/* Leaving is a different kind of act from answering a question, so
+            the rule keeps the cross from reading as a third thumb. */}
+        <span aria-hidden="true" className="h-6 w-px bg-white/15" />
+
+        {/* Dismissal reads the same everywhere on this page: a bare cross, no
+            label — only the colours change for the dark surface.
+
+            The press answers under the finger while the screen is already
+            leaving — neither waits for the other, or dismissing a call would
+            cost two animations end to end. A click carries `detail: 0` only
+            when the keyboard activated it, which is what decides where focus
+            lands once the dialer is back. */}
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={(event) => onClose(event.detail === 0)}
+          className="call-close-press flex size-8 shrink-0 items-center justify-center rounded-[4px] text-white/70 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40 active:bg-white/16"
+        >
+          <IconClose size={20} className="call-close-icon" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -2450,7 +2731,7 @@ function WrapUpPanel({
   suggestedOutcome: CallOutcomeValue;
   notes: NotesEditorValue;
   onNotesChange: (value: NotesEditorValue) => void;
-  onClose: () => void;
+  onClose: (fromKeyboard?: boolean) => void;
 }) {
   const [outcome, setOutcome] = useState<string>(suggestedOutcome);
   // Read once, on the way in: the field stays labelled as carried over even
@@ -2458,6 +2739,9 @@ function WrapUpPanel({
   const [carriedOver] = useState(() => notes.text.trim().length > 0);
   const [saved, setSaved] = useState(false);
   const saveTimer = useRef<number | null>(null);
+  // Read at the click and spent half a second later, once the button has
+  // finished confirming: by then the event that carried it is long gone.
+  const savedByKeyboard = useRef(false);
 
   useEffect(
     () => () => {
@@ -2467,10 +2751,14 @@ function WrapUpPanel({
   );
 
   // Saving is the end of the call: confirm on the button, then let the wrap-up go.
-  const save = () => {
+  const save = (event: MouseEvent<HTMLButtonElement>) => {
     if (saveTimer.current) return;
+    savedByKeyboard.current = event.detail === 0;
     setSaved(true);
-    saveTimer.current = window.setTimeout(onClose, SAVE_CONFIRM_MS);
+    saveTimer.current = window.setTimeout(
+      () => onClose(savedByKeyboard.current),
+      SAVE_CONFIRM_MS
+    );
   };
 
   const outcomeOptions = CALL_OUTCOMES.map((item) => ({
@@ -2680,7 +2968,7 @@ function DialerNav({
   return (
     <nav
       aria-label="Dialer"
-      className={cn("flex w-full shrink-0 items-start bg-brand", className)}
+      className={cn("dialer-nav flex w-full shrink-0 items-start bg-brand", className)}
     >
       {NAV_ITEMS.map((item) => {
         const active = tab === item.id;

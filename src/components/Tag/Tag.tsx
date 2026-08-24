@@ -1,6 +1,8 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { DURATION } from "@/lib/motion";
+import { usePresence } from "@/lib/usePresence";
 import { IconClose } from "@/components/Icon";
 
 /**
@@ -134,7 +136,20 @@ export interface TagProps
   onClose?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   /** Accessible label for the dismiss control. */
   closeLabel?: string;
+  /**
+   * Presence. Omit it and the tag renders exactly as before — the consumer
+   * mounts and unmounts it, and there is no animation, because a node React
+   * has already removed cannot animate.
+   *
+   * Pass it and the tag owns its own enter/exit instead: it stays mounted
+   * through the exit before removing itself. `onClose` still just reports
+   * the click; flipping `open` to false is the caller's move.
+   */
+  open?: boolean;
 }
+
+/* Exit step for `.tag-presence[data-state="closed"]` in base.css. */
+const TAG_EXIT_MS = DURATION.fast;
 
 export const Tag = React.forwardRef<HTMLSpanElement, TagProps>(
   (
@@ -149,10 +164,13 @@ export const Tag = React.forwardRef<HTMLSpanElement, TagProps>(
       onClose,
       closeLabel = "Remove",
       children,
+      open,
       ...props
     },
     ref
   ) => {
+    const controlled = open !== undefined;
+    const { mounted, state } = usePresence(open ?? true, TAG_EXIT_MS);
     const resolvedSize: TagSize = size ?? "lg";
     const resolvedColor: TagColor = color ?? "grey";
     const resolvedOutline =
@@ -161,10 +179,16 @@ export const Tag = React.forwardRef<HTMLSpanElement, TagProps>(
     const hasClose = typeof onClose === "function";
     const hasLeading = Boolean(avatar || icon);
 
+    if (controlled && !mounted) return null;
+
     return (
       <span
         ref={ref}
+        // Uncontrolled callers get no `data-state`, so the motion rules
+        // never match and behaviour is byte-for-byte what it was.
+        data-state={controlled ? state : undefined}
         className={cn(
+          controlled && "tag-presence",
           tagVariants({
             size: resolvedSize,
             color: resolvedColor,

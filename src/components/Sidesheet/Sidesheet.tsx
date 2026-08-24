@@ -1,6 +1,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { DURATION } from "@/lib/motion";
 
 /**
  * Sidesheet — panel that slides in from the right edge of the viewport,
@@ -29,9 +30,9 @@ export interface SidesheetProps {
 }
 
 // Longest of the panel/scrim closing transitions (see .sidesheet-panel /
-// .sidesheet-scrim in globals.css) — how long to stay mounted after `open`
+// .sidesheet-scrim in base.css) — how long to stay mounted after `open`
 // goes false so the exit animation can finish before unmounting.
-const CLOSE_ANIMATION_MS = 190;
+const CLOSE_ANIMATION_MS = DURATION.moderate;
 
 export function Sidesheet({
   open,

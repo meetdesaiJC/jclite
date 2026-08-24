@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { type SidenavItem } from "@/components/Sidenav";
+import { type AgentAssistScope } from "./agentAssistScope";
 import { GlobalHeader } from "@/components/GlobalHeader";
 import { ProfileMenu } from "@/components/ProfileMenu";
 import { AgentAssistAdmin } from "./AgentAssistAdmin";
@@ -83,6 +84,8 @@ export interface JustCallAiShellProps {
    * Agent Assist, so every page opens on its empty state.
    */
   seeded?: boolean;
+  /** V1 hides Behavioral Coaching and In-call Actions — see `agentAssistScope`. */
+  scope?: AgentAssistScope;
   profileName?: string;
 }
 
@@ -90,6 +93,7 @@ export function JustCallAiShell({
   activeKey = "agent-assist",
   onNavigate,
   seeded = true,
+  scope = "v2",
   profileName = "Sarah Johnson",
 }: JustCallAiShellProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -132,6 +136,7 @@ export function JustCallAiShell({
       ) : activeKey === "agent-assist" ? (
         <AgentAssistAdmin
           seeded={seeded}
+          scope={scope}
           knowledgeSources={knowledgeSources}
           onOpenKnowledge={() => onNavigate?.("knowledge")}
         />

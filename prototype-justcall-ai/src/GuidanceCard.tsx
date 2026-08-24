@@ -5,6 +5,7 @@ import {
   IconCircleCheckFilled,
   IconMessageCircle2,
 } from "@/components/Icon";
+import { FeedbackThumbs } from "@/components/FeedbackThumbs";
 import { Modal } from "@/components/Modal";
 import { cn } from "@/lib/utils";
 import {
@@ -14,48 +15,6 @@ import {
   type GuidanceKind,
   type GuidanceResource,
 } from "./guidanceData";
-
-function ThumbUpIcon({ size = 16, filled = false }: { size?: number; filled?: boolean }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M4.5 7.5v6H3.25A1.25 1.25 0 0 1 2 12.25v-3.5A1.25 1.25 0 0 1 3.25 7.5H4.5Zm0 0 2.1-4.4A1.6 1.6 0 0 1 8.05 2.2c.7 0 1.2.6 1.07 1.28L8.75 5.5H12.2a1.8 1.8 0 0 1 1.76 2.18l-.7 3.2A2 2 0 0 1 11.3 12.5H4.5Z"
-        fill={filled ? "currentColor" : "none"}
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ThumbDownIcon({ size = 16, filled = false }: { size?: number; filled?: boolean }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M4.5 8.5v-6H3.25A1.25 1.25 0 0 0 2 3.75v3.5A1.25 1.25 0 0 0 3.25 8.5H4.5Zm0 0 2.1 4.4a1.6 1.6 0 0 0 1.45.9c.7 0 1.2-.6 1.07-1.28L8.75 10.5H12.2a1.8 1.8 0 0 0 1.76-2.18l-.7-3.2A2 2 0 0 0 11.3 3.5H4.5Z"
-        fill={filled ? "currentColor" : "none"}
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 function battlecardValueClass(value: string) {
   const normalized = value.trim().toLowerCase();
@@ -362,43 +321,6 @@ export type GuidanceFeedback = "helpful" | "not-helpful" | null;
 
 const THANKS_MS = 2000;
 
-function ThumbVoteButton({
-  label,
-  selected,
-  pressKey,
-  onClick,
-  children,
-}: {
-  label: string;
-  selected: boolean;
-  pressKey: number;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={selected}
-      onClick={onClick}
-      className={cn(
-        "inline-flex size-7 cursor-pointer items-center justify-center rounded-full",
-        "text-muted-foreground transition-colors duration-150",
-        "hover:bg-surface-hover hover:text-foreground",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
-        selected && "bg-indigo-50 text-foreground hover:bg-indigo-50"
-      )}
-    >
-      <span
-        key={pressKey}
-        className={cn("inline-flex", pressKey > 0 && "thumb-press")}
-      >
-        {children}
-      </span>
-    </button>
-  );
-}
-
 export function GuidanceFeedbackBar({
   feedback,
   onHelpful,
@@ -410,8 +332,6 @@ export function GuidanceFeedbackBar({
   onNotHelpful?: () => void;
   className?: string;
 }) {
-  const [upPress, setUpPress] = React.useState(0);
-  const [downPress, setDownPress] = React.useState(0);
   const [thanksId, setThanksId] = React.useState(0);
 
   React.useEffect(() => {
@@ -435,29 +355,17 @@ export function GuidanceFeedbackBar({
         className
       )}
     >
-      <ThumbVoteButton
-        label="Helpful"
-        selected={feedback === "helpful"}
-        pressKey={upPress}
-        onClick={() => {
-          setUpPress((current) => current + 1);
-          onHelpful?.();
+      <FeedbackThumbs
+        value={feedback === "helpful" ? "up" : feedback === "not-helpful" ? "down" : null}
+        // Not clearable: a card's rating is a signal we keep, and there is no
+        // "never mind" state for it — an agent who changes their mind picks
+        // the other thumb.
+        clearable={false}
+        onChange={(vote) => {
+          if (vote === "up") onHelpful?.();
+          if (vote === "down") onNotHelpful?.();
         }}
-      >
-        <ThumbUpIcon size={14} filled={feedback === "helpful"} />
-      </ThumbVoteButton>
-
-      <ThumbVoteButton
-        label="Not helpful"
-        selected={feedback === "not-helpful"}
-        pressKey={downPress}
-        onClick={() => {
-          setDownPress((current) => current + 1);
-          onNotHelpful?.();
-        }}
-      >
-        <ThumbDownIcon size={14} filled={feedback === "not-helpful"} />
-      </ThumbVoteButton>
+      />
 
       {thanksId > 0 ? (
         <span

@@ -14,7 +14,9 @@ import { cn } from "@/lib/utils";
 const buttonVariants = cva(
   // Base: shared layout, typography, focus ring, disabled behaviour.
   "relative inline-flex items-center justify-center whitespace-nowrap rounded-[4px] font-medium select-none " +
-    "transition-colors outline-none focus-visible:ring-4 disabled:pointer-events-none disabled:cursor-not-allowed",
+    // `button-press` (base.css) carries both the colour crossfade and the
+    // press nudge, which run at different speeds — see §4.
+    "button-press outline-none focus-visible:ring-4 disabled:pointer-events-none disabled:cursor-not-allowed",
   {
     variants: {
       variant: {
@@ -33,7 +35,7 @@ const buttonVariants = cva(
           "disabled:data-[loading=false]:text-disabled-fg",
         // Text-only link.
         link:
-          "bg-transparent text-brand hover:text-brand-hover focus-visible:ring-brand/24 " +
+          "button-press-none bg-transparent text-brand hover:text-brand-hover focus-visible:ring-brand/24 " +
           "disabled:data-[loading=false]:text-disabled-fg",
         // Solid error red.
         error:
