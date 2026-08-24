@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { DURATION } from "@/lib/motion";
 import type { GuidanceSuggestion, ScriptStep } from "./callSimulation";
+import {
+  insertPushesViewport,
+  isAtFeedGrowthEdge,
+  type FeedGrowth,
+} from "./useGuidanceFeed";
 
 /**
  * The in-call guidance stream — arrival, expansion, ordering and expiry.
@@ -28,11 +33,21 @@ import type { GuidanceSuggestion, ScriptStep } from "./callSimulation";
  * scale rather than re-typed: the classes that play them are cleared here, so
  * a literal would let the animation and its unmount timer drift (CLAUDE.md §4).
  */
-export const CARD_ENTER_MS = DURATION.moderate;
-/** One `fast` step per card in a burst — enough to read as a sequence (§12). */
-export const CARD_STAGGER_MS = DURATION.fast;
-/** Pulse starts as the reveal settles, so its total overlaps by one step. */
-export const CARD_ATTENTION_MS = DURATION.base + DURATION.emphasis;
+export const CARD_ENTER_MS = DURATION.slow;
+/**
+ * One `micro` step per card in a burst — enough to read as a sequence, short
+ * enough that the last card of three is not still arriving after the agent has
+ * started reading the first (§10).
+ */
+export const CARD_STAGGER_MS = DURATION.micro;
+/**
+ * How many cards of a burst actually stagger. Past three the cascade stops
+ * being a sequence and starts being a queue draining down the column, so the
+ * fourth card and everything after it land with the third.
+ */
+const MAX_STAGGERED = 3;
+/** Highlight starts as the reveal settles, so its total overlaps by one step. */
+export const CARD_ATTENTION_MS = DURATION.base + DURATION.settle;
 export const AGENT_SCROLL_IDLE_MS = 2000;
 /** How long "Relevant again" stays on a re-triggered card (§9). */
 export const RELEVANT_AGAIN_MS = 2400;
@@ -43,11 +58,12 @@ export const RELEVANT_AGAIN_MS = 2400;
  */
 export const NEW_LABEL_MS = 4000;
 /**
- * A burst this size or larger pulses only its first card. Three washes firing
- * down the column at once is the visual noise the pulse exists to avoid — the
- * rest arrive with their unread dot and nothing more (§12).
+ * A burst this size or larger highlights only its first card. Up to three cards
+ * is a moment in the conversation surfacing several answers, and each one is
+ * worth marking; past that it is a queue, and a column of washes firing at once
+ * is the visual noise the highlight exists to avoid (§10).
  */
-const QUIET_BURST_FROM = 3;
+const QUIET_BURST_FROM = MAX_STAGGERED + 1;
 /** Active card plus three queued suggestions; the rest compresses (§4). */
 export const MAX_VISIBLE_CARDS = 4;
 /**
@@ -130,12 +146,24 @@ export function useGuidanceStream({
   reduced,
   /** Guidance the AI heard the agent cover — the topic has moved on (§8). */
   handledIds = [],
+  feedRef,
+  feedGrowth = "bottom",
 }: {
   suggestions: GuidanceSuggestion[];
   steps: ScriptStep[];
   playhead: number;
   reduced: boolean;
   handledIds?: string[];
+  /**
+   * The scrolling column, when guidance owns one. Given it, the stream can tell
+   * whether the agent is watching the feed grow or reading something else, and
+   * only lets an arrival into the visible column in the first case (§8).
+   * Without it every arrival follows, which is the behaviour guidance rendered
+   * inline in the script sheet already had.
+   */
+  feedRef?: RefObject<HTMLElement | null>;
+  /** Which end new cards land at — see `FeedGrowth`. */
+  feedGrowth?: FeedGrowth;
 }) {
   const [entries, setEntries] = useState<GuidanceStreamCard[]>([]);
   /**
@@ -151,6 +179,12 @@ export function useGuidanceStream({
    */
   const [arrivingIds, setArrivingIds] = useState<Map<string, number>>(new Map());
   const [attentionIds, setAttentionIds] = useState<Set<string>>(new Set());
+  /**
+   * Highlights that landed while the agent was working the column. Attention
+   * motion is the one thing an arrival owes nobody — it waits until the agent
+   * has stopped scrolling, selecting or clicking, and only then plays (§19).
+   */
+  const [heldAttentionIds, setHeldAttentionIds] = useState<Set<string>>(new Set());
   /** Arrived recently enough that the dot still spells itself out as "New". */
   const [newLabelIds, setNewLabelIds] = useState<Set<string>>(new Set());
   const [relevantAgainIds, setRelevantAgainIds] = useState<Set<string>>(new Set());
@@ -242,10 +276,18 @@ export function useGuidanceStream({
     if (arriving.length === 0 && repeats.length === 0 && !dropped) return;
 
     const interactingNow = interactingRef.current;
+    const feed = feedRef?.current ?? null;
+    /**
+     * Parked at the end the feed grows from, the agent is watching it grow and
+     * the new card is what they are waiting for. Anywhere else they are
+     * reading, and the column does not move (§6, §8).
+     */
+    const followingFeed = isAtFeedGrowthEdge(feed, feedGrowth);
     /** The card the column should scroll to, if any — the last thing to land. */
     let scrollTo: string | null = null;
     let announce: string | null = null;
     const attention = new Set<string>();
+    const enter = new Set<string>();
 
     // Built here rather than inside the setter: each arrival is placed relative
     // to the ones before it, so the list has to exist while we walk them.
@@ -266,13 +308,30 @@ export function useGuidanceStream({
         status: "new",
       };
       const at = arrivalIndex(next);
+      /**
+       * Landing where it would push what the agent is reading. The card still
+       * goes in and still counts as unread, but it makes its space instantly
+       * instead of growing into it: animating the space means the text under
+       * their eyes travels for a quarter of a second, and nothing about a new
+       * card is worth that (§18, §24). `useGuidanceFeed` holds the anchor —
+       * which it can only do exactly because the height arrives all at once.
+       */
+      const pushes = insertPushesViewport(
+        feed,
+        feedGrowth,
+        cardEls.current,
+        next.map((item) => item.suggestion.id),
+        at
+      );
       next = [...next.slice(0, at), entry, ...next.slice(at)];
+      if (!pushes) enter.add(suggestion.id);
 
-      // Arrives open and readable (§2) — the pulse is what says "this one just
-      // landed", and it is the only thing that says it. Every arrival gets one
-      // unless the burst is big enough that a column of washes would be the
-      // noise the pulse exists to avoid (§12).
-      if (critical || !quietBurst || !pulsed) {
+      // Arrives open and readable (§2) — the highlight is what says "this one
+      // just landed", and it is the only thing that says it. Every arrival gets
+      // one unless the burst is big enough that a column of washes would be the
+      // noise the highlight exists to avoid (§10). A card that landed outside
+      // the viewport has nobody to highlight to.
+      if (!pushes && (critical || !quietBurst || !pulsed)) {
         attention.add(suggestion.id);
         pulsed = true;
       }
@@ -281,7 +340,7 @@ export function useGuidanceStream({
         // Compliance guidance can't wait to be noticed, but the agent is
         // mid-sentence: say it out loud rather than dragging the column (§7).
         announce = suggestion.id;
-      } else if (!interactingNow) {
+      } else if (!interactingNow && followingFeed) {
         scrollTo = suggestion.id;
       }
     }
@@ -314,14 +373,19 @@ export function useGuidanceStream({
       });
     }
 
+    if (enter.size > 0) {
+      setArrivingIds((current) => {
+        const merged = new Map(current);
+        let order = 0;
+        for (const item of arriving) {
+          if (!enter.has(item.id)) continue;
+          merged.set(item.id, Math.min(order, MAX_STAGGERED - 1));
+          order += 1;
+        }
+        return merged;
+      });
+    }
     if (arriving.length > 0) {
-      setArrivingIds(
-        (current) =>
-          new Map([
-            ...current,
-            ...arriving.map((item, order) => [item.id, order] as const),
-          ])
-      );
       setNewLabelIds(
         (current) => new Set([...current, ...arriving.map((item) => item.id)])
       );
@@ -332,7 +396,10 @@ export function useGuidanceStream({
       );
     }
     if (attention.size > 0) {
-      setAttentionIds((current) => new Set([...current, ...attention]));
+      // Held rather than dropped: the agent stops scrolling in a second or two
+      // and the card is still the one that just landed (§19).
+      const sink = interactingNow ? setHeldAttentionIds : setAttentionIds;
+      sink((current) => new Set([...current, ...attention]));
     }
     if (arriving.length > 0) {
       // A replay reuses ids, so a card the agent closed last time round would
@@ -421,6 +488,26 @@ export function useGuidanceStream({
     return () => window.clearTimeout(timer);
   }, [attentionIds, burstTailMs, reduced]);
 
+  // The agent has stopped working the column, so a highlight held back during
+  // it can play now — but only for a card they still have not touched. One they
+  // have since opened or closed is not news any more, and washing it then would
+  // read as the panel answering a click that happened seconds ago (§19).
+  useEffect(() => {
+    if (interacting || heldAttentionIds.size === 0) return;
+    const stillNew = new Set(
+      entriesRef.current
+        .filter(
+          (entry) =>
+            entry.status === "new" && heldAttentionIds.has(entry.suggestion.id)
+        )
+        .map((entry) => entry.suggestion.id)
+    );
+    setHeldAttentionIds(new Set());
+    if (stillNew.size > 0) {
+      setAttentionIds((current) => new Set([...current, ...stillNew]));
+    }
+  }, [interacting, heldAttentionIds]);
+
   // The dot stays; only the word it arrived with is on a clock.
   useEffect(() => {
     if (newLabelIds.size === 0) return;
@@ -454,16 +541,6 @@ export function useGuidanceStream({
   }, [scrollTargetId, reduced]);
 
   // ---- derived -----------------------------------------------------------
-  /**
-   * How many just landed — not how many are unread. Cards arrive open, so a
-   * running total of "new" guidance would only ever climb while the agent read
-   * every word of it. The count therefore rides the same short window as the
-   * word "New" on the card itself, and leaves with it (§3, §12).
-   */
-  const newCount = entries.filter((entry) =>
-    newLabelIds.has(entry.suggestion.id)
-  ).length;
-
   let visible = entries;
   if (!showAll && entries.length > MAX_VISIBLE_CARDS) {
     visible = entries.slice(0, MAX_VISIBLE_CARDS);
@@ -500,8 +577,6 @@ export function useGuidanceStream({
     hiddenCount,
     showAll,
     showAllCards: () => setShowAll(true),
-    /** Suggestions that just landed — drives "Conversation guidance · 2 new". */
-    newCount,
     /** Set when critical guidance queued under a card the agent was reading. */
     criticalAlert,
     /** Cards the agent has closed — everything else is open (§2). */
