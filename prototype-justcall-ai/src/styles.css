@@ -1577,8 +1577,6 @@ button.call-bar-control[data-help="active"] {
   }
 }
 
-/* Tailwind's auto content-detection only scans this prototype's own
-   folder; point it at the library source and the shared add-ons prototype
-   pieces we reuse (ProfileMenu, toolbar icons) so their utilities generate. */
+/* Tailwind's auto content-detection only scans this prototype's own folder;
+   point it at the design system so its utilities generate too. */
 @source "../../src";
-@source "../../prototype-add-ons-flow/src";

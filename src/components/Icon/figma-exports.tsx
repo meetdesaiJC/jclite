@@ -1,6 +1,14 @@
 import * as React from "react";
 
 /**
+ * Hand-exported Figma glyphs that are not yet in the icon pipeline.
+ *
+ * These are fixed-20px SVGs with hardcoded strokes, unlike `icons.tsx` /
+ * `icons.generated.tsx` which ship 16/20/24 and use `currentColor`. They live
+ * here because both prototypes' Dashboard screens use them; keeping them out
+ * of `icons.tsx` marks them as the set still owing a pipeline migration
+ * (`npm run icons:pull "calendar-time" "mail-share" --size 16,20,24`).
+ *
  * Dashboard toolbar glyphs — exact Figma exports (icon-library/dashboard/
  * calendar-time.svg, mail-share.svg) for the "Schedule" and "Share" toolbar
  * buttons above the KPI row.

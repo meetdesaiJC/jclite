@@ -13,7 +13,7 @@ import {
   IconProfileSubmitFeedback,
   IconProfileDevicesDown,
   IconProfileLogout,
-} from "./icons/ProfileMenuIcons";
+} from "./icons";
 
 /**
  * ProfileMenu — Figma "Header + Filter Unification / Profile Dropdown"

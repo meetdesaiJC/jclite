@@ -9,8 +9,8 @@ import {
   IconInfoCircle,
   IconDotsVertical,
 } from "@/components/Icon";
-import { ProfileMenu } from "../../prototype-add-ons-flow/src/ProfileMenu";
-import { IconCalendarTime, IconMailShare } from "../../prototype-add-ons-flow/src/icons/DashboardToolbarIcons";
+import { ProfileMenu } from "@/components/ProfileMenu";
+import { IconCalendarTime, IconMailShare } from "@/components/Icon";
 import { DialerPanel } from "./DialerPanel";
 
 /**

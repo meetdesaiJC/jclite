@@ -12,8 +12,8 @@ import {
   IconClose,
 } from "@/components/Icon";
 import { NotificationPanel } from "./NotificationPanel";
-import { ProfileMenu } from "./ProfileMenu";
-import { IconCalendarTime, IconMailShare } from "./icons/DashboardToolbarIcons";
+import { ProfileMenu } from "@/components/ProfileMenu";
+import { IconCalendarTime, IconMailShare } from "@/components/Icon";
 import { IconTranscriptionAi } from "./icons/AiInsightsIcons";
 import { ManageLicensesModal, type AccountHolder, type TeamMember } from "./ManageLicensesModal";
 import { TeamMembersPage } from "./TeamMembers";
