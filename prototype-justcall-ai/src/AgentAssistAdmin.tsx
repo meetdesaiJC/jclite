@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { AgentAssistPlaybooksPage } from "./AgentAssistPage";
 import { ActionsPage } from "./ActionsPage";
 import { AgentAssistNav, type AgentAssistArea } from "./AgentAssistNav";
+import { type AgentAssistScope } from "./agentAssistScope";
 import { KnowledgeSuggestionsModal } from "./KnowledgeSuggestionsModal";
 import {
   AgentAssistTakeoverContext,
@@ -77,6 +78,8 @@ export interface AgentAssistAdminProps {
    * puts every list into its empty state and leaves all apps unconnected.
    */
   seeded?: boolean;
+  /** V1 authors Scripts and Response Cards only — see `agentAssistScope`. */
+  scope?: AgentAssistScope;
   /** Read by response-card coverage hints; owned by JustCallAiShell. */
   knowledgeSources: KnowledgeSourceRecord[];
   /** Leaves Agent Assist for the global Knowledge page. */
@@ -85,6 +88,7 @@ export interface AgentAssistAdminProps {
 
 export function AgentAssistAdmin({
   seeded = true,
+  scope = "v2",
   knowledgeSources,
   onOpenKnowledge,
 }: AgentAssistAdminProps) {
@@ -173,6 +177,7 @@ export function AgentAssistAdmin({
               setKnowledgeSuggestionsLearnMore(true)
             }
             onCreateKnowledgeBase={onOpenKnowledge}
+            scope={scope}
           />
         )}
 

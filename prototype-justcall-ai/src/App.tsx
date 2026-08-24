@@ -8,8 +8,21 @@ import {
   type JustCallAiPageKey,
 } from "./JustCallAiShell";
 import { PrototypeLauncher } from "./PrototypeLauncher";
+import { type AgentAssistScope } from "./agentAssistScope";
 
-type AppView = "launcher" | "setup" | "setup-empty" | "in-call";
+/**
+ * V1 and North Star each get their own view keys even though the V1 three
+ * currently render the same flows. The seam is the point: when V1 diverges,
+ * it diverges here, and the North Star prototypes stay untouched.
+ */
+type AppView =
+  | "launcher"
+  | "setup"
+  | "setup-empty"
+  | "in-call"
+  | "v1-setup"
+  | "v1-setup-empty"
+  | "v1-in-call";
 type AppArea = "dashboard" | "justcall-ai";
 
 /**
@@ -21,8 +34,16 @@ type AppArea = "dashboard" | "justcall-ai";
  * `seeded` decides which account the same flow is walked through: on, the
  * demo library everything is already configured with; off, the day-one
  * account where every list opens on its empty state.
+ *
+ * `scope` decides which release: V1 authors Scripts and Response Cards only.
  */
-function SetupFlow({ seeded = true }: { seeded?: boolean }) {
+function SetupFlow({
+  seeded = true,
+  scope = "v2",
+}: {
+  seeded?: boolean;
+  scope?: AgentAssistScope;
+}) {
   const [area, setArea] = useState<AppArea>("dashboard");
   const [navTransition, setNavTransition] = useState<SidenavItemsTransition>("forward");
   const [aiPage, setAiPage] = useState<JustCallAiPageKey>("agent-assist");
@@ -78,6 +99,7 @@ function SetupFlow({ seeded = true }: { seeded?: boolean }) {
             activeKey={aiPage}
             onNavigate={setAiPage}
             seeded={seeded}
+            scope={scope}
           />
         </div>
       </div>
@@ -89,13 +111,17 @@ function SetupFlow({ seeded = true }: { seeded?: boolean }) {
  * In-call prototype — starts on the Calls dashboard. The agent opens the
  * dialer from the top nav, dials a number, and hits Call; ringing → pickup →
  * Agent Assist all play out from that first tap.
+ *
+ * `scope` decides which release: V1 drops the coaching cues and suggested
+ * actions from the guidance column, and the Live Assist control from the call
+ * bar.
  */
-function InCallFlow() {
+function InCallFlow({ scope = "v2" }: { scope?: AgentAssistScope }) {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidenav activeKey="dashboard" />
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <Dashboard />
+        <Dashboard scope={scope} />
       </div>
     </div>
   );
@@ -107,18 +133,27 @@ export default function App() {
   if (view === "launcher") {
     return (
       <PrototypeLauncher
+        onStartV1EmptySetup={() => setView("v1-setup-empty")}
+        onStartV1Setup={() => setView("v1-setup")}
+        onStartV1InCall={() => setView("v1-in-call")}
+        onStartEmptySetup={() => setView("setup-empty")}
         onStartSetup={() => setView("setup")}
         onStartInCall={() => setView("in-call")}
-        onStartEmptySetup={() => setView("setup-empty")}
       />
     );
   }
 
-  if (view === "in-call") {
-    return <InCallFlow />;
+  if (view === "in-call" || view === "v1-in-call") {
+    return <InCallFlow scope={view === "v1-in-call" ? "v1" : "v2"} />;
   }
 
-  // Same flow, different account: "setup" walks the demo library, "setup-empty"
-  // walks a brand-new account with nothing configured yet.
-  return <SetupFlow seeded={view === "setup"} />;
+  // Same flow, two axes: the seeded views walk the demo library and the empty
+  // ones a brand-new account, while the scope decides how much of Agent Assist
+  // exists at all.
+  return (
+    <SetupFlow
+      seeded={view === "setup" || view === "v1-setup"}
+      scope={view.startsWith("v1-") ? "v1" : "v2"}
+    />
+  );
 }

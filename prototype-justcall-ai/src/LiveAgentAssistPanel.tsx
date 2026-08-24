@@ -21,6 +21,7 @@ import {
   coachingCardMessage,
   type CoachingRule,
 } from "./coachingData";
+import { type AgentAssistScope } from "./agentAssistScope";
 import { CoachingCardFace, coachingTone } from "./coachingVisuals";
 import {
   InCallActionDoneCard,
@@ -781,6 +782,11 @@ function useStableStreamOrder<T extends StreamRow>(rows: T[]) {
 
 export interface LiveAgentAssistPanelProps {
   elapsedMs: number;
+  /**
+   * V1 shows script guidance and knowledge answers only — no coaching cues and
+   * no suggested actions. See `agentAssistScope`.
+   */
+  scope?: AgentAssistScope;
   scenario: CallScenario;
   guidanceItems?: GuidanceItem[];
   knowledgeSources?: KnowledgeSourceRecord[];
@@ -796,6 +802,7 @@ export interface LiveAgentAssistPanelProps {
 
 export function LiveAgentAssistPanel({
   elapsedMs,
+  scope = "v2",
   scenario,
   guidanceItems = SEED_GUIDANCE,
   knowledgeSources = SEED_KNOWLEDGE_SOURCES,
@@ -807,6 +814,13 @@ export function LiveAgentAssistPanel({
   className,
 }: LiveAgentAssistPanelProps) {
   const reduced = prefersReducedMotion();
+  /**
+   * The simulation still produces coaching and actions in V1 — the scenarios
+   * are shared. They are filtered at the point of display instead, so the
+   * script and knowledge beats keep the timing they were authored with rather
+   * than sliding earlier to fill the gaps.
+   */
+  const showsV2Stream = scope === "v2";
   const libraries = {
     knowledge: knowledgeSources,
     coaching: coachingRules,
@@ -1051,26 +1065,30 @@ export function LiveAgentAssistPanel({
       id: entry.suggestion.id,
       entry,
     })),
-    ...coaching.stack.map((cue) => ({
-      kind: "coaching" as const,
-      atMs: cue.atMs,
-      id: cue.id,
-      cue,
-    })),
+    ...(showsV2Stream
+      ? coaching.stack.map((cue) => ({
+          kind: "coaching" as const,
+          atMs: cue.atMs,
+          id: cue.id,
+          cue,
+        }))
+      : []),
     ...snapshot.knowledge.map((surface) => ({
       kind: "knowledge" as const,
       atMs: surface.atMs,
       id: surface.id,
       surface,
     })),
-    ...snapshot.actions
-      .filter((entry) => isActionVisible(entry.id))
-      .map((entry) => ({
-        kind: "action" as const,
-        atMs: entry.atMs,
-        id: entry.id,
-        action: entry.action,
-      })),
+    ...(showsV2Stream
+      ? snapshot.actions
+          .filter((entry) => isActionVisible(entry.id))
+          .map((entry) => ({
+            kind: "action" as const,
+            atMs: entry.atMs,
+            id: entry.id,
+            action: entry.action,
+          }))
+      : []),
   ];
 
   const ordered = useStableStreamOrder(streamStack);
@@ -1078,8 +1096,8 @@ export function LiveAgentAssistPanel({
   const nothingYet =
     stream.cards.length === 0 &&
     snapshot.knowledge.length === 0 &&
-    visibleStreamActions.length === 0 &&
-    coaching.stack.length === 0;
+    (!showsV2Stream ||
+      (visibleStreamActions.length === 0 && coaching.stack.length === 0));
 
   /**
    * "Building context…" is earned, not decorative: the panel replays the call a
@@ -1094,8 +1112,8 @@ export function LiveAgentAssistPanel({
     ahead !== null &&
     (ahead.suggestions.length > 0 ||
       ahead.knowledge.length > 0 ||
-      ahead.coaching.length > 0 ||
-      ahead.actions.length > 0);
+      (showsV2Stream &&
+        (ahead.coaching.length > 0 || ahead.actions.length > 0)));
 
   const renderKnowledge = (surface: KnowledgeSurface) => (
     <KnowledgeCard
