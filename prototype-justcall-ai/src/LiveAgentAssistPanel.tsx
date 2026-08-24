@@ -45,7 +45,6 @@ import {
   simulationAt,
   type CallScenario,
   type CoachingCue,
-  type GuidanceSuggestion,
   type KnowledgeSurface,
 } from "./callSimulation";
 import {

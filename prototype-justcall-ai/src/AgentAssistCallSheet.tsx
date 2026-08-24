@@ -36,7 +36,6 @@ import {
   type CallScenario,
   type GuidanceSuggestion,
   type ResolvedCallActionItem,
-  type ScriptStep,
   type SimulationSnapshot,
   type TranscriptSpeaker,
   type TranscriptTurn,

@@ -69,7 +69,7 @@ const AMOUNT_DUE_EXPAND_DURATION = "200ms";
 const AMOUNT_DUE_COLLAPSE_DURATION = "165ms";
 
 const AI_AVATAR_BG =
-  "linear-gradient(94deg, rgba(0,76,230,0.15) 46%, rgba(172,112,255,0.15) 145%), linear-gradient(90deg, #fff 0%, #fff 100%)";
+  "linear-gradient(94deg, rgba(0,76,230,0.15) 46%, rgba(172,112,255,0.15) 145%), linear-gradient(90deg, var(--color-white) 0%, var(--color-white) 100%)";
 
 function FeatureRow({ children }: { children: React.ReactNode }) {
   return (

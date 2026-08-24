@@ -4,26 +4,72 @@
     {
       "name": "justcall-ai",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 5679
     },
     {
       "name": "justcall-ai-alt",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5680", "--strictPort"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5680",
+        "--strictPort"
+      ],
       "port": 5680
     },
     {
       "name": "justcall-ai-third",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5681", "--strictPort"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5681",
+        "--strictPort"
+      ],
       "port": 5681
     },
     {
       "name": "justcall-ai-fourth",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5682", "--strictPort"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5682",
+        "--strictPort"
+      ],
       "port": 5682
+    },
+    {
+      "name": "add-ons",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "proto:add-ons"
+      ],
+      "port": 5678
+    },
+    {
+      "name": "add-ons-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "proto:add-ons",
+        "--",
+        "--port",
+        "5677",
+        "--strictPort"
+      ],
+      "port": 5677
     }
   ]
 }

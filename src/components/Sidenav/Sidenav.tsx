@@ -38,8 +38,8 @@ import {
  * do double duty (they match this palette too), so those reuse the tokens.
  */
 
-const SIDENAV_ACCENT = "#196aff"; // active item border / usage-balance top border
-const SIDENAV_BG = "linear-gradient(176deg, #101828 0%, #111b2e 100%)";
+const SIDENAV_ACCENT = "var(--color-sidenav-accent)"; // active item border / usage-balance top border
+const SIDENAV_BG = "linear-gradient(176deg, var(--color-sidenav-bg-from) 0%, var(--color-sidenav-bg-to) 100%)";
 
 export interface SidenavItem {
   /** Stable identifier, passed to `onItemSelect`. */
@@ -279,7 +279,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
               return (
                 <React.Fragment key={item.key}>
                   {item.sectionLabel && (
-                    <li className="px-6 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-[#b0b0b0]">
+                    <li className="px-6 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-sidenav-label">
                       {item.sectionLabel}
                     </li>
                   )}
@@ -305,7 +305,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
                       )}
                       style={{
                         borderLeftColor: active ? SIDENAV_ACCENT : undefined,
-                        backgroundColor: active ? "#111e36" : undefined,
+                        backgroundColor: active ? "var(--color-sidenav-item-active)" : undefined,
                       }}
                     >
                       <span className="flex size-[18px] shrink-0 items-center justify-center [&_svg]:size-full">
@@ -317,7 +317,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
                           {item.badge && (
                             <span
                               className="shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] font-bold leading-none"
-                              style={{ borderColor: "#ee46bc", color: "#ee46bc" }}
+                              style={{ borderColor: "var(--color-badge-pink)", color: "var(--color-badge-pink)" }}
                             >
                               {item.badge}
                             </span>
@@ -353,7 +353,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
                                 )}
                                 style={{
                                   borderLeftColor: subActive ? SIDENAV_ACCENT : undefined,
-                                  backgroundColor: subActive ? "#111e36" : undefined,
+                                  backgroundColor: subActive ? "var(--color-sidenav-item-active)" : undefined,
                                 }}
                               >
                                 {sub.label}
@@ -371,7 +371,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
         </div>
 
         {creditsValue !== null && (
-          <div className="mx-2 mb-2 shrink-0 overflow-hidden rounded-[5px] border border-gray-700 bg-[#1c2838] p-3">
+          <div className="mx-2 mb-2 shrink-0 overflow-hidden rounded-[5px] border border-gray-700 bg-sidenav-card p-3">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-label-md-semi">💰 Total Credits:</span>
               <span className="rounded-full bg-blue-500 px-2.5 py-1 text-label-md text-white">
@@ -392,7 +392,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
           type="button"
           onClick={onViewUsageBalance}
           className="flex h-[49px] shrink-0 items-center justify-center gap-1.5 border-t px-3.5 text-label-sm font-semibold tracking-[0.1px] text-white transition-colors hover:bg-white/5"
-          style={{ borderTopColor: SIDENAV_ACCENT, backgroundColor: "#172848" }}
+          style={{ borderTopColor: SIDENAV_ACCENT, backgroundColor: "var(--color-sidenav-balance)" }}
         >
           View Usage Balance
           <IconArrowRight className="size-4 shrink-0" />

@@ -1,0 +1,154 @@
+/* ================================================================== */
+/* COMPONENT TOKENS                                                   */
+/* For values no semantic role covers — a badge's pink, the dialer's   */
+/* navy. Each MUST reference a primitive or semantic token, never a    */
+/* new hex, or a palette change will skip it. See CLAUDE.md §3.        */
+/* ================================================================== */
+@theme {
+  /* AVATAR TOKENS                                                     */
+  /* Synced from Figma — Design System 2.0 "Avatars".                 */
+  /* Soft tag-color pairs for initials / placeholder fills, plus      */
+  /* presence-indicator colours for agent status.                     */
+  /* ---------------------------------------------------------------- */
+  --color-avatar-indigo-bg: var(--color-indigo-50); /* #eef4ff */
+  --color-avatar-indigo-fg: var(--color-indigo-700); /* #3538cd */
+  --color-avatar-purple-bg: var(--color-purple-50); /* #f4f3ff */
+  --color-avatar-purple-fg: var(--color-purple-700); /* #5925dc */
+  --color-avatar-pink-bg: var(--color-pink-50); /* #fdf2fa */
+  --color-avatar-pink-fg: var(--color-pink-700); /* #c11574 */
+  --color-avatar-orange-bg: #fff6ed;
+  --color-avatar-orange-fg: #c4320a;
+  --color-avatar-grey-bg: #f4f4f4;
+  --color-avatar-grey-fg: var(--color-gray-700); /* #344054 */
+  --color-avatar-bluegrey-bg: var(--color-bluegray-100); /* #eaecf5 */
+  --color-avatar-bluegrey-fg: var(--color-bluegray-700); /* #363f72 */
+
+  --color-status-available: var(--color-success); /* Available for call */
+  --color-status-ooo: var(--color-disabled-fg); /* Disabled / OOO */
+  --color-status-on-call: var(--color-red-500); /* On call */
+  --color-status-wrap-up: var(--color-warning); /* Wrap-up time */
+  --color-status-dnd: var(--color-error); /* DND */
+
+  /* ---------------------------------------------------------------- */
+  /* BADGE TOKENS                                                      */
+  /* Synced from Figma — Design System 2.0 "Badges".                  */
+  /* Solid states use primary fills; inverted/subtle states use the   */
+  /* tinted *-secondary surfaces with matching *-text colours.        */
+  /* ---------------------------------------------------------------- */
+  --color-success-text: #027a48; /* success/text — success badge label + indicator */
+  --color-warning-text: #b54708; /* warning/text — warning badge label + indicator */
+  --color-badge-grey-bg: var(--color-gray-100); /* accent/grey-bg — primary-inverted surface */
+  --color-badge-bluegrey-bg: var(--color-bluegray-100); /* accent/blue-grey-bg */
+  --color-badge-bluegrey-fg: var(--color-bluegray-700); /* indicator on blue-grey */
+  --color-badge-pink: #ee46bc; /* accent/pink-badge — "New" special badge */
+  --color-badge-beta: var(--color-gray-700); /* Inverse/Layer/02 — "Beta" special badge */
+  --color-badge-premium: #fec84b; /* icon/premium — crown icon fill */
+
+  /* ---------------------------------------------------------------- */
+  /* TAG TOKENS                                                        */
+  /* Synced from Figma — Design System 2.0 "Tags" (node 3464:126546). */
+  /* Soft fills for the documented color variants (Grey / Orange).    */
+  /* Other colors reuse avatar / status tokens.                       */
+  /* ---------------------------------------------------------------- */
+  --color-tag-grey-bg: #f4f4f4; /* accent/grey — user tags */
+  --color-tag-orange-bg: #fff6ed; /* accent/orange-bg */
+  --color-tag-orange-fg: #ec4a0a; /* accent/orange-text */
+
+  /* ---------------------------------------------------------------- */
+  /* TOOLTIP TOKENS                                                    */
+  /* Synced from Figma — Design System 2.0 "Tooltips" (3464:126547).  */
+  /* Dark surface reuses gray-900; inverse CTA is a lighter brand blue.*/
+  /* ---------------------------------------------------------------- */
+  --color-tooltip-dark-bg: var(--color-gray-900); /* Inverse/Layer/03 */
+  --color-tooltip-dark-fg: var(--color-white);
+  --color-tooltip-dark-muted: var(--color-disabled-fg); /* text/placeholder #98A2B3 */
+  --color-tooltip-dark-action: #4d8bff; /* Inverse/Button-primary */
+
+  /* ---------------------------------------------------------------- */
+  /* AI TOKENS                                                         */
+  /* The JustCall AI accent. Lives here rather than in a prototype so   */
+  /* every prototype and component resolves the same purple.            */
+  /* ---------------------------------------------------------------- */
+  --color-ai: #673bff;
+  --color-ai-surface: var(--color-purple-50); /* #f4f3ff */
+  --color-ai-border: var(--color-purple-200); /* #d9d6fe */
+  --color-ai-gradient-from: #3318ff; /* AI pill / icon gradient */
+  --color-ai-gradient-to: #b46dff;
+
+  /* ---------------------------------------------------------------- */
+  /* COACHING CUE TOKENS                                               */
+  /* One hue per live-coaching signal so agents can scan a stack by     */
+  /* category. Every one derives from an existing role or primitive —   */
+  /* these used to be hand-typed hexes in the prototype, which meant    */
+  /* changing --color-error left the coaching red behind.               */
+  /* ---------------------------------------------------------------- */
+  --color-coach-orange: var(--color-warning);
+  --color-coach-orange-surface: var(--color-warning-secondary);
+  --color-coach-orange-border: var(--color-warning-border);
+  --color-coach-orange-text: var(--color-warning-text);
+
+  --color-coach-purple: var(--color-purple-500);
+  --color-coach-purple-surface: var(--color-purple-50);
+  --color-coach-purple-border: var(--color-purple-200);
+  --color-coach-purple-text: var(--color-purple-700);
+
+  --color-coach-blue: var(--color-blue-500);
+  --color-coach-blue-surface: var(--color-blue-50);
+  --color-coach-blue-border: var(--color-blue-200);
+  --color-coach-blue-text: var(--color-blue-700);
+
+  --color-coach-teal: var(--color-teal-500);
+  --color-coach-teal-surface: var(--color-teal-50);
+  --color-coach-teal-border: var(--color-teal-200);
+  --color-coach-teal-text: var(--color-teal-700);
+
+  --color-coach-red: var(--color-error);
+  --color-coach-red-surface: var(--color-error-subtle);
+  --color-coach-red-border: var(--color-error-border);
+  --color-coach-red-text: var(--color-error-hover);
+
+  /* ---------------------------------------------------------------- */
+  /* CHART SERIES TOKENS                                               */
+  /* Calls-volume series colours. Both prototypes' dashboards drew the  */
+  /* same two hexes independently before this.                          */
+  /* ---------------------------------------------------------------- */
+  --color-chart-outbound: #1f8bc0;
+  --color-chart-inbound: #6c15e0;
+
+  /* ---------------------------------------------------------------- */
+  /* SIDENAV TOKENS                                                    */
+  /* The dark navigation rail is its own small theme — a gradient       */
+  /* surface with its own label, active-item and card colours that do   */
+  /* not map onto the light-UI semantics.                               */
+  /* ---------------------------------------------------------------- */
+  --color-sidenav-bg-from: var(--color-gray-900); /* #101828 */
+  --color-sidenav-bg-to: #111b2e;
+  --color-sidenav-accent: #196aff; /* active item border, balance top rule */
+  --color-sidenav-item-active: #111e36;
+  --color-sidenav-label: #b0b0b0; /* section headings */
+  --color-sidenav-card: #1c2838; /* credits card fill */
+  --color-sidenav-balance: #172848; /* usage-balance footer fill */
+
+  /* ---------------------------------------------------------------- */
+  /* HEADER TOKENS                                                     */
+  /* ---------------------------------------------------------------- */
+  --color-header-icon-hover: var(--color-gray-100); /* #f2f4f7 */
+  --color-notification-badge: var(--color-red-500); /* unread count dot */
+  --color-avatar-brand-bg: #2d72ff; /* header profile avatar fill */
+
+  /* ---------------------------------------------------------------- */
+  /* IN-CALL SURFACE TOKENS                                            */
+  /* Dark surfaces used by the dialer and the notes formatting bar.     */
+  /* ---------------------------------------------------------------- */
+  --color-dialer-surface: #071532;
+  --color-editor-toolbar: #2f2f33;
+
+  /* Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Typography */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+}

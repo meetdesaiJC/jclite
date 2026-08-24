@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { type SidenavItem } from "@/components/Sidenav";
 import { GlobalHeader } from "@/components/GlobalHeader";
-import { ProfileMenu } from "../../prototype-add-ons-flow/src/ProfileMenu";
+import { ProfileMenu } from "@/components/ProfileMenu";
 import { AgentAssistAdmin } from "./AgentAssistAdmin";
 import { DialerPanel } from "./DialerPanel";
 import { KnowledgePage } from "./KnowledgePage";

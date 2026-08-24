@@ -22,6 +22,8 @@ import {
 /* Demo helpers                                                        */
 /* ------------------------------------------------------------------ */
 
+// Literal flag red, not a design token — story fixture content, the same way a
+// brand logo keeps its own colour. The no-raw-hex rule covers UI, not content.
 function FlagLead() {
   return (
     <div
@@ -43,7 +45,8 @@ function StarRating({ value = 3.5 }: { value?: number }) {
           <svg key={i} width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path
               d="M10 2.5l2.2 4.46 4.92.72-3.56 3.47.84 4.9L10 13.77 5.6 16.05l.84-4.9L2.88 7.68l4.92-.72L10 2.5z"
-              fill={filled || half ? "#FDB022" : "#E4E7EC"}
+              // Fixture colours: a rating gold with no token, and the line grey.
+              fill={filled || half ? "#FDB022" : "var(--color-line)"}
             />
           </svg>
         );

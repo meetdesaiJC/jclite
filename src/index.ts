@@ -13,6 +13,7 @@ export * from "./components/GlobalHeader";
 export * from "./components/Icon";
 export * from "./components/InputField";
 export * from "./components/Modal";
+export * from "./components/ProfileMenu";
 export * from "./components/Radio";
 export * from "./components/Sidenav";
 export * from "./components/Sidesheet";

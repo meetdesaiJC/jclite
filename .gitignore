@@ -9,4 +9,3 @@ tsconfig.tsbuildinfo
 .env.local
 scripts/icons/icons-page.meta.xml
 .vercel
-/Agent Assist/

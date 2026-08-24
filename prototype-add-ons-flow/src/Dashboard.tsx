@@ -12,8 +12,8 @@ import {
   IconClose,
 } from "@/components/Icon";
 import { NotificationPanel } from "./NotificationPanel";
-import { ProfileMenu } from "./ProfileMenu";
-import { IconCalendarTime, IconMailShare } from "./icons/DashboardToolbarIcons";
+import { ProfileMenu } from "@/components/ProfileMenu";
+import { IconCalendarTime, IconMailShare } from "@/components/Icon";
 import { IconTranscriptionAi } from "./icons/AiInsightsIcons";
 import { ManageLicensesModal, type AccountHolder, type TeamMember } from "./ManageLicensesModal";
 import { TeamMembersPage } from "./TeamMembers";
@@ -130,8 +130,8 @@ function SectionHeader({ title, lastUpdated }: { title: string; lastUpdated?: bo
   );
 }
 
-const OUTBOUND_COLOR = "#1F8BC0";
-const INBOUND_COLOR = "#6C15E0";
+const OUTBOUND_COLOR = "var(--color-chart-outbound)";
+const INBOUND_COLOR = "var(--color-chart-inbound)";
 
 // Exact vertices exported from Figma's "Calls volume over time" chart
 // (node 40002621:32275) — kept as literal coordinates rather than a charting
@@ -511,7 +511,7 @@ export function Dashboard({
                       <KpiCard key={card.label} {...card} />
                     ))}
                   </div>
-                  <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]">
+                  <div className="overflow-hidden rounded-xl border border-line bg-white shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]">
                     <div className="flex items-center justify-between border-b border-line p-4">
                       <p className="text-heading-lg capitalize text-foreground">Calls volume over time</p>
                       <IconDotsVertical size={16} className="size-4 shrink-0 text-foreground" />

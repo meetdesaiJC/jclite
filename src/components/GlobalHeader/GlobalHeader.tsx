@@ -43,15 +43,15 @@ export interface GlobalHeaderBreadcrumbItem {
 // default, richening to 15% on hover/focus. No equivalent design token
 // (closest is Tag's color="ai", which uses a different angle/opacity).
 const LIVE_CALL_SUPPORT_BG =
-  "bg-[linear-gradient(110deg,rgba(0,76,230,0.08)_46%,rgba(180,109,255,0.08)_145%),linear-gradient(90deg,#fff_0%,#fff_100%)]";
+  "bg-[linear-gradient(110deg,rgba(0,76,230,0.08)_46%,rgba(180,109,255,0.08)_145%),linear-gradient(90deg,var(--color-white)_0%,var(--color-white)_100%)]";
 const LIVE_CALL_SUPPORT_BG_HOVER =
-  "hover:bg-[linear-gradient(110deg,rgba(0,76,230,0.15)_46%,rgba(172,112,255,0.15)_145%),linear-gradient(90deg,#fff_0%,#fff_100%)] focus-visible:bg-[linear-gradient(110deg,rgba(0,76,230,0.15)_46%,rgba(172,112,255,0.15)_145%),linear-gradient(90deg,#fff_0%,#fff_100%)]";
+  "hover:bg-[linear-gradient(110deg,rgba(0,76,230,0.15)_46%,rgba(172,112,255,0.15)_145%),linear-gradient(90deg,var(--color-white)_0%,var(--color-white)_100%)] focus-visible:bg-[linear-gradient(110deg,rgba(0,76,230,0.15)_46%,rgba(172,112,255,0.15)_145%),linear-gradient(90deg,var(--color-white)_0%,var(--color-white)_100%)]";
 // Figma gradient text fill for the "Live Call Support" label — likewise a
 // one-off with no matching token, deepened slightly on hover/focus.
 const LIVE_CALL_SUPPORT_TEXT =
-  "bg-[linear-gradient(101deg,#3318ff_5%,#b46dff_126%)]";
+  "bg-[linear-gradient(101deg,var(--color-ai-gradient-from)_5%,var(--color-ai-gradient-to)_126%)]";
 const LIVE_CALL_SUPPORT_TEXT_HOVER =
-  "group-hover:bg-[linear-gradient(118deg,#3318ff_30%,#b46dff_149%)] group-focus-visible:bg-[linear-gradient(118deg,#3318ff_30%,#b46dff_149%)]";
+  "group-hover:bg-[linear-gradient(118deg,var(--color-ai-gradient-from)_30%,var(--color-ai-gradient-to)_149%)] group-focus-visible:bg-[linear-gradient(118deg,var(--color-ai-gradient-from)_30%,var(--color-ai-gradient-to)_149%)]";
 
 export interface GlobalHeaderProps
   extends Omit<React.HTMLAttributes<HTMLElement>, "title"> {
@@ -252,7 +252,7 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
                 variant="grey-outline"
                 aria-label="Messages"
                 onClick={onMessagesClick}
-                className="hover:bg-[#F2F4F7]"
+                className="hover:bg-header-icon-hover"
               >
                 <IconMessages size={16} />
               </Button>
@@ -272,7 +272,7 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
                   aria-expanded={notificationsOpen}
                   onClick={onNotificationsClick}
                   className={cn(
-                    "hover:bg-[#F2F4F7]",
+                    "hover:bg-header-icon-hover",
                     notificationsOpen && "border-brand"
                   )}
                 >
@@ -280,7 +280,7 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
                 </Button>
                 {notificationCount > 0 && (
                   <span
-                    className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full border-[1.5px] border-white bg-[#f04438] px-[3px] text-label-sm text-white"
+                    className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full border-[1.5px] border-white bg-notification-badge px-[3px] text-label-sm text-white"
                     aria-label={`${notificationCount} unread notifications`}
                   >
                     {notificationLabel}
@@ -309,7 +309,7 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
                 "flex h-7 min-w-[120px] max-w-[160px] flex-1 items-center gap-2 rounded-[4px] border bg-white py-1.5 pr-2.5 pl-3 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand/24",
                 availabilityOpen
                   ? "border-brand"
-                  : "border-line hover:border-gray-300 hover:bg-[#F2F4F7]"
+                  : "border-line hover:border-gray-300 hover:bg-header-icon-hover"
               )}
             >
               <span className="flex flex-1 items-center gap-2">
@@ -336,7 +336,7 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
                 aria-label="Profile"
                 aria-expanded={profileMenuOpen}
                 className={cn(
-                  "flex size-6 shrink-0 items-center justify-center rounded-full border border-white bg-[#2d72ff] text-label-sm font-normal text-white outline-none",
+                  "flex size-6 shrink-0 items-center justify-center rounded-full border border-white bg-avatar-brand-bg text-label-sm font-normal text-white outline-none",
                   profileMenuOpen
                     ? "shadow-[0_0_0_1px_rgba(77,139,255,0.5)]"
                     : "focus-visible:shadow-[0_0_0_1px_rgba(77,139,255,0.5)]"
