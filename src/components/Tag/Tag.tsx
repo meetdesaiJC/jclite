@@ -42,7 +42,7 @@ const tagVariants = cva(
         green: "bg-success-secondary text-success-text",
         red: "bg-error-secondary text-error",
         // Blue→purple wash over white, matching Figma Color=AI.
-        ai: "bg-[linear-gradient(99deg,rgba(0,76,230,0.15)_46%,rgba(172,112,255,0.15)_145%),linear-gradient(#fff,#fff)] text-foreground",
+        ai: "bg-[linear-gradient(99deg,rgba(0,76,230,0.15)_46%,rgba(172,112,255,0.15)_145%),linear-gradient(var(--color-white),var(--color-white))] text-foreground",
       },
       outline: {
         true: "bg-transparent",

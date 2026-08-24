@@ -177,19 +177,40 @@ stroke weights, not one SVG scaled — pass the size that matches your layout.
   green. Always run the builds too.
 - Each prototype has its own `vite.config.ts` with its own `root` and port.
   The root config is not their parent.
+- **`no-restricted-imports` ignores extglob negation.** A pattern like
+  `**/prototype-!(justcall-ai)/**` looks correct, matches nothing, and fails
+  silently — the rule appears to pass. `eslint.config.js` lists each
+  prototype's siblings explicitly instead. If you add a third prototype, add it
+  to the `PROTOTYPES` array there; nothing else needs changing.
+- After changing a lint rule, prove it fires. Paste a violation in, confirm the
+  error, then remove it. A rule that matches nothing is worse than no rule,
+  because it reads as a passing gate.
 
 ---
 
 ## 7. Verify before saying it works
 
-`typecheck` alone is not evidence. Run all four:
+`typecheck` alone is not evidence — it only covers `src/`. Run the full gate,
+which is the same set CI runs:
 
 ```bash
-npm run typecheck
-npm run build                                              # justcall-ai prototype
-npx vite build --config prototype-add-ons-flow/vite.config.ts
+npm run verify
+```
+
+That is `lint` + `typecheck` + both prototype builds + Storybook. Individually:
+
+```bash
+npm run lint            # architecture rules: boundaries + no raw colours
+npm run typecheck       # src/ only
+npm run build           # justcall-ai prototype
+npm run build:add-ons   # add-ons prototype
 npm run build-storybook
 ```
+
+`npm run lint` is the machine-checked version of §1 and §3. It currently
+reports 0 errors and 8 `exhaustive-deps` warnings — pre-existing, deliberately
+left alone, since changing effect dependencies in working prototype code is how
+prototypes break. Keep errors at zero; don't let the warning count grow.
 
 For visual changes, actually open the prototype and look at it. Dev servers are
 declared in `.claude/launch.json` (`justcall-ai` :5679, `add-ons` :5678, plus alt

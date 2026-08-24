@@ -130,8 +130,8 @@ function SectionHeader({ title, lastUpdated }: { title: string; lastUpdated?: bo
   );
 }
 
-const OUTBOUND_COLOR = "#1F8BC0";
-const INBOUND_COLOR = "#6C15E0";
+const OUTBOUND_COLOR = "var(--color-chart-outbound)";
+const INBOUND_COLOR = "var(--color-chart-inbound)";
 
 // Exact vertices exported from Figma's "Calls volume over time" chart
 // (node 40002621:32275) — kept as literal coordinates rather than a charting

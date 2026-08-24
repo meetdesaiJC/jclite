@@ -153,7 +153,7 @@ function AiReviewAssistBadge() {
       <span
         className="bg-clip-text text-label-sm text-transparent"
         style={{
-          backgroundImage: "linear-gradient(101deg, #3318ff 30%, #b46dff 149%)",
+          backgroundImage: "linear-gradient(101deg, var(--color-ai-gradient-from) 30%, var(--color-ai-gradient-to) 149%)",
         }}
       >
         AI Review Assist

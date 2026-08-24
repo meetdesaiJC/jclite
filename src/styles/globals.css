@@ -277,6 +277,14 @@
   --color-coach-red-text: var(--color-error-hover);
 
   /* ---------------------------------------------------------------- */
+  /* CHART SERIES TOKENS                                               */
+  /* Calls-volume series colours. Both prototypes' dashboards drew the  */
+  /* same two hexes independently before this.                          */
+  /* ---------------------------------------------------------------- */
+  --color-chart-outbound: #1f8bc0;
+  --color-chart-inbound: #6c15e0;
+
+  /* ---------------------------------------------------------------- */
   /* SIDENAV TOKENS                                                    */
   /* The dark navigation rail is its own small theme — a gradient       */
   /* surface with its own label, active-item and card colours that do   */

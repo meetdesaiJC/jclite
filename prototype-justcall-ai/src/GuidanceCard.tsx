@@ -182,8 +182,8 @@ function AiGlyphGradient({ id }: { id: string }) {
       y2="-3.737"
       gradientUnits="userSpaceOnUse"
     >
-      <stop stopColor="#3318FF" />
-      <stop offset="1" stopColor="#B46DFF" />
+      <stop stopColor="var(--color-ai-gradient-from)" />
+      <stop offset="1" stopColor="var(--color-ai-gradient-to)" />
     </linearGradient>
   );
 }
@@ -752,10 +752,10 @@ export function GuidanceResourceModal({
 }
 
 export function GuidanceKindDot({
-  kind,
   className,
 }: {
-  kind: GuidanceKind;
+  /** Accepted for call-site symmetry with the other Guidance* components. */
+  kind?: GuidanceKind;
   className?: string;
 }) {
   return (

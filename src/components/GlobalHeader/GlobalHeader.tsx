@@ -43,9 +43,9 @@ export interface GlobalHeaderBreadcrumbItem {
 // default, richening to 15% on hover/focus. No equivalent design token
 // (closest is Tag's color="ai", which uses a different angle/opacity).
 const LIVE_CALL_SUPPORT_BG =
-  "bg-[linear-gradient(110deg,rgba(0,76,230,0.08)_46%,rgba(180,109,255,0.08)_145%),linear-gradient(90deg,#fff_0%,#fff_100%)]";
+  "bg-[linear-gradient(110deg,rgba(0,76,230,0.08)_46%,rgba(180,109,255,0.08)_145%),linear-gradient(90deg,var(--color-white)_0%,var(--color-white)_100%)]";
 const LIVE_CALL_SUPPORT_BG_HOVER =
-  "hover:bg-[linear-gradient(110deg,rgba(0,76,230,0.15)_46%,rgba(172,112,255,0.15)_145%),linear-gradient(90deg,#fff_0%,#fff_100%)] focus-visible:bg-[linear-gradient(110deg,rgba(0,76,230,0.15)_46%,rgba(172,112,255,0.15)_145%),linear-gradient(90deg,#fff_0%,#fff_100%)]";
+  "hover:bg-[linear-gradient(110deg,rgba(0,76,230,0.15)_46%,rgba(172,112,255,0.15)_145%),linear-gradient(90deg,var(--color-white)_0%,var(--color-white)_100%)] focus-visible:bg-[linear-gradient(110deg,rgba(0,76,230,0.15)_46%,rgba(172,112,255,0.15)_145%),linear-gradient(90deg,var(--color-white)_0%,var(--color-white)_100%)]";
 // Figma gradient text fill for the "Live Call Support" label — likewise a
 // one-off with no matching token, deepened slightly on hover/focus.
 const LIVE_CALL_SUPPORT_TEXT =
