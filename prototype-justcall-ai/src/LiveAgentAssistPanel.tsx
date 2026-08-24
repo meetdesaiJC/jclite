@@ -5,6 +5,7 @@ import {
   IconChevronUp,
   IconInfoCircle,
 } from "@/components/Icon";
+import { WaveformLoader } from "@/components/WaveformLoader";
 import { cn } from "@/lib/utils";
 import {
   SEED_GUIDANCE,
@@ -722,20 +723,40 @@ const PREPARING_LEAD_MS = 2000;
  * The column before anything has landed. Agent Assist is listening either way;
  * this only says so, in one line, and stops as soon as the first card arrives.
  * It never comes back — once cards exist, the stream is the state.
+ *
+ * Driven by `show` rather than mounted conditionally, because the waveform
+ * owns its own exit: unmounting the row the instant the first card lands would
+ * cut that off, and the wait would end with a pop in the middle of a call.
  */
 function GuidanceListeningState({
+  show,
   preparing,
-  reduced,
 }: {
+  show: boolean;
   preparing: boolean;
-  reduced: boolean;
 }) {
+  const [gone, setGone] = useState(false);
+
+  useEffect(() => {
+    if (show) setGone(false);
+  }, [show]);
+
+  if (!show && gone) return null;
+
   return (
-    <div className="flex items-center gap-1.5 px-0.5 pt-3.5" aria-live="polite">
-      <GuidanceSparklesIcon
-        size={14}
-        className={cn("shrink-0", !reduced && "assist-listen-sparkle")}
-      />
+    <div
+      className={cn(
+        "flex items-center gap-1.5 px-0.5 pt-3.5",
+        !show && "assist-listen-out"
+      )}
+      aria-live="polite"
+    >
+      {/* Sits in the sparkle's slot. The wait has no progress to report, so
+          the indicator says "working" and nothing more — and it says it with
+          movement the agent can ignore while they are on a call. */}
+      <span className="text-ai">
+        <WaveformLoader show={show} onExited={() => setGone(true)} />
+      </span>
       {/* Both lines share one grid cell, so the swap crossfades in place. */}
       <span className="grid text-paragraph-sm text-muted-foreground">
         <span
@@ -855,20 +876,21 @@ export function LiveAgentAssistPanel({
     setCollapsedKnowledge(new Set());
   }, [scenario.id]);
 
-  // Knowledge collapses as soon as the conversation asks something else (§32).
+  // Knowledge answers a question that was just asked, so it lands open and
+  // stays open — the agent closes it when they're done with it, and an answer
+  // arriving for the next question doesn't fold the last one away (§32).
   const knowledgeSig = snapshot.knowledge.map((item) => item.id).join("|");
   useEffect(() => {
     const arriving = snapshot.knowledge.filter((item) => !knownIds.has(item.id));
     if (arriving.length === 0) return;
-    const newest = snapshot.knowledge[snapshot.knowledge.length - 1];
     setKnownIds(new Set(snapshot.knowledge.map((item) => item.id)));
-    setCollapsedKnowledge(
-      new Set(
-        snapshot.knowledge
-          .filter((item) => item.id !== newest?.id)
-          .map((item) => item.id)
-      )
-    );
+    // A replay reuses ids, so an id the agent closed last time has to be let go.
+    setCollapsedKnowledge((current) => {
+      if (!arriving.some((item) => current.has(item.id))) return current;
+      const next = new Set(current);
+      arriving.forEach((item) => next.delete(item.id));
+      return next;
+    });
     // Arrival drives this; the list itself is derived from elapsed time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [knowledgeSig]);
@@ -1043,10 +1065,12 @@ export function LiveAgentAssistPanel({
       key={entry.suggestion.id}
       item={entry.suggestion}
       reduced={reduced}
-      expanded={stream.expandedId === entry.suggestion.id}
+      expanded={stream.isExpanded(entry.suggestion.id)}
       status={entry.status}
       relevantAgain={stream.relevantAgainIds.has(entry.suggestion.id)}
       arriving={stream.arrivingIds.has(entry.suggestion.id)}
+      arrivalIndex={stream.arrivingIds.get(entry.suggestion.id) ?? 0}
+      newLabel={stream.newLabelIds.has(entry.suggestion.id)}
       attention={stream.attentionIds.has(entry.suggestion.id)}
       onToggle={() => stream.toggleCard(entry.suggestion.id)}
       onViewResource={setViewingResource}
@@ -1149,7 +1173,7 @@ export function LiveAgentAssistPanel({
       >
         <GuidanceSparklesIcon className="size-4 shrink-0" />
         <p className="text-label-md-semi text-foreground">Conversation guidance</p>
-        {/* Something landed while they were reading — said once, quietly (§3). */}
+        {/* Something just landed — said once, quietly, then gone (§3). */}
         {stream.newCount > 0 ? (
           <p
             aria-live="polite"
@@ -1170,9 +1194,7 @@ export function LiveAgentAssistPanel({
         )}
         {...stream.scrollHandlers}
       >
-        {nothingYet ? (
-          <GuidanceListeningState preparing={preparing} reduced={reduced} />
-        ) : null}
+        <GuidanceListeningState show={nothingYet} preparing={preparing} />
 
         {stream.criticalAlert ? (
           <CriticalGuidanceAlert

@@ -1,4 +1,4 @@
-import { useState, type ReactNode, type Ref } from "react";
+import { useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import { IconAlertTriangleFilled, IconCircleCheckFilled } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import { type GuidanceResource } from "./guidanceData";
@@ -18,40 +18,65 @@ import type { GuidanceCardStatus } from "./useGuidanceStream";
 /**
  * State chip. Quiet by design: it tells the agent something landed without
  * asking for their attention — no pulse, no glow (§11).
+ *
+ * Unread is a dot rather than a word, because it has to outlive the entrance
+ * pulse without competing with the card title for the rest of the call. The
+ * word "New" rides alongside it for the first few seconds only — long enough
+ * to say what the dot means, short enough that a column of closed cards
+ * doesn't turn into a wall of labels (§12).
  */
 export function GuidanceStateBadge({
   status,
   relevantAgain,
   expanded,
+  newLabel = false,
   reduced,
 }: {
   status?: GuidanceCardStatus;
   relevantAgain?: boolean;
   expanded?: boolean;
+  /** Still inside the window where the dot spells itself out. */
+  newLabel?: boolean;
   reduced?: boolean;
 }) {
+  // Open is read, so the unread dot is only ever about a card the agent closed.
+  // The words stay either way: "Earlier" explains why an open card just sank
+  // down the column, and "Relevant again" why one came back up.
+  const unread = !expanded && !relevantAgain && status === "new";
   const label = relevantAgain
     ? "Relevant again"
-    : expanded
-      ? null
-      : status === "new"
-        ? "New"
-        : status === "expired"
-          ? "Earlier"
-          : null;
-  if (!label) return null;
+    : status === "expired"
+      ? "Earlier"
+      : null;
+  if (!unread && !label) return null;
+
+  const word = cn(
+    "text-[11px] leading-4 font-medium whitespace-nowrap",
+    status === "expired" && !relevantAgain
+      ? "text-muted-foreground"
+      : "text-brand"
+  );
 
   return (
     <span
       className={cn(
-        "shrink-0 text-[11px] leading-4 font-medium whitespace-nowrap",
-        status === "expired" && !relevantAgain
-          ? "text-muted-foreground"
-          : "text-brand",
+        "flex shrink-0 items-center gap-1.5",
         !reduced && "assist-badge-in"
       )}
     >
-      {label}
+      {unread ? (
+        <>
+          <span
+            aria-hidden="true"
+            className="size-1.5 shrink-0 rounded-full bg-brand"
+          />
+          {/* The dot carries no text of its own, so the word is either shown
+              or read out — never neither. */}
+          {newLabel ? <span className={word}>New</span> : <span className="sr-only">New</span>}
+        </>
+      ) : (
+        <span className={word}>{label}</span>
+      )}
     </span>
   );
 }
@@ -65,6 +90,7 @@ export function LiveGuidanceCard({
   attention = false,
   status,
   relevantAgain = false,
+  newLabel = false,
   onToggle,
   onViewResource,
   actionSlot,
@@ -78,6 +104,7 @@ export function LiveGuidanceCard({
   attention?: boolean;
   status?: GuidanceCardStatus;
   relevantAgain?: boolean;
+  newLabel?: boolean;
   onToggle?: () => void;
   onViewResource: (resource: GuidanceResource) => void;
   /**
@@ -115,10 +142,10 @@ export function LiveGuidanceCard({
             status={status}
             relevantAgain={relevantAgain}
             expanded={expanded}
+            newLabel={newLabel}
             reduced={reduced}
           />
         }
-        className={pulse ? "assist-header-attention" : undefined}
       />
 
       <div
@@ -169,9 +196,11 @@ export function InCallGuidanceSlot({
   reduced,
   expanded,
   arriving,
+  arrivalIndex = 0,
   attention,
   status,
   relevantAgain,
+  newLabel,
   onToggle,
   onViewResource,
   onEngage,
@@ -184,9 +213,16 @@ export function InCallGuidanceSlot({
   reduced: boolean;
   expanded: boolean;
   arriving: boolean;
+  /**
+   * Place in the burst this card arrived with. Cards that land together enter
+   * one `fast` step apart so the column reads as a sequence rather than a
+   * shove — see `--assist-stagger` in styles.css (§12).
+   */
+  arrivalIndex?: number;
   attention: boolean;
   status?: GuidanceCardStatus;
   relevantAgain?: boolean;
+  newLabel?: boolean;
   onToggle: () => void;
   onViewResource: (resource: GuidanceResource) => void;
   onEngage: () => void;
@@ -204,6 +240,15 @@ export function InCallGuidanceSlot({
         (reduced || !arriving) && "grid grid-rows-[1fr]",
         className
       )}
+      // Inherited by the card and its pulse, so all three phases of the
+      // arrival stay on the same clock.
+      style={
+        arriving && arrivalIndex > 0
+          ? ({
+              "--assist-stagger": `calc(${arrivalIndex} * var(--duration-fast))`,
+            } as CSSProperties)
+          : undefined
+      }
       onPointerEnter={onEngage}
       onPointerLeave={onDisengage}
       onFocusCapture={onEngage}
@@ -217,6 +262,7 @@ export function InCallGuidanceSlot({
           attention={attention}
           status={status}
           relevantAgain={relevantAgain}
+          newLabel={newLabel}
           onToggle={onToggle}
           onViewResource={onViewResource}
           actionSlot={actionSlot}

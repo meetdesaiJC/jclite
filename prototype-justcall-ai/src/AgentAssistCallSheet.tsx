@@ -403,8 +403,9 @@ function AssistStream({
         playhead={playhead}
         reduced={reduced}
         placedCards={stream.cards}
-        expandedId={stream.expandedId}
+        isExpanded={stream.isExpanded}
         arrivingIds={stream.arrivingIds}
+        newLabelIds={stream.newLabelIds}
         attentionIds={stream.attentionIds}
         relevantAgainIds={stream.relevantAgainIds}
         onToggleCard={stream.toggleCard}
@@ -1123,8 +1124,9 @@ function FullScriptList({
   playhead,
   reduced,
   placedCards,
-  expandedId,
+  isExpanded,
   arrivingIds,
+  newLabelIds,
   attentionIds,
   relevantAgainIds,
   onToggleCard,
@@ -1137,8 +1139,11 @@ function FullScriptList({
   playhead: number;
   reduced: boolean;
   placedCards: GuidanceStreamCard[];
-  expandedId: string | null;
-  arrivingIds: Set<string>;
+  /** Cards are open unless the agent closed them — see useGuidanceStream. */
+  isExpanded: (id: string) => boolean;
+  /** Card id → its place in the burst it arrived with, for the entrance stagger. */
+  arrivingIds: Map<string, number>;
+  newLabelIds: Set<string>;
   attentionIds: Set<string>;
   relevantAgainIds: Set<string>;
   onToggleCard: (id: string) => void;
@@ -1207,8 +1212,10 @@ function FullScriptList({
                 key={card.id}
                 item={card}
                 reduced={reduced}
-                expanded={expandedId === card.id}
+                expanded={isExpanded(card.id)}
                 arriving={arrivingIds.has(card.id)}
+                arrivalIndex={arrivingIds.get(card.id) ?? 0}
+                newLabel={newLabelIds.has(card.id)}
                 attention={attentionIds.has(card.id)}
                 status={status}
                 relevantAgain={relevantAgainIds.has(card.id)}
