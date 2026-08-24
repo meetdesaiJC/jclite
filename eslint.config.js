@@ -10,6 +10,9 @@ import reactHooks from "eslint-plugin-react-hooks";
 //      reach sideways into each other.
 //   2. No raw colours outside the token file. A hex written in a
 //      component is a colour that a token change can never reach.
+//   3. No raw timings outside the motion token file. Same argument: a
+//      `duration-[180ms]` is a duration the scale can never reach, and
+//      motion drifts faster than colour because nobody can eyeball 20ms.
 //
 // Both were violated before the restructure, and both are cheap to
 // re-violate by accident, which is why they are machine-checked.
@@ -36,6 +39,26 @@ const COLOUR_EXEMPT = [
 const PROTOTYPES = ["justcall-ai", "add-ons-flow"];
 
 const HEX_COLOUR = String.raw`/#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b/`;
+
+/**
+ * Matches an off-system timing anywhere in a string: `duration-[180ms]`,
+ * `duration-150` (Tailwind's own numeric scale bypasses ours),
+ * `ease-[cubic-bezier(...)]`, a bare `cubic-bezier(` in an inline style, or
+ * Tailwind's default `ease-in` / `ease-out` / `ease-linear` keywords.
+ *
+ * `duration-instant` etc. do not match — the alternatives all require a
+ * digit or a bracket after `duration-`.
+ */
+const RAW_TIMING = String.raw`/duration-(?:\[|\d)|ease-\[|cubic-bezier\(|\bease-(?:in|out|in-out|linear)\b|\b\d+ms\b/`;
+
+const NO_RAW_TIMING = {
+  selector: `Literal[value=${RAW_TIMING}], TemplateElement[value.raw=${RAW_TIMING}]`,
+  message:
+    'Raw timing. Use a motion token: className="duration-base ease-entrance" ' +
+    "or var(--duration-base) / var(--ease-entrance). For a number JS needs, " +
+    "import { DURATION } from \"@/lib/motion\". New steps go in " +
+    "src/styles/tokens/motion.css — see CLAUDE.md §4.",
+};
 
 const NO_RAW_COLOUR = {
   selector: `Literal[value=${HEX_COLOUR}], TemplateElement[value.raw=${HEX_COLOUR}], JSXText[value=${HEX_COLOUR}]`,
@@ -83,6 +106,24 @@ export default tseslint.config(
     files: ["src/**/*.{ts,tsx}", "prototype-*/src/**/*.{ts,tsx}"],
     ignores: COLOUR_EXEMPT,
     rules: { "no-restricted-syntax": ["error", NO_RAW_COLOUR] },
+  },
+
+  // ── Rule 3: no raw timings ─────────────────────────────────────────
+  // src/ only, for now. The prototypes carry ~35 one-off durations from
+  // before the scale existed; erroring on them would demand a mass edit of
+  // working demo code, which §1 says not to do casually. They get migrated
+  // deliberately, then this `files` list grows to include them — same
+  // staging as `typecheck:all` in §8.
+  //
+  // no-restricted-syntax does not merge across config objects: the last
+  // matching block wins outright. So src/ has to restate NO_RAW_COLOUR
+  // alongside NO_RAW_TIMING or it would silently lose colour checking.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: COLOUR_EXEMPT,
+    rules: {
+      "no-restricted-syntax": ["error", NO_RAW_COLOUR, NO_RAW_TIMING],
+    },
   },
 
   // ── Rule 1: dependencies point inward ──────────────────────────────

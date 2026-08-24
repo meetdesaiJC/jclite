@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import * as React from "react";
 import { Alert } from "./Alert";
 
 const meta = {
@@ -133,6 +134,37 @@ export const AllVariants: Story = {
             {body}
           </Alert>
         ))}
+      </div>
+    );
+  },
+};
+
+/**
+ * Passing `open` hands presence to the Alert, so dismissing plays an exit
+ * instead of the node disappearing. Without `open` the consumer mounts and
+ * unmounts it and there is no animation — nothing to animate, since React
+ * has already removed the node.
+ */
+export const Dismissible: Story = {
+  args: {
+    variant: "info",
+    title: "Info message",
+    children: "Dismiss this and it animates out instead of vanishing.",
+  },
+  render: (args) => {
+    const [open, setOpen] = React.useState(true);
+    return (
+      <div className="flex flex-col items-start gap-4">
+        <Alert {...args} open={open} onClose={() => setOpen(false)} />
+        {!open && (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="text-label-md text-brand hover:underline"
+          >
+            Bring it back
+          </button>
+        )}
       </div>
     );
   },

@@ -2,6 +2,8 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { DURATION } from "@/lib/motion";
+import { usePresence } from "@/lib/usePresence";
 
 /* Modal sizes — synced from Figma (Design System 2.0).
    sm 400 · md 640 · lg 968 · xl 1156. Below 1016px viewports the modal
@@ -21,6 +23,10 @@ const modalVariants = cva(
     defaultVariants: { size: "md" },
   }
 );
+
+/* Exit step for `.modal-panel[data-state="closed"]` in base.css — the
+   dialog stays mounted this long so the exit animation can finish. */
+const MODAL_CLOSE_MS = DURATION.base;
 
 function CloseIcon() {
   return (
@@ -79,8 +85,10 @@ export function Modal({
   bodyClassName,
 }: ModalProps) {
   const dialogRef = React.useRef<HTMLDivElement>(null);
+  const { mounted, state } = usePresence(open, MODAL_CLOSE_MS);
 
-  // Escape to close + body scroll lock while open.
+  // Escape and the focus trap follow `open`, not `mounted`: a dialog on its
+  // way out should not be catching keys.
   React.useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -100,13 +108,20 @@ export function Modal({
       }
     };
     document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, closeOnEscape, onClose]);
+
+  // Scroll lock is keyed to `mounted`, not `open`. Releasing it the instant
+  // `open` flips false would restore the scrollbar mid-exit and shift the
+  // page under a dialog that is still on screen.
+  React.useEffect(() => {
+    if (!mounted) return;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open, closeOnEscape, onClose]);
+  }, [mounted]);
 
   // Move focus into the dialog on open.
   React.useEffect(() => {
@@ -115,14 +130,15 @@ export function Modal({
     (node ?? dialogRef.current)?.focus();
   }, [open]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   const hasHeader = Boolean(title || description || icon || showCloseButton);
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       <div
-        className="absolute inset-0 bg-foreground/50"
+        className="modal-scrim absolute inset-0 bg-foreground/50"
+        data-state={state}
         aria-hidden="true"
         onClick={closeOnOverlayClick ? onClose : undefined}
       />
@@ -131,7 +147,8 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        className={cn(modalVariants({ size }), className)}
+        data-state={state}
+        className={cn("modal-panel", modalVariants({ size }), className)}
       >
         {hasHeader && (
           <div className="flex items-start gap-3 p-6 pb-0">

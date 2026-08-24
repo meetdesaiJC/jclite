@@ -24,9 +24,18 @@ const trackSize = {
   md: "h-6 w-[38.4px]",
 } as const;
 
-const knobPosition = {
-  sm: { off: "left-0.5", on: "left-[14px]" },
-  md: { off: "left-[2.4px]", on: "left-[16.8px]" },
+// The knob keeps a single resting `left` and travels by `transform`, so the
+// move composites rather than laying out — §4: animate transform, not
+// layout properties. The `on` offsets are the old `left` deltas
+// (14 - 2 = 12px, 16.8 - 2.4 = 14.4px), so it lands where it always did.
+const knobRest = {
+  sm: "left-0.5",
+  md: "left-[2.4px]",
+} as const;
+
+const knobTravel = {
+  sm: { off: "translate-x-0", on: "translate-x-[12px]" },
+  md: { off: "translate-x-0", on: "translate-x-[14.4px]" },
 } as const;
 
 const knobSize = {
@@ -123,9 +132,19 @@ export const Toggle = React.forwardRef<HTMLInputElement, ToggleProps>(
         <span
           aria-hidden="true"
           className={cn(
-            "pointer-events-none absolute top-1/2 -translate-y-1/2 rounded-full transition-all",
+            "pointer-events-none absolute top-1/2 rounded-full",
+            // `translate`, not `transform`: Tailwind v4 compiles
+            // `translate-x-*` to the standalone `translate` property, so a
+            // transition on `transform` matches nothing and the knob snaps.
+            // Travelling in place, so `ease-standard` rather than an
+            // entrance/exit curve. Snaps under reduced motion — nothing
+            // waits on this transition, so there is no presence to break.
+            "transition-[translate,background-color] duration-base ease-standard",
+            "motion-reduce:transition-none",
             knobSize[size],
-            knobPosition[size][isChecked ? "on" : "off"],
+            knobRest[size],
+            "-translate-y-1/2",
+            knobTravel[size][isChecked ? "on" : "off"],
             knobColorClass
           )}
         />

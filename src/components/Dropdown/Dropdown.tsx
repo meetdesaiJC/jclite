@@ -84,10 +84,10 @@ function MenuCheckbox({
  * A dropdown menu lets people pick one or many choices from a list — used in
  * forms and for filtering / sorting UI.
  *
- * Motion (globals.css): open 160ms ease-out fade + translateY(-4px→0);
- * close 120ms ease-in fade + translateY(0→-3px); chevron 160ms 0°↔180°;
- * item hover 80ms; checkmark 120ms. Overlay only — never pushes layout.
- * Reduced motion keeps opacity and drops translation.
+ * Motion (base.css): open base/entrance fade + translateY(-4px→0); close
+ * fast/exit fade + translateY(0→-3px); chevron base 0°↔180°; item hover
+ * micro; checkmark fast. Overlay only — never pushes layout. Reduced motion
+ * keeps opacity and drops translation.
  */
 
 /* ------------------------------------------------------------------ */

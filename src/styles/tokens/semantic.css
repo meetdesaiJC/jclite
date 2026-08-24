@@ -33,6 +33,10 @@
 
   --color-line: #e4e7ec; /* border/primary — grey outline border */
   --color-surface-hover: #f9fafb; /* bg/primary-hover — grey outline hover */
+  /* Pressed fill — one palette step past --color-muted, which is where
+     hover lands. Any control whose press has to read as "darker than
+     hover" without previewing a selected surface uses this. */
+  --color-surface-active: var(--color-gray-200);
 
   --color-disabled-bg: #e4e7ec; /* bg/tertiary — disabled solid fill */
   --color-disabled-fg: #98a2b3; /* text/disabled, icon/disabled */

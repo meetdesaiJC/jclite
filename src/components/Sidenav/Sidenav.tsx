@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { DURATION } from "@/lib/motion";
 import {
   JustCallLogo,
   IconDashboard,
@@ -135,7 +136,8 @@ type NavBodyMotion =
   | "enter-from-left"
   | "enter-from-right";
 
-const NAV_EXIT_MS = 150;
+// Matches .sidenav-body exit transitions in base.css (--duration-base).
+const NAV_EXIT_MS = DURATION.base;
 
 function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;

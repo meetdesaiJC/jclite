@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { DURATION } from "@/lib/motion";
+import { trackNotes } from "./notesTelemetry";
 
 /**
  * Notes' first showing.
@@ -10,10 +12,13 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
  * toolbar icon and the icon lights up as it lands. That is the whole lesson:
  * *this* is where Notes went, so *this* is where it comes back from.
  *
- * It runs once per agent, not once per call, and it only runs when it can be
- * ignored safely: the workspace has room for the column, no other right-side
- * panel is up, and the notes are empty. Any real touch of Notes during the
- * pause ends it — a panel the agent is already using must not be taken away.
+ * It runs once per connected call, and only when it can be ignored safely: the
+ * workspace has room for the column, no other right-side panel is up, and the
+ * notes are empty. Any real touch of Notes during the pause ends it — a panel
+ * the agent is already using must not be taken away, and once the agent opens
+ * Notes themselves it stays open for the rest of that call.
+ * A cursor resting on the panel is not a touch, but it is attention, so it
+ * holds the collapse rather than cancelling it.
  *
  * It also waits for someone to be looking. A backgrounded tab still runs its
  * timers, so without that check the one introduction an agent ever gets could
@@ -21,27 +26,40 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
  * something else. Hidden is a reason to wait, not a reason to give up.
  */
 
-const STORAGE_KEY = "jcai.dialer.notes-discovery-seen.v1";
-
+/**
+ * Transition lengths come from the shared scale — the panel, the travelling
+ * header and the toolbar pulse are all animating, so they are all on it. The
+ * plain numbers below are *waits*: nothing moves during a settle beat, a
+ * dwell, or the hold after a pulse, so there is no travel to size them by.
+ */
 export const NOTES_DISCOVERY = {
   /** A beat after the workspace lands, so Notes is not one more thing arriving. */
   settleMs: 320,
-  /** Long enough to read the panel, short enough not to feel like a modal. */
-  dwellMs: 1700,
+  /** Long enough to read the panel and start typing in it if that is why it opened. */
+  dwellMs: 3000,
   /** Textarea, counter and close button clear first; the header stays. */
-  bodyFadeMs: 140,
-  /** The header's trip to the toolbar — inside the column's own 240ms close. */
-  flightMs: 260,
+  bodyFadeMs: DURATION.fast,
+  /** The header's trip to the toolbar, and the panel's own compression with it. */
+  flightMs: DURATION.slow,
   /** It only clears once it is over the icon, not on the way there. */
-  fadeMs: 120,
-  fadeDelayMs: 140,
+  fadeMs: DURATION.fast,
+  fadeDelayMs: DURATION.fast,
   /** Toolbar glyph is 20px; the header meets it at roughly its size. */
   endScale: 0.5,
   /** Two frames, in case none arrive — the move must not depend on rAF alone. */
   armMs: 48,
-  /** Confirmation, not a notification — one small pulse and back to rest. */
-  pulseMs: 140,
+  /**
+   * The icon absorbing the landing: overshoot, dip, settle. On the scale at
+   * `slow` because a bounce covers more ground than a tint does — the three
+   * segments inside it are what keep it quick rather than springy.
+   */
+  pulseMs: DURATION.slow,
   pulseHoldMs: 320,
+  /**
+   * After the cursor leaves. Long enough that crossing the panel on the way
+   * somewhere else doesn't hand the agent a collapse under their pointer.
+   */
+  hoverResumeMs: 300,
 } as const;
 
 /** Geometry for the travelling header, in viewport coordinates. */
@@ -58,24 +76,6 @@ export type NotesDiscoveryFlight = {
   /** False for the frame that paints it in place, true for the one that moves it. */
   moving: boolean;
 };
-
-export function notesDiscoverySeen() {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === "true";
-  } catch {
-    // Private mode: no memory, so the introduction runs again. Better than
-    // never running it at all.
-    return false;
-  }
-}
-
-export function markNotesDiscoverySeen() {
-  try {
-    localStorage.setItem(STORAGE_KEY, "true");
-  } catch {
-    /* Nothing to keep it in. The call still works. */
-  }
-}
 
 /** `waiting` is the settle beat before the panel opens; `leaving` is the trip. */
 type Stage = "off" | "waiting" | "dwell" | "leaving" | "done";
@@ -137,6 +137,12 @@ export function useNotesDiscovery({
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
 
+  // The cursor is on the panel, and — separately — the collapse came due while
+  // it was. The second outlives the first: that is what makes leaving the
+  // panel start the collapse rather than just clearing a flag.
+  const hoverRef = useRef(false);
+  const heldRef = useRef(false);
+
   const timersRef = useRef<number[]>([]);
   const rafRef = useRef(0);
 
@@ -157,6 +163,7 @@ export function useNotesDiscovery({
   useEffect(
     () => () => {
       clear();
+      heldRef.current = false;
       if (stageRef.current === "waiting" || stageRef.current === "dwell") {
         stageRef.current = "off";
       }
@@ -166,7 +173,16 @@ export function useNotesDiscovery({
 
   const collapse = useCallback(() => {
     if (stageRef.current !== "dwell") return;
+
+    // Reading the panel is a reason to keep it. Hold, and let the pointer
+    // leaving be what restarts this — the collapse is owed, not cancelled.
+    if (hoverRef.current) {
+      heldRef.current = true;
+      return;
+    }
+    heldRef.current = false;
     stageRef.current = "leaving";
+    trackNotes("notes_intro_auto_collapsed");
 
     // Read the geometry while the panel is still where it was — the close
     // below is what starts taking it away.
@@ -233,12 +249,18 @@ export function useNotesDiscovery({
     // hidden window is about the agent, and they may still be back inside it.
     if (!visible) return;
 
-    // One shot, taken the moment the workspace settles. If the conditions are
-    // wrong now they are not going to become right in a way worth acting on —
-    // Notes appearing on its own halfway through a call is an interruption,
-    // not an introduction. The flag is left unset so a roomier window, or a
-    // call that starts with empty notes, still gets the introduction later.
-    if (busy || hasContent || !hasRoom || notesDiscoverySeen()) {
+    // One shot per call, taken the moment the workspace settles. If the
+    // conditions are wrong now they are not going to become right in a way
+    // worth acting on — Notes appearing on its own halfway through a call is an
+    // interruption, not an introduction. The next call is a fresh chance.
+    if (busy || hasContent || !hasRoom) {
+      // Says which gate closed. A call that quietly gets no introduction is
+      // indistinguishable from a broken one otherwise.
+      console.debug("[notes] introduction skipped", {
+        busy,
+        hasContent,
+        hasRoom,
+      });
       stageRef.current = "done";
       return;
     }
@@ -253,10 +275,8 @@ export function useNotesDiscovery({
         return;
       }
       stageRef.current = "dwell";
-      // Written when the panel is actually on screen: what the flag records is
-      // that the agent has *seen* this, not that we once intended it.
-      markNotesDiscoverySeen();
       openRef.current();
+      trackNotes("notes_intro_shown", { dwellMs: NOTES_DISCOVERY.dwellMs });
       later(NOTES_DISCOVERY.dwellMs, collapse);
     });
   }, [busy, collapse, hasContent, hasRoom, later, ready, visible]);
@@ -269,8 +289,26 @@ export function useNotesDiscovery({
   const cancel = useCallback(() => {
     if (stageRef.current !== "waiting" && stageRef.current !== "dwell") return;
     clear();
+    heldRef.current = false;
     stageRef.current = "done";
+    trackNotes("notes_intro_cancelled_by_interaction");
   }, [clear]);
+
+  /**
+   * Hover is the one signal that pauses instead of ending. It is also the only
+   * one that can arrive *after* the collapse was due, which is why leaving has
+   * to check for a held collapse rather than assume the timer is still coming.
+   */
+  const onPanelEnter = useCallback(() => {
+    hoverRef.current = true;
+  }, []);
+
+  const onPanelLeave = useCallback(() => {
+    hoverRef.current = false;
+    if (!heldRef.current) return;
+    heldRef.current = false;
+    later(NOTES_DISCOVERY.hoverResumeMs, collapse);
+  }, [collapse, later]);
 
   return {
     flight,
@@ -278,5 +316,7 @@ export function useNotesDiscovery({
     handingOff: flight !== null,
     pulsing,
     cancel,
+    onPanelEnter,
+    onPanelLeave,
   };
 }

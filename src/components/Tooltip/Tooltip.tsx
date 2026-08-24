@@ -2,6 +2,8 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { DURATION } from "@/lib/motion";
+import { usePresence } from "@/lib/usePresence";
 import { IconClose } from "@/components/Icon";
 import arrowLight from "./assets/arrow-light.svg";
 import arrowDark from "./assets/arrow-dark.svg";
@@ -349,6 +351,9 @@ export const Tooltip = React.forwardRef<HTMLDivElement, TooltipProps>(
 Tooltip.displayName = "Tooltip";
 
 /* ------------------------------------------------------------------ */
+/* Exit step for `.tooltip-presence[data-state="closed"]` in base.css. */
+const TOOLTIP_EXIT_MS = DURATION.micro;
+
 /* Trigger — hover / focus wrapper with a brief open delay.           */
 /* Default placement is above the trigger (Figma: icon buttons).      */
 /* ------------------------------------------------------------------ */
@@ -506,9 +511,16 @@ export function TooltipTrigger({
   React.useEffect(() => () => clearTimer(), []);
 
   const show = open && !disabled;
+  // No API change needed here — Tooltip already owns `open`. It just used to
+  // unmount the bubble in the same tick, leaving nothing to animate.
+  const { mounted, state } = usePresence(show, TOOLTIP_EXIT_MS);
 
+  // Keyed on `mounted`, not `show`. `show` flips true one render *before* the
+  // bubble exists, so positioning off it would run against a null ref and
+  // never re-run — the bubble would sit at top:0 left:0. Staying subscribed
+  // through the exit also keeps it anchored while it fades.
   React.useLayoutEffect(() => {
-    if (!show) return;
+    if (!mounted) return;
     const update = () => {
       const trigger = triggerRef.current;
       const bubble = bubbleRef.current;
@@ -525,7 +537,7 @@ export function TooltipTrigger({
       window.removeEventListener("scroll", update, true);
       window.removeEventListener("resize", update);
     };
-  }, [show, placement]);
+  }, [mounted, placement]);
 
   const child = React.cloneElement(children, {
     onMouseEnter: (event: React.MouseEvent) => {
@@ -567,12 +579,13 @@ export function TooltipTrigger({
   return (
     <span ref={triggerRef} className={cn("relative inline-flex", className)}>
       {child}
-      {show && typeof document !== "undefined"
+      {mounted && typeof document !== "undefined"
         ? createPortal(
             <span
               ref={bubbleRef}
+              data-state={state}
               className={cn(
-                "fixed z-[100]",
+                "tooltip-presence fixed z-[100]",
                 interactive ? "pointer-events-auto" : "pointer-events-none"
               )}
               style={{ top: 0, left: 0 }}

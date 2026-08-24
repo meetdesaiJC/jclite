@@ -1,30 +1,23 @@
-import * as React from "react";
+import { DURATION } from "@/lib/motion";
+import { usePresence, type PresenceState } from "@/lib/usePresence";
 
 /**
  * Stay mounted this long after `open` goes false so `.dropdown-panel`
- * `[data-state="closed"]` (120ms ease-in in globals.css) can finish.
+ * `[data-state="closed"]` (--duration-fast / --ease-exit, base.css) can
+ * finish.
  */
-export const DROPDOWN_CLOSE_MS = 120;
+export const DROPDOWN_CLOSE_MS = DURATION.fast;
 
-export type DropdownPresenceState = "open" | "closed";
+export type DropdownPresenceState = PresenceState;
 
 /**
  * Keeps an overlay mounted through its close animation.
  * `state` maps onto `.dropdown-panel[data-state]`.
+ *
+ * A thin wrapper over `usePresence` — kept because `.dropdown-panel` is the
+ * shared menu skin, so "dropdown presence" means one specific duration and
+ * callers should not have to know which.
  */
 export function useDropdownPresence(open: boolean) {
-  const [mounted, setMounted] = React.useState(open);
-
-  React.useEffect(() => {
-    if (open) {
-      setMounted(true);
-      return;
-    }
-    if (!mounted) return;
-    const timer = window.setTimeout(() => setMounted(false), DROPDOWN_CLOSE_MS);
-    return () => window.clearTimeout(timer);
-  }, [open, mounted]);
-
-  const state: DropdownPresenceState = open && mounted ? "open" : "closed";
-  return { mounted, state };
+  return usePresence(open, DROPDOWN_CLOSE_MS);
 }

@@ -873,7 +873,7 @@ Best,`,
     ],
     wrapUp: {
       summary:
-        "Elena is on Aircall today and evaluating JustCall so calling, SMS, and CRM live in one place. After-hours calls go to voicemail with no owner — about twenty missed leads a week — and nothing logs to Salesforce unless someone remembers. She wants a Thursday afternoon working session with her ops lead, and needs a one-pager to sell a higher price internally versus Aircall.",
+        "Elena is on Aircall today and evaluating JustCall so calling, SMS, and CRM live in one place. After-hours calls go to voicemail with no owner, which costs her about twenty missed leads a week, and nothing logs to Salesforce unless someone remembers. She wants a Thursday afternoon working session with her ops lead, and needs a one-pager to sell a higher price internally versus Aircall.",
       suggestedOutcome: "meeting",
       actionItems: [
         {
@@ -1052,7 +1052,7 @@ Best,`,
     ],
     wrapUp: {
       summary:
-        "Priya couldn't sign in after several failed attempts and also thought she was charged twice. The account was unlocked and a reset email was sent; she confirmed she was back in. Card details were not collected on the call — a secure payment link is the path if a refund is still needed.",
+        "Priya couldn't sign in after several failed attempts and also thought she was charged twice. The account was unlocked and a reset email was sent; she confirmed she was back in. Card details were not collected on the call, so a secure payment link is the path if a refund is still needed.",
       suggestedOutcome: "follow-up",
       actionItems: [
         {
@@ -1197,7 +1197,7 @@ Best,`,
     ],
     wrapUp: {
       summary:
-        "Marcus saw two $49 charges — one posted on the 12th for the monthly plan, and a second still pending from yesterday. Pending charges often drop off in a few days. He was offered a reversal if the second charge posts, plus an email once it clears.",
+        "Marcus saw two $49 charges: one posted on the 12th for the monthly plan, and a second still pending from yesterday. Pending charges often drop off in a few days. He was offered a reversal if the second charge posts, plus an email once it clears.",
       suggestedOutcome: "follow-up",
       actionItems: [
         {
