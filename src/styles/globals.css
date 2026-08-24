@@ -10,6 +10,7 @@
   --color-white: #ffffff;
 
   /* Blue */
+  --color-blue-50: #eff8ff;
   --color-blue-200: #b2ddff;
   --color-blue-400: #53b1fd;
   --color-blue-500: #2e90fa;
@@ -68,7 +69,17 @@
   --color-bluegray-900: #101323;
 
   /* Red */
-  --color-red-400: #f04438;
+  --color-red-50: #fef3f2;
+  --color-red-100: #fee4e2;
+  --color-red-500: #f04438;
+  --color-red-600: #d92d20;
+  --color-red-700: #b42318;
+
+  /* Teal — coaching "pace" cue; no other surface uses it yet. */
+  --color-teal-50: #f0fdf9;
+  --color-teal-200: #99f6e0;
+  --color-teal-500: #15b79e;
+  --color-teal-700: #107569;
 
   /* Gray */
   --color-gray-25: #fcfcfd;
@@ -106,7 +117,7 @@
 
   --color-secondary-bg: #f9fafb; /* Figma: "Gray / Secondary bg" */
 
-  --color-destructive: #d92d20;
+  --color-destructive: var(--color-error);
   --color-destructive-foreground: var(--color-white);
 
   /* ---------------------------------------------------------------- */
@@ -117,7 +128,7 @@
   /* ---------------------------------------------------------------- */
   --color-brand: #004ce6; /* bg/brand-primary, text/brand, border/brand */
   --color-brand-hover: #003bb3; /* bg/brand-primary-hover */
-  --color-brand-subtle: #eff8ff; /* bg/brand-secondary — outline hover fill */
+  --color-brand-subtle: var(--color-blue-50); /* bg/brand-secondary — outline hover fill */
 
   --color-line: #e4e7ec; /* border/primary — grey outline border */
   --color-surface-hover: #f9fafb; /* bg/primary-hover — grey outline hover */
@@ -125,13 +136,13 @@
   --color-disabled-bg: #e4e7ec; /* bg/tertiary — disabled solid fill */
   --color-disabled-fg: #98a2b3; /* text/disabled, icon/disabled */
 
-  --color-error: #d92d20; /* error/primary */
-  --color-error-hover: #b42318; /* error/primary-hover */
-  --color-error-subtle: #fef3f2; /* error/secondary — error outline hover fill */
+  --color-error: var(--color-red-600); /* error/primary */
+  --color-error-hover: var(--color-red-700); /* error/primary-hover */
+  --color-error-subtle: var(--color-red-50); /* error/secondary — error outline hover fill */
   /* Danger *icons* sit one palette step brighter than --color-error, which is
-     the text/fill colour. Figma draws the logout glyph at red-400 while its
+     the text/fill colour. Figma draws the logout glyph at red-500 while its
      label is error (#d92d20) — kept distinct rather than flattened. */
-  --color-error-icon: var(--color-red-400);
+  --color-error-icon: var(--color-red-500);
 
   --color-success: #12b76a; /* success/primary — "Saved" state */
 
@@ -148,7 +159,7 @@
   /* Each status has an icon colour (*-primary), a tinted surface      */
   /* (*-secondary) and a matching border (*-border).                   */
   /* ---------------------------------------------------------------- */
-  --color-info: #004ce6; /* info/primary */
+  --color-info: var(--color-brand); /* info/primary — same blue as brand */
   --color-info-secondary: #e6eeff; /* info/secondary — alert surface */
   --color-info-border: #ccdeff; /* info/border */
 
@@ -159,8 +170,8 @@
   --color-warning-secondary: #fffaeb; /* warning/secondary — alert surface */
   --color-warning-border: #fef0c7; /* warning/border */
 
-  --color-error-secondary: #fef3f2; /* error/secondary — alert surface */
-  --color-error-border: #fee4e2; /* error/border */
+  --color-error-secondary: var(--color-error-subtle); /* error/secondary — alert surface */
+  --color-error-border: var(--color-red-100); /* error/border */
 
   /* ---------------------------------------------------------------- */
   /* AVATAR TOKENS                                                     */
@@ -183,9 +194,9 @@
 
   --color-status-available: var(--color-success); /* Available for call */
   --color-status-ooo: var(--color-disabled-fg); /* Disabled / OOO */
-  --color-status-on-call: var(--color-red-400); /* On call */
+  --color-status-on-call: var(--color-red-500); /* On call */
   --color-status-wrap-up: var(--color-warning); /* Wrap-up time */
-  --color-status-dnd: #d92d20; /* DND */
+  --color-status-dnd: var(--color-error); /* DND */
 
   /* ---------------------------------------------------------------- */
   /* BADGE TOKENS                                                      */
@@ -234,6 +245,38 @@
   --color-ai-gradient-to: #b46dff;
 
   /* ---------------------------------------------------------------- */
+  /* COACHING CUE TOKENS                                               */
+  /* One hue per live-coaching signal so agents can scan a stack by     */
+  /* category. Every one derives from an existing role or primitive —   */
+  /* these used to be hand-typed hexes in the prototype, which meant    */
+  /* changing --color-error left the coaching red behind.               */
+  /* ---------------------------------------------------------------- */
+  --color-coach-orange: var(--color-warning);
+  --color-coach-orange-surface: var(--color-warning-secondary);
+  --color-coach-orange-border: var(--color-warning-border);
+  --color-coach-orange-text: var(--color-warning-text);
+
+  --color-coach-purple: var(--color-purple-500);
+  --color-coach-purple-surface: var(--color-purple-50);
+  --color-coach-purple-border: var(--color-purple-200);
+  --color-coach-purple-text: var(--color-purple-700);
+
+  --color-coach-blue: var(--color-blue-500);
+  --color-coach-blue-surface: var(--color-blue-50);
+  --color-coach-blue-border: var(--color-blue-200);
+  --color-coach-blue-text: var(--color-blue-700);
+
+  --color-coach-teal: var(--color-teal-500);
+  --color-coach-teal-surface: var(--color-teal-50);
+  --color-coach-teal-border: var(--color-teal-200);
+  --color-coach-teal-text: var(--color-teal-700);
+
+  --color-coach-red: var(--color-error);
+  --color-coach-red-surface: var(--color-error-subtle);
+  --color-coach-red-border: var(--color-error-border);
+  --color-coach-red-text: var(--color-error-hover);
+
+  /* ---------------------------------------------------------------- */
   /* SIDENAV TOKENS                                                    */
   /* The dark navigation rail is its own small theme — a gradient       */
   /* surface with its own label, active-item and card colours that do   */
@@ -251,7 +294,7 @@
   /* HEADER TOKENS                                                     */
   /* ---------------------------------------------------------------- */
   --color-header-icon-hover: var(--color-gray-100); /* #f2f4f7 */
-  --color-notification-badge: var(--color-red-400); /* unread count dot */
+  --color-notification-badge: var(--color-red-500); /* unread count dot */
   --color-avatar-brand-bg: #2d72ff; /* header profile avatar fill */
 
   /* ---------------------------------------------------------------- */

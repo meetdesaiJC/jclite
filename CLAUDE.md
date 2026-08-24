@@ -92,8 +92,16 @@ that fits:
 /* ❌ */  --color-coach-red: #d92d20;   /* silently duplicates --color-error */
 ```
 
-That second form is why "change the brand color once" doesn't currently work
-everywhere. Don't add more of it.
+Every token in `globals.css` now derives this way, so changing one primitive
+ripples. Verify it still holds after editing tokens — override a primitive in
+devtools and check its dependents move:
+
+```js
+document.documentElement.style.setProperty('--color-red-600', '#00a651')
+```
+
+`--color-error`, `--color-destructive`, `--color-status-dnd` and
+`--color-coach-red` should all follow. If one doesn't, it is re-typing a hex.
 
 ### Existing semantic tokens — check here before inventing one
 

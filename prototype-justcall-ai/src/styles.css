@@ -1,37 +1,8 @@
 @import "../../src/styles/globals.css";
 
-/* JustCall AI — shared guidance-card tone. The --color-ai* trio now lives in
-   the design system (src/styles/globals.css) so every prototype shares it. */
-@theme {
-  /* Coaching cue accents — one hue per signal so agents can scan by category.
-     Orange / purple / blue / teal / red match the trigger legend; talk-ratio
-     and monologue share blue and split on the icon. Surfaces sit at the same
-     quiet intensity as warning-secondary so a stack doesn't shout. */
-  --color-coach-orange: #f79009;
-  --color-coach-orange-surface: #fffaeb;
-  --color-coach-orange-border: #fef0c7;
-  --color-coach-orange-text: #b54708;
-
-  --color-coach-purple: #7a5af8;
-  --color-coach-purple-surface: #f4f3ff;
-  --color-coach-purple-border: #d9d6fe;
-  --color-coach-purple-text: #5925dc;
-
-  --color-coach-blue: #2e90fa;
-  --color-coach-blue-surface: #eff8ff;
-  --color-coach-blue-border: #b2ddff;
-  --color-coach-blue-text: #175cd3;
-
-  --color-coach-teal: #15b79e;
-  --color-coach-teal-surface: #f0fdf9;
-  --color-coach-teal-border: #99f6e0;
-  --color-coach-teal-text: #107569;
-
-  --color-coach-red: #d92d20;
-  --color-coach-red-surface: #fef3f2;
-  --color-coach-red-border: #fee4e2;
-  --color-coach-red-text: #b42318;
-}
+/* Colour tokens all live in the design system (src/styles/globals.css) —
+   the --color-ai* trio and the coaching cue hues included. What stays here is
+   motion: keyframes and reduced-motion handling for this prototype only. */
 
 /* Transcript chunk fade-in — new words appear without disturbing prior text */
 @keyframes transcript-chunk-in {
