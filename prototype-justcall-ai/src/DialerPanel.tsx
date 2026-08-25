@@ -2675,16 +2675,23 @@ function EndedCallBar({
             exact moment the agent might want to correct a mis-tap — and the
             filled thumb already says it was heard. */}
         <span className="text-[13px] leading-5 whitespace-nowrap text-white/60">
-          How was the call quality?
+          How was the audio quality?
         </span>
+        {/* Filled and labelled: this bar is on screen for as long as it takes
+            to file the call, which is not long enough for anyone to go hunting
+            for a bare glyph. The short words carry the ask; the long ones stay
+            on the accessible name. */}
         <FeedbackThumbs
           tone="dark"
           size="md"
           shape="rounded"
+          emphasis="filled"
           value={quality}
           onChange={setQuality}
           upLabel="Call quality was good"
           downLabel="Call quality was poor"
+          upText="Good"
+          downText="Bad"
         />
 
         {/* Leaving is a different kind of act from answering a question, so
