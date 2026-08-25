@@ -46,6 +46,7 @@ import {
   type Integration,
   type SuggestedAction,
 } from "./actionsData";
+import type { AgentAssistScope } from "./agentAssistScope";
 
 /**
  * Demo pacing. The scenarios below are authored on a natural conversation
@@ -391,13 +392,29 @@ function statusFromLiveState(
  * again, and a failed one stays retryable instead of looking finished.
  * Authored wrap-up statuses apply on the recap, so hanging up still shows
  * what the call already did even if the live cards hadn't flipped.
+ *
+ * V1 has no in-call actions, so nothing can have run yet — every row arrives
+ * as work still to do. The authored statuses, the live action states and the
+ * "View in Salesforce" receipts they carry all describe a V2 call, so V1
+ * drops them and keeps only the offer: the CTA, and a box the agent can tick
+ * once they have done it themselves.
  */
 export function resolvePostCallActionItems(
   items: CallActionItem[],
   snapshot: SimulationSnapshot,
-  liveStates: Record<string, ActionState> = {}
+  liveStates: Record<string, ActionState> = {},
+  scope: AgentAssistScope = "v2"
 ): ResolvedCallActionItem[] {
   return items.map((item) => {
+    if (scope === "v1") {
+      return {
+        ...item,
+        status: "pending",
+        outcome: item.action ? callActionOutcome(item.action) : "",
+        result: undefined,
+        allowMarkDone: true,
+      };
+    }
     const linkedId = item.linkedActionId;
     const live = linkedId
       ? snapshot.actions.find(

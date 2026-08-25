@@ -1150,6 +1150,7 @@ function InCallShell({
         wrapping ? (
           <PostCallStage
             className={enter}
+            scope={scope}
             reduced={reduced}
             elapsedMs={elapsedMs}
             contactName={contactName}
@@ -2526,6 +2527,7 @@ function RingingPhone({
  */
 function PostCallStage({
   className,
+  scope,
   reduced,
   elapsedMs,
   contactName,
@@ -2545,6 +2547,7 @@ function PostCallStage({
   contactMeta: string;
   scenario: CallScenario;
   actionStates?: Record<string, ActionState>;
+  scope: AgentAssistScope;
   notes: NotesEditorValue;
   onNotesChange: (value: NotesEditorValue) => void;
   onScenarioChange: (id: string) => void;
@@ -2589,6 +2592,7 @@ function PostCallStage({
             transcriptOpen={transcriptOpen}
             onTranscriptOpenChange={setTranscriptOpen}
             actionStates={actionStates}
+            scope={scope}
             className="h-full"
           />
         </StagePane>
