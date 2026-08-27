@@ -86,8 +86,9 @@ function MenuCheckbox({
  *
  * Motion (base.css): open base/entrance fade + translateY(-4px→0); close
  * fast/exit fade + translateY(0→-3px); chevron base 0°↔180°; item hover
- * micro; checkmark fast. Overlay only — never pushes layout. Reduced motion
- * keeps opacity and drops translation.
+ * micro; checkmark fast. A menu flipped above its trigger (`placement`)
+ * mirrors the travel so it still reads as leaving the trigger. Overlay only —
+ * never pushes layout. Reduced motion keeps opacity and drops translation.
  */
 
 /* ------------------------------------------------------------------ */
@@ -201,6 +202,13 @@ export interface DropdownProps
    * inside its container when the trigger sits against the right edge.
    */
   align?: "start" | "end";
+  /**
+   * Which side of the trigger the menu opens on. `auto` (default) hangs it
+   * below and flips it above when below has no room — the menu is absolutely
+   * positioned, so a scroll container clips it rather than letting it hang
+   * out of bounds.
+   */
+  placement?: "auto" | "bottom" | "top";
   /** Show a search field at the top of the menu. Default `true`. */
   searchable?: boolean;
   searchPlaceholder?: string;
@@ -234,6 +242,38 @@ function normalizeMulti(value: string | string[] | undefined): string[] {
 
 function optionList(items: DropdownListItem[]): DropdownOption[] {
   return items.filter(isOption);
+}
+
+/** Gap between trigger and menu, matching `top-[calc(100%+8px)]`. */
+const MENU_GAP = 8;
+
+/** Below this the menu is more scrollbar than list, so stop shrinking it. */
+const MENU_MIN_HEIGHT = 120;
+
+/**
+ * The vertical band the menu can actually be seen in: the viewport, narrowed
+ * by every scrolling or clipping ancestor between the trigger and the page.
+ *
+ * Absolute positioning does not escape `overflow: auto` — an ancestor that
+ * scrolls cuts the menu off at its own edge, which is how a menu near the
+ * bottom of a panel ends up half-drawn under whatever sits below the panel.
+ */
+function clipBand(el: HTMLElement): { top: number; bottom: number } {
+  let top = 0;
+  let bottom = window.innerHeight;
+  let node = el.parentElement;
+
+  while (node && node !== document.body && node !== document.documentElement) {
+    const style = window.getComputedStyle(node);
+    if (style.overflowY !== "visible" || style.overflowX !== "visible") {
+      const rect = node.getBoundingClientRect();
+      top = Math.max(top, rect.top);
+      bottom = Math.min(bottom, rect.bottom);
+    }
+    node = node.parentElement;
+  }
+
+  return { top, bottom };
 }
 
 /* ------------------------------------------------------------------ */
@@ -285,6 +325,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
       prefix,
       disabled = false,
       align = "start",
+      placement = "auto",
       searchable = true,
       searchPlaceholder = "Search placeholder value",
       emptyTitle = "No Results Found",
@@ -314,9 +355,17 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
     const { mounted, state: panelState } = useDropdownPresence(open);
 
     const rootRef = React.useRef<HTMLDivElement>(null);
+    const anchorRef = React.useRef<HTMLDivElement>(null);
+    const panelRef = React.useRef<HTMLDivElement>(null);
     const listRef = React.useRef<HTMLDivElement>(null);
     const searchRef = React.useRef<HTMLInputElement>(null);
     const listboxId = React.useId();
+
+    // Resolved side + height cap for the open menu, measured against whatever
+    // is clipping it. Held across the close animation so the menu leaves the
+    // way it arrived.
+    const [flipped, setFlipped] = React.useState(false);
+    const [maxHeight, setMaxHeight] = React.useState<number | null>(null);
 
     React.useImperativeHandle(ref, () => rootRef.current as HTMLDivElement);
 
@@ -399,6 +448,61 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
         requestAnimationFrame(() => searchRef.current?.focus());
       }
     }, [open, searchable]);
+
+    /**
+     * Place the menu against the room it actually has. Below by default;
+     * above when below is short and above is roomier; capped to the band
+     * either way, so a scroll container never gets to cut the list in half.
+     *
+     * Runs in a layout effect and on scroll/resize while open — before paint,
+     * so the flip is never a visible jump.
+     */
+    React.useLayoutEffect(() => {
+      if (!mounted) return;
+
+      const measure = () => {
+        const anchor = anchorRef.current;
+        const panel = panelRef.current;
+        if (!anchor || !panel) return;
+
+        // Read the menu's own height with any previous cap lifted — measuring
+        // it capped would ratchet the menu smaller on every pass.
+        const capped = panel.style.maxHeight;
+        panel.style.maxHeight = "";
+        const wanted = panel.offsetHeight;
+        panel.style.maxHeight = capped;
+
+        const rect = anchor.getBoundingClientRect();
+        const band = clipBand(anchor);
+        const below = band.bottom - rect.bottom - MENU_GAP;
+        const above = rect.top - band.top - MENU_GAP;
+
+        const goUp =
+          placement === "top" ||
+          (placement === "auto" && wanted > below && above > below);
+        const room = goUp ? above : below;
+
+        setFlipped(goUp);
+        // Only the option list scrolls — capping the no-results state would
+        // crop its illustration instead of making anything reachable.
+        const scrolls = filteredOptions.length > 0;
+        setMaxHeight(
+          scrolls && wanted > room
+            ? Math.max(Math.floor(room), MENU_MIN_HEIGHT)
+            : null
+        );
+      };
+
+      measure();
+
+      window.addEventListener("resize", measure);
+      // Capture, so scrolling an ancestor container counts and not just the page.
+      document.addEventListener("scroll", measure, true);
+      return () => {
+        window.removeEventListener("resize", measure);
+        document.removeEventListener("scroll", measure, true);
+      };
+    }, [mounted, placement, filteredOptions]);
 
     const selectSingle = (option: DropdownOption) => {
       if (option.disabled) return;
@@ -540,7 +644,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
           </div>
         )}
 
-        <div className="relative w-full">
+        <div ref={anchorRef} className="relative w-full">
           <button
             type="button"
             disabled={disabled}
@@ -665,6 +769,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
 
           {mounted && (
             <div
+              ref={panelRef}
               id={listboxId}
               role="listbox"
               aria-multiselectable={multiple || undefined}
@@ -672,8 +777,11 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
               tabIndex={-1}
               onKeyDown={onMenuKeyDown}
               data-state={panelState}
+              data-placement={flipped ? "top" : "bottom"}
+              style={maxHeight != null ? { maxHeight } : undefined}
               className={cn(
-                "dropdown-panel absolute top-[calc(100%+8px)] z-50 flex flex-col overflow-hidden rounded-[4px] border border-line bg-white shadow-400",
+                "dropdown-panel absolute z-50 flex flex-col overflow-hidden rounded-[4px] border border-line bg-white shadow-400",
+                flipped ? "bottom-[calc(100%+8px)]" : "top-[calc(100%+8px)]",
                 align === "end" ? "right-0" : "left-0",
                 // Bordered fields read as one control with the menu, so the
                 // menu matches the field. A borderless trigger is only as wide
@@ -744,7 +852,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
             ) : (
               <div
                 ref={listRef}
-                className="max-h-[216px] overflow-y-auto overscroll-contain py-0"
+                className="max-h-[216px] min-h-0 overflow-y-auto overscroll-contain py-0"
               >
                 {multiple && (
                   <button

@@ -487,6 +487,19 @@ button.call-bar-control[aria-pressed="true"] {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.38);
 }
 
+/* Mute and Hold, engaged. A solid red rather than the white wash the other
+   toggles wear: these two are the ones that stop the caller hearing the
+   agent, and that has to be readable from across a desk. Written against the
+   tokens so the dialer's red can never drift from --color-error. */
+button.call-bar-control[data-tone="interrupt"][aria-pressed="true"] {
+  background-color: var(--color-error);
+  box-shadow: none;
+}
+
+button.call-bar-control[data-tone="interrupt"][aria-pressed="true"]:hover {
+  background-color: var(--color-error-hover);
+}
+
 /* The call bar takes its width as the stage turns horizontal. Only used when
    there was no phone to morph from (resumed call, reduced motion). */
 @keyframes call-bar-in {
@@ -559,6 +572,24 @@ button.call-bar-control[aria-pressed="true"] {
 .call-bar-detail-in {
   animation: call-bar-detail-in 160ms ease-out both;
   animation-delay: var(--detail-delay, 0ms);
+}
+
+/* Compact voice-activity bars. Heights travel as `scale` so the 48×20
+   slot never reflows and the surrounding call controls stay put. */
+.call-voice-activity {
+  transition: opacity var(--duration-fast) var(--ease-entrance);
+}
+
+.call-voice-bar {
+  transform-origin: center;
+  scale: 1 var(--voice-bar-scale, 0.25);
+  transition: scale var(--duration-fast) var(--ease-entrance);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .call-voice-bar {
+    transition: none;
+  }
 }
 
 /* Agent Assist, then the transcript — only once the bar has mostly settled. */
@@ -735,7 +766,9 @@ button.call-bar-control[aria-pressed="true"] {
 
 /* ── Notes / transcript / Live Assist aside ─────────────────────────
    One right-side shell. Open/close slides the column while Script and
-   Guidance compress or restore; switching views never re-opens the shell.
+   Guidance compress or restore; the card inside fades and travels the
+   same 12px Notes set as the standard. Switching views never re-opens
+   the shell — the incoming card plays the same enter as a fresh open.
    Keep these durations in step with DialerPanel.tsx. */
 .call-workspace-row {
   --call-aside-open-ms: 280ms;
@@ -807,6 +840,47 @@ button.call-bar-control[aria-pressed="true"] {
     visibility 0s linear 0s;
 }
 
+/* ── Aside view enter / leave ───────────────────────────────────────────
+   The column sliding is one move; the card arriving is another. Notes
+   set the bar: the card fades up out of the right edge it left through,
+   on `slow` / `ease-entrance`. Every view the column hosts plays the
+   same pair, so opening Transcript is not a different object from
+   opening Notes.
+
+   Exit takes one step less and travels a little less — pairing rule —
+   so putting the panel away never feels like it is arguing. The
+   introduction's own close (`is-notes-handoff`) stays a separate move:
+   that one has a header to deliver, and must not pick up a generic leave. */
+@keyframes call-aside-view-in {
+  from {
+    opacity: 0;
+    translate: 12px 0;
+  }
+  to {
+    opacity: 1;
+    translate: 0;
+  }
+}
+
+@keyframes call-aside-view-out {
+  from {
+    opacity: 1;
+    translate: 0;
+  }
+  to {
+    opacity: 0;
+    translate: 8px 0;
+  }
+}
+
+.call-aside-view.is-entering {
+  animation: call-aside-view-in var(--duration-slow) var(--ease-entrance) both;
+}
+
+.call-aside-view.is-leaving {
+  animation: call-aside-view-out var(--duration-moderate) var(--ease-exit) both;
+}
+
 /* ── Notes' first showing ───────────────────────────────────────────────
    Notes opens itself once, holds long enough to be read, then puts itself
    away into the call-bar icon that owns it. The panel gives its width back
@@ -841,20 +915,6 @@ button.call-bar-control[aria-pressed="true"] {
     translate var(--notes-flight-ms, 240ms) var(--ease-exit),
     scale var(--notes-flight-ms, 240ms) var(--ease-exit),
     opacity var(--notes-flight-ms, 240ms) var(--ease-exit);
-}
-
-/* Coming back is its own move, not the introduction played backwards: the
-   column re-opens the way any panel does and the card arrives out of the edge
-   it left through. Entrance curve, because this one is arriving. */
-@keyframes notes-reopen {
-  from {
-    opacity: 0;
-    translate: 12px 0;
-  }
-}
-
-.call-aside-view.is-notes-reopening {
-  animation: notes-reopen var(--duration-slow) var(--ease-entrance);
 }
 
 .notes-discovery-ghost {
@@ -1734,7 +1794,8 @@ button.call-bar-control[data-help="active"] {
     scale: none;
   }
 
-  .call-aside-view.is-notes-reopening {
+  .call-aside-view.is-entering,
+  .call-aside-view.is-leaving {
     animation: none !important;
   }
 
@@ -1809,4 +1870,182 @@ button.call-bar-control[data-help="active"] {
 .assist-listen-out {
   opacity: 0;
   transition: opacity var(--duration-fast) var(--ease-exit);
+}
+
+/* ── Input level meter ──────────────────────────────────────────────────────
+   The audio-settings meter, in the Settings tab and the in-call Audio panel.
+   A CSS loop rather than a frame loop for the same reason WaveformLoader is
+   one: both render inside preview panes, which are permanently hidden pages,
+   and requestAnimationFrame never fires there.
+
+   Off the transition scale on purpose (CLAUDE.md §4): this answers "how calm
+   should a level read?", not "how far did it travel?", so it takes the ambient
+   loop tokens. Fourteen segments share one keyframe and are pulled apart by
+   the stagger, which is what turns fourteen pulses into a sweep. */
+@keyframes mic-level-sweep {
+  0% {
+    transform: scaleY(0.16);
+  }
+  30% {
+    transform: scaleY(1);
+  }
+  60%,
+  100% {
+    transform: scaleY(0.16);
+  }
+}
+
+.mic-level-bar {
+  transform-origin: bottom;
+  /* Full height at rest, so the meter reads as an empty track waiting for
+     signal. Scaling the segments down when idle looked tidier in the abstract
+     and read as a hairline rule on the page — there was nothing to tell the
+     eye a meter was there at all. The trough belongs to the sweep, which is
+     the only thing that should be moving. */
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+
+.mic-level[data-active="true"] > .mic-level-bar {
+  animation: mic-level-sweep var(--duration-ambient-loop) var(--ease-standard)
+    infinite backwards;
+}
+
+/* A quarter of the stagger between neighbours: fourteen segments at the full
+   step would span more than one loop, and the sweep would lap itself. */
+.mic-level[data-active="true"] > .mic-level-bar:nth-child(n) {
+  animation-delay: calc(
+    var(--duration-ambient-stagger) * 0.25 * var(--mic-level-index, 0)
+  );
+}
+
+.mic-level-bar:nth-child(1) { --mic-level-index: 0; }
+.mic-level-bar:nth-child(2) { --mic-level-index: 1; }
+.mic-level-bar:nth-child(3) { --mic-level-index: 2; }
+.mic-level-bar:nth-child(4) { --mic-level-index: 3; }
+.mic-level-bar:nth-child(5) { --mic-level-index: 4; }
+.mic-level-bar:nth-child(6) { --mic-level-index: 5; }
+.mic-level-bar:nth-child(7) { --mic-level-index: 6; }
+.mic-level-bar:nth-child(8) { --mic-level-index: 7; }
+.mic-level-bar:nth-child(9) { --mic-level-index: 8; }
+.mic-level-bar:nth-child(10) { --mic-level-index: 9; }
+.mic-level-bar:nth-child(11) { --mic-level-index: 10; }
+.mic-level-bar:nth-child(12) { --mic-level-index: 11; }
+.mic-level-bar:nth-child(13) { --mic-level-index: 12; }
+.mic-level-bar:nth-child(14) { --mic-level-index: 13; }
+
+/* Recording, running — the dot on the call bar's pill. A slow breath, not a
+   blink: this is on screen for the length of a call, and anything faster
+   reads as an alarm the agent is supposed to do something about. */
+@keyframes recording-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.recording-dot[data-state="recording"] {
+  animation: recording-pulse var(--duration-ambient-loop) var(--ease-standard)
+    infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The loop is the part the preference is asking about — a meter and a
+     recording dot both run for the whole call. The segments hold at the
+     trough and the dot holds lit, which still says "armed" and "capturing"
+     without anything moving. */
+  .mic-level[data-active="true"] > .mic-level-bar,
+  .recording-dot[data-state="recording"] {
+    animation: none !important;
+  }
+
+  .mic-level-bar {
+    transition: none !important;
+  }
+
+  /* Without the loop the meter has nothing left to say it is live, so the
+     colour change from the resting track carries it on its own. */
+}
+
+/* ── Phone sheet ────────────────────────────────────────────────────────────
+   Keypad, transfer, voicemail and audio, inside the 360px phone. It comes up
+   over the card's body rather than hanging off a control, because the card
+   clips its own overflow.
+
+   Travel is a panel-internal move, so it enters at `moderate`; the exit takes
+   one step less (CLAUDE.md §4's pairing rule) so putting it away never feels
+   like it is arguing. The distance is short on purpose — this is a layer
+   arriving over a card, not a drawer crossing a page. */
+@keyframes phone-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@keyframes phone-sheet-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.phone-sheet[data-state="open"] {
+  animation: phone-sheet-in var(--duration-moderate) var(--ease-entrance) both;
+}
+
+.phone-sheet[data-state="closed"] {
+  animation: phone-sheet-out var(--duration-base) var(--ease-exit) both;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Travel goes, the crossfade stays — presence is on a JS timer, so an
+     animation still has to run for the same length or the sheet would vanish
+     before its slot expires. */
+  .phone-sheet[data-state="open"] {
+    animation-name: dropdown-fade-in;
+  }
+
+  .phone-sheet[data-state="closed"] {
+    animation-name: dropdown-fade-out;
+  }
+}
+
+/* ── The transfer confirmation ─────────────────────────────────────────────
+   Picking somebody raises the two ways to hand the call over, *over* the list
+   rather than in place of it: the choice is still provisional, so the agent
+   can see which row they hit, and backing out puts them where they were
+   instead of at the top of a list they have to scroll again. The scrim is what
+   makes that legible — the list stays visible and stops being live, so there
+   is one decision on screen at a time.
+
+   The sheet travels up out of the edge it is pinned to, which is a
+   panel-internal move: `moderate`, on the entrance curve. The scrim only
+   tints, so it has nothing to travel and takes the default step. Neither has
+   an exit animation — the sheet unmounts with the selection, and a dismissal
+   that lingers is a dismissal that feels like it is arguing. */
+@keyframes transfer-confirm-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+
+.transfer-confirm-sheet {
+  animation: transfer-confirm-in var(--duration-moderate) var(--ease-entrance);
+}
+
+.transfer-confirm-scrim {
+  animation: dropdown-fade-in var(--duration-base) var(--ease-entrance);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The tint arriving is the whole signal, so it stays; only the travel goes.
+     Nothing waits on this animation, so swapping it outright is safe. */
+  .transfer-confirm-sheet {
+    animation-name: dropdown-fade-in;
+  }
 }

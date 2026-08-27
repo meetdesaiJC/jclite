@@ -30,6 +30,7 @@ import {
   POST_CALL_SECTION_TITLE,
   resolvePostCallActionItems,
   simulationAt,
+  type CallActionItem,
   type CallActionKind,
   type CallActionResult,
   type CallActionStatus,
@@ -691,9 +692,15 @@ const ACTION_CONFIRM_MS = 750;
 
 /**
  * Post-call — the recap the agent reads and works from: what was said, then
- * what to do about it. Summary streams first; action items and their CTAs
- * become usable as each one lands. Disposition, notes and rating live in
- * Wrap up beside this; this pane only reports and hands off.
+ * what to do about it. Summary streams first; action items land after it.
+ * Disposition, notes and rating live in Wrap up beside this; this pane only
+ * reports and hands off.
+ *
+ * On V2 a row can run its own work, so it carries the CTA. On V1 nothing runs
+ * itself — a "Send message" sitting on the row would promise execution the
+ * account doesn't have — so the rows are read-and-tick only and the same offer
+ * appears once, as a secondary button in Wrap up, next to the work the agent
+ * is already doing by hand.
  */
 
 function PostCallAssist({
@@ -848,6 +855,7 @@ function PostCallAssist({
                     item={item}
                     reduced={reduced}
                     animate={index >= itemsAtMount}
+                    offerCta={scope !== "v1"}
                     onRun={() => runItem(item)}
                     onRetry={() => runItem(item)}
                     onToggleDone={() =>
@@ -913,17 +921,47 @@ function CopyButton({ text, disabled = false }: { text: string; disabled?: boole
   );
 }
 
-const ACTION_CTA: Record<
+export const CALL_ACTION_CTA: Record<
   CallActionKind,
-  { label: string; icon: typeof IconScheduler }
+  {
+    label: string;
+    /**
+     * Used where the button stands away from the row that described the
+     * errand — Wrap up's footer, which the agent reaches after the recap has
+     * scrolled off. Beside its own action item, "Schedule" already reads as
+     * scheduling that; alone under a notes field, it has to say what for.
+     */
+    wrapUpLabel?: string;
+    icon: typeof IconScheduler;
+  }
 > = {
-  schedule: { label: "Schedule", icon: IconScheduler },
+  schedule: {
+    label: "Schedule",
+    wrapUpLabel: "Schedule a follow-up call",
+    icon: IconScheduler,
+  },
   message: { label: "Send message", icon: IconMessages },
   prepare: { label: "Prepare", icon: IconFile },
   ticket: { label: "Create ticket", icon: IconCreateAction },
   update: { label: "Update", icon: IconPencil },
   create: { label: "Create", icon: IconCreateAction },
 };
+
+/**
+ * The distinct things this call asks the agent to go and do, in the order the
+ * recap lists them. Deduplicated by kind: two rows that both need a message
+ * are still one trip to the composer, and two identical buttons side by side
+ * would read as two different messages.
+ */
+export function callActionCtas(items: CallActionItem[]) {
+  const seen = new Set<CallActionKind>();
+  return items.flatMap((item) => {
+    if (!item.action || seen.has(item.action)) return [];
+    seen.add(item.action);
+    const cta = CALL_ACTION_CTA[item.action];
+    return [{ kind: item.action, ...cta, label: cta.wrapUpLabel ?? cta.label }];
+  });
+}
 
 function IconRetry(props: SVGProps<SVGSVGElement>) {
   return (
@@ -1032,6 +1070,7 @@ function ActionItemRow({
   item,
   reduced,
   animate,
+  offerCta,
   onRun,
   onRetry,
   onToggleDone,
@@ -1039,6 +1078,12 @@ function ActionItemRow({
   item: RecapActionItem;
   reduced: boolean;
   animate: boolean;
+  /**
+   * Whether the row itself can do the work. False on V1, where nothing runs
+   * itself — the offer moves to Wrap up instead, so the row stays a thing to
+   * read and tick rather than a button that promises execution.
+   */
+  offerCta: boolean;
   onRun: () => void;
   onRetry: () => void;
   onToggleDone: () => void;
@@ -1047,18 +1092,24 @@ function ActionItemRow({
   const completed = item.status === "completed";
   const failed = item.status === "failed";
   const busy = item.status === "in_progress";
-  const cta = item.action ? ACTION_CTA[item.action] : null;
+  const cta = offerCta && item.action ? CALL_ACTION_CTA[item.action] : null;
   const CtaIcon = cta?.icon;
   const viewLink = completed ? actionResultLink(item.result) : null;
   const showToggle =
     item.allowMarkDone === true &&
     (pending || (completed && item.markedManually));
   const needsAttention = pending || failed || busy;
+  // A row with nothing on its right edge closes up rather than reserving the
+  // control column — V1's rows are all of this shape, and a held-open gutter
+  // would read as a button that failed to render.
+  const trailing =
+    busy || failed || Boolean(viewLink) || Boolean(pending && cta);
 
   return (
     <li
       className={cn(
-        "flex min-h-[50px] items-center gap-2.5 rounded-lg border border-line bg-white py-2 pr-2 pl-3",
+        "flex min-h-[50px] items-center gap-2.5 rounded-lg border border-line bg-white py-2 pl-3",
+        trailing ? "pr-2" : "pr-3",
         !reduced && animate && "recap-item-in"
       )}
     >
@@ -1075,7 +1126,12 @@ function ActionItemRow({
       >
         {item.title}
       </p>
-      <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+      <div
+        className={cn(
+          "shrink-0 items-center gap-2 whitespace-nowrap",
+          trailing ? "flex" : "hidden"
+        )}
+      >
         {busy ? (
           <span
             className="inline-flex h-8 items-center gap-1.5 px-2 text-label-sm text-muted-foreground"
@@ -1121,7 +1177,7 @@ function ActionItemRow({
           </button>
         ) : null}
 
-        {failed ? (
+        {failed && offerCta ? (
           <button type="button" onClick={onRetry} className={ACTION_CTA_CLASS}>
             <IconRetry className="size-4 shrink-0" />
             Retry

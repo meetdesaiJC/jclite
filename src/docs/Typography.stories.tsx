@@ -21,10 +21,11 @@ const GROUPS: { group: string; styles: Style[] }[] = [
     ],
   },
   {
-    group: "Label — Medium / SemiBold",
+    group: "Label — Medium / SemiBold / Bold",
     styles: [
       { token: "text-label-md", className: "text-label-md" },
       { token: "text-label-md-semi", className: "text-label-md-semi" },
+      { token: "text-label-md-bold", className: "text-label-md-bold" },
       { token: "text-label-sm", className: "text-label-sm" },
       { token: "text-label-xs", className: "text-label-xs" },
     ],

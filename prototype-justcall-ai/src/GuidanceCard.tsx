@@ -219,7 +219,7 @@ export function GuidanceAiHeader({
     className
   );
   const label = (
-    <span className="min-w-0 flex-1 truncate text-label-md font-medium text-brand">
+    <span className="min-w-0 flex-1 truncate text-label-md font-medium text-foreground">
       {title}
     </span>
   );
@@ -400,9 +400,14 @@ export interface GuidanceCardProps {
   className?: string;
 }
 
-/** Shared response-card tone — solid brand blue, no gradient wash. */
+/**
+ * Shared response-card tone. The expanded border is the same pale
+ * `info-border` a knowledge card carries: a full-strength brand outline reads
+ * as a selected card rather than an open one, and the two card types sit in
+ * one column, so they have to be the same weight of blue.
+ */
 export const GUIDANCE_AI_THEME = {
-  card: "relative overflow-hidden rounded-lg border border-brand bg-white",
+  card: "relative overflow-hidden rounded-lg border border-info-border bg-white",
   cardCollapsed: "relative overflow-hidden rounded-lg border border-line bg-white",
   rail: "absolute inset-y-0 left-0 w-[3px] bg-brand",
   badge: "bg-white/80 text-brand",

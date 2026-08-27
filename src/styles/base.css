@@ -308,30 +308,37 @@ input[type="radio"]:not(:disabled) {
 }
 
 /* ================================================================== */
-/* THUMB PRESS                                                         */
-/* FeedbackThumbs. A vote is often a no-op on screen — tapping the      */
-/* thumb you already picked changes nothing — so the glyph itself has   */
-/* to acknowledge the click. It compresses and returns rather than      */
-/* nudging like `.button-press`, because the target here is a 14px      */
-/* glyph inside a round button: a 1px translate on that reads as a      */
-/* rendering wobble, a scale reads as a press.                         */
+/* THUMB MOTION                                                        */
+/* FeedbackThumbs. Casting a vote is a one-shot — `emphasis`, not a     */
+/* transition — so the glyph pops and a burst leaves the icon, then     */
+/* both are gone. Clearing a vote is the other case: nothing else on    */
+/* screen changes, so the glyph still has to acknowledge the click. It  */
+/* compresses and returns rather than nudging like `.button-press`,     */
+/* because the target is a 14px glyph inside a round button: a 1px      */
+/* translate on that reads as a rendering wobble, a scale reads as a    */
+/* press.                                                              */
 /*                                                                     */
-/* Re-triggered by remounting the glyph under a new key — restarting a  */
-/* running CSS animation is not something a class toggle can do.        */
+/* Re-triggered from FeedbackThumbs by a reflow restart on the glyph,     */
+/* not by remounting it — a keyed remount next to the burst left the      */
+/* previous SVG in the tree.                                              */
 /*                                                                     */
-/* `transform`, not `translate`: this scales, and Tailwind's            */
-/* v4 property split (§4) only applies to the utilities, not to         */
-/* hand-written keyframes.                                             */
+/* Bounce shape is in the stops, not the curve: a keyframe block        */
+/* cannot read `--ease-*` (Chrome keeps the declaration and ignores     */
+/* it). The rule's `ease-standard` rounds each hop.                     */
+/*                                                                     */
+/* Standalone `scale` / `rotate` / `translate`, not `transform`: same   */
+/* reason as the notes landing bounce — Tailwind v4's property split    */
+/* is how these compose with neighbouring utilities.                    */
 /* ================================================================== */
 @keyframes thumb-press {
   0% {
-    transform: scale(1);
+    scale: 1;
   }
   40% {
-    transform: scale(0.88);
+    scale: 0.88;
   }
   100% {
-    transform: scale(1);
+    scale: 1;
   }
 }
 
@@ -339,8 +346,201 @@ input[type="radio"]:not(:disabled) {
   animation: thumb-press var(--duration-base) var(--ease-standard);
 }
 
+@keyframes thumb-like {
+  0% {
+    scale: 1;
+    rotate: 0deg;
+  }
+  16% {
+    scale: 1.42;
+    rotate: -18deg;
+  }
+  34% {
+    scale: 0.88;
+    rotate: 10deg;
+  }
+  52% {
+    scale: 1.12;
+    rotate: -6deg;
+  }
+  70% {
+    scale: 0.96;
+    rotate: 2deg;
+  }
+  100% {
+    scale: 1;
+    rotate: 0deg;
+  }
+}
+
+@keyframes thumb-dislike {
+  0% {
+    scale: 1;
+    rotate: 0deg;
+  }
+  16% {
+    scale: 1.42;
+    rotate: 18deg;
+  }
+  34% {
+    scale: 0.88;
+    rotate: -10deg;
+  }
+  52% {
+    scale: 1.12;
+    rotate: 6deg;
+  }
+  70% {
+    scale: 0.96;
+    rotate: -2deg;
+  }
+  100% {
+    scale: 1;
+    rotate: 0deg;
+  }
+}
+
+.thumb-like {
+  display: inline-flex;
+  transform-origin: 32% 88%;
+  animation: thumb-like var(--duration-emphasis) var(--ease-standard);
+}
+
+.thumb-dislike {
+  display: inline-flex;
+  transform-origin: 32% 12%;
+  animation: thumb-dislike var(--duration-emphasis) var(--ease-standard);
+}
+
+/* Unchecking is the exit of a vote, so it is one step quicker than the
+   pop and has no burst — the fill dropping to a stroke is the receipt. */
+@keyframes thumb-unlike {
+  0% {
+    scale: 1;
+    rotate: 0deg;
+  }
+  45% {
+    scale: 0.8;
+    rotate: 10deg;
+  }
+  100% {
+    scale: 1;
+    rotate: 0deg;
+  }
+}
+
+@keyframes thumb-unlike-down {
+  0% {
+    scale: 1;
+    rotate: 0deg;
+  }
+  45% {
+    scale: 0.8;
+    rotate: -10deg;
+  }
+  100% {
+    scale: 1;
+    rotate: 0deg;
+  }
+}
+
+.thumb-unlike {
+  display: inline-flex;
+  transform-origin: 32% 88%;
+  animation: thumb-unlike var(--duration-moderate) var(--ease-standard);
+}
+
+.thumb-unlike-down {
+  display: inline-flex;
+  transform-origin: 32% 12%;
+  animation: thumb-unlike-down var(--duration-moderate) var(--ease-standard);
+}
+
+.thumb-burst {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.thumb-burst-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 1.5px solid currentColor;
+  border-radius: 9999px;
+  opacity: 0;
+  animation: thumb-burst-ring var(--duration-emphasis) var(--ease-exit) both;
+}
+
+@keyframes thumb-burst-ring {
+  0% {
+    scale: 0.4;
+    opacity: 0.4;
+  }
+  100% {
+    scale: 1.85;
+    opacity: 0;
+  }
+}
+
+.thumb-burst-dot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--burst-size, 3px);
+  height: var(--burst-size, 3px);
+  margin: calc(var(--burst-size, 3px) / -2) 0 0 calc(var(--burst-size, 3px) / -2);
+  border-radius: 9999px;
+  background-color: currentColor;
+  opacity: 0;
+  animation: thumb-burst-dot var(--duration-emphasis) var(--ease-entrance) both;
+}
+
+.thumb-burst-spark {
+  border-radius: 0;
+  clip-path: polygon(
+    50% 0%,
+    62% 38%,
+    100% 50%,
+    62% 62%,
+    50% 100%,
+    38% 62%,
+    0% 50%,
+    38% 38%
+  );
+}
+
+@keyframes thumb-burst-dot {
+  0% {
+    translate: 0 0;
+    scale: 0;
+    opacity: 1;
+  }
+  16% {
+    scale: 1.15;
+    opacity: 1;
+  }
+  100% {
+    translate: var(--burst-x) var(--burst-y);
+    scale: 0.2;
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .thumb-press {
+  .thumb-press,
+  .thumb-like,
+  .thumb-dislike,
+  .thumb-unlike,
+  .thumb-unlike-down,
+  .thumb-burst-ring,
+  .thumb-burst-dot {
     animation: none;
   }
 }
@@ -492,6 +692,39 @@ input[type="radio"]:not(:disabled) {
   pointer-events: none;
 }
 
+/* A menu flipped above its trigger travels the other way — arriving from
+   below it and leaving downward — so the direction still reads as "out of the
+   trigger" rather than as the menu sliding past it. */
+@keyframes dropdown-open-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dropdown-close-up {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+.dropdown-panel[data-placement="top"][data-state="open"] {
+  animation-name: dropdown-open-up;
+}
+
+.dropdown-panel[data-placement="top"][data-state="closed"] {
+  animation-name: dropdown-close-up;
+}
+
 .dropdown-chevron {
   display: inline-flex;
   transform: rotate(0deg);
@@ -520,6 +753,16 @@ input[type="radio"]:not(:disabled) {
   }
 
   .dropdown-panel[data-state="closed"] {
+    animation-name: dropdown-fade-out;
+  }
+
+  /* Same specificity as the flipped rules above, and later — so a flipped
+     menu fades rather than travelling too. */
+  .dropdown-panel[data-placement="top"][data-state="open"] {
+    animation-name: dropdown-fade-in;
+  }
+
+  .dropdown-panel[data-placement="top"][data-state="closed"] {
     animation-name: dropdown-fade-out;
   }
 
@@ -856,5 +1099,159 @@ input[type="radio"]:not(:disabled) {
 @keyframes waveform-loader-fade-out {
   to {
     opacity: 0;
+  }
+}
+
+/* ── Accordion ──────────────────────────────────────────────────────────────
+   The one deliberate exception to §4's "don't animate layout": a disclosure
+   row genuinely gets taller, and no amount of `transform` makes the rows below
+   it move. `grid-template-rows` between `0fr` and `1fr` is the cheapest way to
+   do it that still lets the panel size itself to its own content — the
+   alternative is a measured pixel height in JS, which goes stale the moment
+   anything inside re-wraps.
+
+   Opening is panel-internal movement, so `moderate`; closing takes one step
+   less (`base`) per §4's pairing rule. The content fades on its own slightly
+   faster, so a panel on its way open reads as arriving rather than as being
+   unrolled. */
+.accordion-panel {
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--duration-base) var(--ease-exit);
+}
+
+.accordion-panel[data-open="true"] {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--duration-moderate) var(--ease-entrance);
+}
+
+.accordion-panel-inner {
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-exit);
+}
+
+.accordion-panel[data-open="true"] > .accordion-panel-inner {
+  opacity: 1;
+  transition: opacity var(--duration-base) var(--ease-entrance)
+    var(--duration-micro);
+}
+
+/* Collapsed → the chevron points at the row; open → it points into the panel
+   it opened. A rotation rather than two swapped glyphs, so it turns. */
+.accordion-chevron {
+  rotate: -90deg;
+  transition: rotate var(--duration-base) var(--ease-standard);
+}
+
+.accordion-chevron[data-open="true"] {
+  rotate: 0deg;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The row snaps to its size and the contents cross-fade. Dropping the fade
+     as well would leave the open panel with no arrival at all. */
+  .accordion-panel,
+  .accordion-panel[data-open="true"],
+  .accordion-chevron {
+    transition: none;
+  }
+
+  .accordion-panel-inner,
+  .accordion-panel[data-open="true"] > .accordion-panel-inner {
+    transition-duration: var(--duration-fast);
+    transition-delay: var(--duration-instant);
+  }
+}
+
+/* ── Slider ─────────────────────────────────────────────────────────────────
+   A native range input, restyled. The track has to be painted twice — once by
+   WebKit's `::-webkit-slider-runnable-track` and once by Gecko's
+   `::-moz-range-track` — because a selector one engine doesn't recognise
+   invalidates the whole rule, so the two can never share a block.
+
+   The fill is a hard-stop gradient at `--slider-progress` rather than a second
+   element: one paint, nothing to keep in sync, and it survives the thumb being
+   dragged past either end. */
+.slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 1.25rem;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.slider:disabled {
+  cursor: not-allowed;
+}
+
+.slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-brand) var(--slider-progress, 50%),
+    var(--color-line) var(--slider-progress, 50%)
+  );
+}
+
+.slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-brand) var(--slider-progress, 50%),
+    var(--color-line) var(--slider-progress, 50%)
+  );
+}
+
+/* The negative margin is what centres the thumb on a 4px track: WebKit aligns
+   the thumb's top edge to the track's, so it has to be pulled up by half the
+   difference. Gecko centres it already, which is why only one engine needs it. */
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  margin-top: -6px;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-brand);
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow var(--duration-base) var(--ease-standard);
+}
+
+.slider::-moz-range-thumb {
+  width: 1rem;
+  height: 1rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-brand);
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow var(--duration-base) var(--ease-standard);
+}
+
+.slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-brand) 24%, transparent);
+}
+
+.slider:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-brand) 24%, transparent);
+}
+
+.slider:disabled::-webkit-slider-thumb {
+  background: var(--color-disabled-fg);
+}
+
+.slider:disabled::-moz-range-thumb {
+  background: var(--color-disabled-fg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The ring is a colour change, which §4 lets stand — but the thumb is under
+     the pointer while it grows, and that is the one place a grow reads as lag. */
+  .slider::-webkit-slider-thumb,
+  .slider::-moz-range-thumb {
+    transition: none;
   }
 }

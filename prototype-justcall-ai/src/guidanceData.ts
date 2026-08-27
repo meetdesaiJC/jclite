@@ -37,7 +37,7 @@ export const AIRCALL_BATTLECARD: BattlecardData = {
   ],
 };
 
-/** Who has to say it before this guidance fires. Defaults to the customer. */
+/** Who has to say it before this guidance fires. New cards default to anyone. */
 export type GuidanceTriggeredBy = "customer" | "agent" | "either";
 
 export interface GuidanceItem {
@@ -65,7 +65,7 @@ export function guidanceTriggeredBy(item: GuidanceItem): GuidanceTriggeredBy {
 export const GUIDANCE_TRIGGERED_BY_OPTIONS: DropdownListItem[] = [
   { value: "customer", label: "Customer" },
   { value: "agent", label: "Agent" },
-  { value: "either", label: "Either" },
+  { value: "either", label: "Anyone" },
 ];
 
 export const TEAM_MEMBERS: DropdownListItem[] = [
@@ -1004,7 +1004,7 @@ export function createEmptyGuidance(): GuidanceItem {
     name: "",
     trigger: "",
     examplePhrases: [],
-    triggeredBy: "customer",
+    triggeredBy: "either",
     suggestedResponse: "",
     talkingPoints: [],
     resources: [],
@@ -1022,6 +1022,54 @@ export function createGuidanceFromTemplate(
     ...createEmptyGuidance(),
     ...GUIDANCE_TEMPLATE_STARTERS[templateId],
   };
+}
+
+/**
+ * Generate from Knowledge Base — the admin picks a source they already
+ * uploaded and AI proposes the strategic pieces: a trigger, wording, and
+ * points. Nothing publishes until the admin reviews it.
+ */
+export function proposeGuidanceFromKnowledge(
+  entries: { title: string; answer: string; cues: string[] }[],
+  sourceName: string
+): GuidanceItem[] {
+  return entries.slice(0, 4).map((entry) => {
+    const subject = entry.title.replace(/^JustCall (vs|and) /i, "").trim();
+    return {
+      ...createEmptyGuidance(),
+      name: entry.title,
+      // Subject is kept verbatim — lowercasing would mangle product names.
+      trigger: `When the customer asks about ${subject}, or raises it as a concern during the call.`,
+      examplePhrases: entry.cues.slice(0, 4).map(sentenceCase),
+      suggestedResponse: entry.answer,
+      talkingPoints: talkingPointsFromAnswer(entry.answer),
+      resources: [
+        {
+          id: `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: "link" as const,
+          name: `${sourceName} — ${entry.title}`,
+        },
+      ],
+      status: "draft" as const,
+    };
+  });
+}
+
+function sentenceCase(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+  const cased = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  return /[.?!]$/.test(cased) ? cased : `${cased}?`;
+}
+
+/** Split an approved answer into scannable points without inventing facts. */
+function talkingPointsFromAnswer(answer: string): string[] {
+  return answer
+    .split(/(?<=[.!?])\s+/)
+    .flatMap((sentence) => sentence.split(/,\s+(?=and\b|with\b)/))
+    .map((part) => part.replace(/^and\s+/i, "").replace(/[.]$/, "").trim())
+    .filter((part) => part.length > 12)
+    .slice(0, 3);
 }
 
 export function placeholdersForGuidance(

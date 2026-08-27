@@ -13,11 +13,11 @@ import {
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { DURATION } from "@/lib/motion";
+import { Alert } from "@/components/Alert";
 import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
 import { FeedbackThumbs, type FeedbackVote } from "@/components/FeedbackThumbs";
 import { InputField } from "@/components/InputField";
-import { AvatarIndicator } from "@/components/Avatar";
 import {
   IconCallDisposition,
   IconCallLogs,
@@ -36,11 +36,74 @@ import { IconJcaiSettings } from "./icons/JustCallAiNavIcons";
 import {
   IconCallHold,
   IconCallKeypad,
+  IconCallMuted,
   IconCallNotes,
   IconCallTranscript,
   IconCallTransfer,
+  IconCallUsers,
 } from "./icons/CallControlIcons";
-import { AgentAssistCallSheet, LiveTranscriptPanel } from "./AgentAssistCallSheet";
+import { BarControl, CallControl } from "./CallBarControl";
+import {
+  KEYPAD_COPY,
+  KeypadBody,
+  KeypadControl,
+  KeypadGrid,
+  TransferBody,
+  TransferControl,
+  VoicemailBody,
+  VoicemailDropControl,
+  transferCopy,
+  useKeypad,
+  useTransferFlow,
+  useVoicemailDrop,
+  voicemailCopy,
+  type KeypadFlow,
+  type TransferFlow,
+  type VoicemailFlow,
+} from "./CallLineControls";
+import {
+  RecordingBody,
+  recordingCopy,
+  AvailabilityControl,
+  AvailabilityStatusPill,
+  CallQualityModal,
+  NetworkStatusControl,
+  PhoneNetworkCheck,
+  RecordingControl,
+  useCallQualityModal,
+  useRecording,
+  type RecordingController,
+} from "./CallStatusControls";
+import {
+  CallAsidePanel,
+  PhoneSheet,
+  usePhoneSheetPresence,
+} from "./CallPopover";
+import { DialerSettingsPage } from "./DialerSettingsPage";
+import { useAudioDevices, type AudioDeviceSelection } from "./audioSettings";
+import {
+  KNOWN_NUMBERS,
+  formatCallDuration,
+  formatPhoneNumber,
+  networkReadingAt,
+  setVoicemailLibrary,
+  voicemailLibrary,
+  type AvailabilityId,
+  SEED_BUSY_REASONS,
+  type BusyReason,
+  type BusyReasonId,
+  type NetworkReading,
+  type TransferTarget,
+  type VoicemailGreeting,
+  INBOUND_ARRIVES_MS,
+  INBOUND_CALL,
+  type InboundCall,
+} from "./callDeviceData";
+import {
+  AgentAssistCallSheet,
+  LiveTranscriptPanel,
+  callActionCtas,
+} from "./AgentAssistCallSheet";
 import {
   NotesEditor,
   type NotesEditorCaret,
@@ -103,8 +166,32 @@ type DialerTab = "dialer" | "call-logs" | "contacts" | "messages" | "settings";
  * `connecting` is the beat between pickup and the workspace: the phone is still
  * whole, it just stops saying Ringing and starts the clock. The layout only
  * begins to move once that has registered.
+ *
+ * `incoming` is not a variant of `ringing`, and the difference is the whole
+ * reason it exists: `ringing` ends on a timer, and an offered call must only
+ * ever end because the agent answered it or turned it down. Keeping them apart
+ * is what stops the clock effect below from quietly answering the phone.
  */
-type CallPhase = "idle" | "ringing" | "connecting" | "talking" | "wrapup";
+type CallPhase =
+  | "idle"
+  | "incoming"
+  | "ringing"
+  | "connecting"
+  | "talking"
+  | "wrapup";
+
+/**
+ * Who is on the line. The number always exists; the name only does when the
+ * directory has a record for it, and `known: false` is the unknown-caller
+ * state every surface has to render — the number is promoted to the headline
+ * and nothing pretends to know whose it is.
+ */
+type CallerIdentity = {
+  name: string;
+  number: string;
+  meta: string;
+  known: boolean;
+};
 
 const NOTES_MAX = 1500;
 
@@ -166,6 +253,12 @@ const POST_COMPLETED_HANGUP_MS = 2800;
 const SHELL_CROSSFADE_MS = 180;
 /** Save & close — the button confirms before the wrap-up lets go. */
 const SAVE_CONFIRM_MS = 520;
+/**
+ * How long the dropped-voicemail toast stays up. Long enough to be read after
+ * the dialer has finished arriving under it, short enough that it is gone
+ * before the agent has dialled the next number.
+ */
+const VOICEMAIL_TOAST_MS = 3200;
 
 /* ── Answered → workspace ───────────────────────────────────────────────────
    One ~640ms move, timed from the moment the line goes live. The phone is
@@ -219,29 +312,6 @@ const DIALER_ARM_MS = DURATION.micro + DURATION.base;
 /** Reduced motion: one crossfade, no collapse, no travel, nothing to wait out. */
 const POST_CALL_CLOSE_REDUCED_MS = DURATION.fast;
 
-const KEYPAD: { digit: string; letters: string }[][] = [
-  [
-    { digit: "1", letters: "" },
-    { digit: "2", letters: "ABC" },
-    { digit: "3", letters: "DEF" },
-  ],
-  [
-    { digit: "4", letters: "GHI" },
-    { digit: "5", letters: "JKL" },
-    { digit: "6", letters: "MNO" },
-  ],
-  [
-    { digit: "7", letters: "PQRS" },
-    { digit: "8", letters: "TUV" },
-    { digit: "9", letters: "WXYZ" },
-  ],
-  [
-    { digit: "*", letters: "" },
-    { digit: "0", letters: "+" },
-    { digit: "#", letters: "" },
-  ],
-];
-
 const NAV_ITEMS: {
   id: DialerTab;
   label: string;
@@ -292,16 +362,6 @@ function Glyph({ src, className }: { src: string; className?: string }) {
       <img src={src} alt="" className="size-full object-contain" />
     </span>
   );
-}
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const seconds = total % 60;
-  return [hours, minutes, seconds]
-    .map((value) => String(value).padStart(2, "0"))
-    .join(":");
 }
 
 function formatLocalTime(date: Date): string {
@@ -531,6 +591,32 @@ function ShellSwap({
 export interface DialerPanelProps {
   /** V1 has no Live Assist, coaching cues or suggested actions. */
   scope?: AgentAssistScope;
+  /**
+   * Whether this account has anything authored in Agent Assist.
+   *
+   * Off is the default dialer: no script to follow, no response cards, nothing
+   * to widen the stage for — so the call never leaves the 360px phone. That is
+   * not a degraded version of the workspace, it is what a JustCall call looks
+   * like before Agent Assist is set up, and it is the state every new account
+   * starts in.
+   */
+  assistConfigured?: boolean;
+  /**
+   * The unavailability reasons the admin has set up for this account. The
+   * dialer reads this list, it never authors it — going Unavailable asks for a
+   * reason from here, and an account with none set up is asked for nothing.
+   */
+  busyReasons?: BusyReason[];
+  /**
+   * Selects the transferred-call walkthrough: shortly after the dialer opens,
+   * a colleague hands a call over instead of the agent placing one. Nothing
+   * else about the dialer changes, and the outbound demo never sees the timer.
+   *
+   * No caller sets it today — the launcher card was pulled while the handover
+   * flow is reworked. Passing it again from `Dashboard` is the whole re-enable,
+   * so the offer states below stay exercised rather than rebuilt.
+   */
+  inboundDemo?: boolean;
   className?: string;
   onCall?: (number: string) => void;
   onClose?: () => void;
@@ -541,6 +627,9 @@ export function DialerPanel({
   onCall,
   onClose,
   scope = "v2",
+  assistConfigured = true,
+  busyReasons = SEED_BUSY_REASONS,
+  inboundDemo = false,
 }: DialerPanelProps) {
   const inputId = useId();
   const [number, setNumber] = useState("");
@@ -550,6 +639,45 @@ export function DialerPanel({
   const [muted, setMuted] = useState(false);
   const [onHold, setOnHold] = useState(false);
   const [scenarioId, setScenarioId] = useState(CALL_SCENARIOS[0].id);
+  // Which number the call actually went to, so the phone can tell a contact
+  // from a bare number it has never seen (see `caller` below).
+  const [dialedDigits, setDialedDigits] = useState(DEFAULT_NUMBER);
+  /**
+   * The attribution for a transferred call, and the direction flag both:
+   * `inbound !== null` is what makes this call inbound. Held as one nullable
+   * payload rather than a field on `CallerIdentity`, so the eight surfaces that
+   * take a caller stay untouched — none of them cares which way it was placed.
+   */
+  const [inbound, setInbound] = useState<InboundCall | null>(null);
+  // The agent's own status and why they are Unavailable if they are. Both
+  // live here because both outlast a single call.
+  const [availability, setAvailability] = useState<AvailabilityId>("available");
+  const [busyReason, setBusyReason] = useState<BusyReasonId | null>(null);
+
+  /**
+   * Status and reason move together — an Unavailable without a reason and an
+   * Available carrying a stale one are both states nothing should be able to
+   * reach.
+   */
+  const changeAvailability = (
+    next: AvailabilityId,
+    reason: BusyReasonId | null
+  ) => {
+    setAvailability(next);
+    setBusyReason(next === "busy" ? reason : null);
+  };
+  // Devices outlast calls too — an agent picks a headset once a morning.
+  const devices = useAudioDevices();
+  // So does the drop library: uploaded once in Settings, offered on every call
+  // after. It lives up here because Settings writes it and the call bar reads
+  // it, and those are two different branches of this tree — and it is seeded
+  // from the account rather than from the fixture, so a drop the agent
+  // uploaded is still there after the dialer has been closed and reopened.
+  const [drops, setDrops] = useState<VoicemailGreeting[]>(voicemailLibrary);
+  // Which drop was just left, or null. The one thing that outlives the call a
+  // voicemail ended: there is no recap to report it on, so it reports itself
+  // on the dialer the agent lands back on.
+  const [droppedVoicemail, setDroppedVoicemail] = useState<string | null>(null);
   const [assistCollapsing, setAssistCollapsing] = useState(false);
   // The completed call is on its way out: the recap is collapsing and the
   // dialer is arriving under it. Also the transition lock — one close runs,
@@ -567,10 +695,62 @@ export function DialerPanel({
   const pausedMs = useRef(0);
   const autoEnded = useRef(false);
   const inCall = phase !== "idle";
+  const incoming = phase === "incoming";
   const connecting = phase === "connecting";
   const talking = phase === "talking";
   const wrapping = phase === "wrapup";
   const scenario = scenarioById(scenarioId);
+
+  /**
+   * Who is on the line, name and number both.
+   *
+   * The number is the one thing about a call that always exists — a name only
+   * does when there is a record behind it. So the number is derived from what
+   * was dialled rather than from the scenario, and a number the directory
+   * doesn't know produces the unknown-caller state: the number becomes the
+   * headline and there is no name above it. That state is reachable by typing
+   * an unfamiliar number into the field, which is how an agent reaches it for
+   * real — not by a switch.
+   */
+  const caller = useMemo(() => {
+    const digits = dialedDigits.replace(/\D/g, "");
+    const known = KNOWN_NUMBERS[digits] === scenario.id;
+    return {
+      name: known ? scenario.contactName : "",
+      number: formatPhoneNumber(known ? scenario.contactNumber : digits),
+      meta: known ? scenario.contactMeta : "No matching contact",
+      known,
+    };
+  }, [dialedDigits, scenario]);
+
+  /** The line's own reading, on the authored arc — see `networkTierAt`. */
+  const network = networkReadingAt(elapsedMs);
+
+  /**
+   * What the pill says. On a call and in wrap-up the phone owns the status:
+   * an agent mid-sentence is not "Available", whatever they last picked.
+   *
+   * Unavailable rather than a status of its own, because Unavailable is what
+   * the queue already does with this: don't ring this person. An agent on a
+   * call, an agent filing one and an agent at lunch are the same routing fact,
+   * and giving each its own colour says they aren't — the floor view then has
+   * three colours to mean one thing.
+   *
+   * Wrap-up was the last holdout, and it was the weakest of the three: Wrap-Up
+   * Time ships Disabled, so an amber "Wrap-up time" named a window the account
+   * had not granted. Filing a call is the same fact as taking one — the agent
+   * is off the queue, and the pill says so once.
+   *
+   * "On a call" and "Wrap-up time" stay in the vocabulary for the *other*
+   * agents in the transfer list, where how they are off the queue is the
+   * whole point.
+   */
+  const effectiveAvailability: AvailabilityId =
+    // `inCall` is `phase !== "idle"`, so it already covers wrap-up. An offered
+    // call satisfies it too — but a call being offered is not one being taken,
+    // and reporting Unavailable before the agent has answered tells the queue
+    // something untrue about them.
+    inCall && !incoming ? "busy" : availability;
 
   useEffect(() => {
     const input = document.getElementById(inputId) as HTMLInputElement | null;
@@ -584,6 +764,10 @@ export function DialerPanel({
       // the whole dialer). A dialog opened from inside the call — the battle
       // card zoom, say — still owns Escape first.
       if (talking) return;
+      // An offer has two answers and Escape is neither. This handler calls
+      // `onClose`, which unmounts the panel outright — a stray keypress would
+      // drop a ringing call with nothing recorded.
+      if (incoming) return;
       // A close is already running. Leaving mid-collapse would cut the
       // screen in half; the transition is short enough to wait out.
       if (closing) return;
@@ -594,7 +778,10 @@ export function DialerPanel({
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose, talking, closing]);
+    // `incoming` belongs here: idle → incoming moves neither `talking` nor
+    // `closing`, so without it the listener keeps the handler that was built
+    // when there was no offer and Escape closes the dialer anyway.
+  }, [onClose, talking, incoming, closing]);
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow;
@@ -604,6 +791,11 @@ export function DialerPanel({
     };
   }, []);
 
+  // `incoming` is deliberately absent from this list. An offered call has no
+  // clock and no deadline: adding it here would start the interval below, and
+  // the `raw >= RINGING_MS` promotion would answer the phone by itself 2.4s
+  // later — from inside a state updater, so it would read as a race rather
+  // than as a rule. Accept and Decline are the only ways out of that phase.
   useEffect(() => {
     if (phase !== "ringing" && phase !== "connecting" && phase !== "talking") return;
     const tick = () => {
@@ -646,29 +838,95 @@ export function DialerPanel({
     setNumber((current) => `${current}${digit}`);
   };
 
+  // Appended rather than sorted: the drop the agent just uploaded is the one
+  // they uploaded it to use, and a list that reorders itself is a list they
+  // have to re-read on the next call.
+  const addDrop = (drop: VoicemailGreeting) =>
+    setDrops((library) => [...library, drop]);
+
+  const removeDrop = (id: string) =>
+    setDrops((library) => library.filter((drop) => drop.id !== id));
+
+  // Back to the account, so closing the dialer doesn't throw the upload away.
+  useEffect(() => {
+    setVoicemailLibrary(drops);
+  }, [drops]);
+
+  /**
+   * One constructor for every call, whichever direction it goes.
+   *
+   * An inbound call is seeded here rather than by a sibling function so that
+   * every reset the outbound path performs — mute, hold, the clock, the paused
+   * accumulator, the scenario — happens in exactly one place. A second
+   * copy is how an accepted transfer ends up subtly not being the same live
+   * call as a dialled one.
+   */
   const startCall = (opts?: {
     skipRinging?: boolean;
     scenarioId?: string;
     elapsedMs?: number;
+    /** Offer the call instead of placing it. */
+    incoming?: InboundCall;
   }) => {
-    const digits = number.replace(/\D/g, "") || DEFAULT_NUMBER;
+    const digits =
+      opts?.incoming?.digits ?? (number.replace(/\D/g, "") || DEFAULT_NUMBER);
     const seek = opts?.elapsedMs ?? 0;
+    setDroppedVoicemail(null);
+    setDialedDigits(digits);
     setMuted(false);
     setOnHold(false);
     setElapsedMs(seek);
-    setScenarioId(opts?.scenarioId ?? CALL_SCENARIOS[0].id);
+    setScenarioId(
+      opts?.incoming?.scenarioId ?? opts?.scenarioId ?? CALL_SCENARIOS[0].id
+    );
+    setInbound(opts?.incoming ?? null);
     holdStartedAt.current = null;
     pausedMs.current = 0;
     autoEnded.current = false;
-    if (opts?.skipRinging) {
+    if (opts?.incoming) {
+      // No clock and no timer: the offer stands until the agent answers it.
+      // `callStartedAt` staying null is also what makes the tick effect inert
+      // if anything ever does run it during this phase.
+      callStartedAt.current = null;
+      setTab("dialer");
+      setPhase("incoming");
+    } else if (opts?.skipRinging) {
       callStartedAt.current = Date.now() - RINGING_MS - seek;
       setPhase("talking");
     } else {
       callStartedAt.current = Date.now();
       setPhase("ringing");
     }
-    onCall?.(digits);
+    // "A call was placed to this number" — untrue of one that arrived.
+    if (!opts?.incoming) onCall?.(digits);
   };
+
+  /** A colleague hands a call over. */
+  const receiveCall = (call: InboundCall) => startCall({ incoming: call });
+
+  /**
+   * Answered. Lands on `connecting`, the same beat the outbound path reaches
+   * on pickup, so the measure-then-move morph and everything after it is the
+   * one implementation.
+   *
+   * The clock is based back by `RINGING_MS` because `elapsedMs` is recomputed
+   * from `callStartedAt` every tick with that ring subtracted unconditionally —
+   * so basing at `Date.now()` would leave the talk clock frozen at 00:00 for
+   * 2.4 seconds, and with it the script, the network reading and the guidance
+   * feed that all key off `elapsedMs`.
+   */
+  const acceptCall = () => {
+    callStartedAt.current = Date.now() - RINGING_MS;
+    setElapsedMs(0);
+    setPhase("connecting");
+  };
+
+  /**
+   * Turned down. Straight to idle rather than through `hangup`, which is
+   * re-entrancy-guarded on the collapse timer and means "end a call that
+   * exists" — this one never started.
+   */
+  const declineCall = () => resetToIdle();
 
   const resetToIdle = () => {
     callStartedAt.current = null;
@@ -680,6 +938,11 @@ export function DialerPanel({
     setMuted(false);
     setOnHold(false);
     setScenarioId(CALL_SCENARIOS[0].id);
+    // Covers all three exits that must forget how the call arrived: declining,
+    // hanging up from a phase that never reached wrap-up, and closing the
+    // recap. `endToWrapUp` deliberately does not call this, so the attribution
+    // survives into the recap the way `mergedWith` does.
+    setInbound(null);
   };
 
   const clearCloseTimers = () => {
@@ -690,6 +953,13 @@ export function DialerPanel({
   const finishClose = () => {
     clearCloseTimers();
     resetToIdle();
+    // Filing the call puts the agent back on the queue. Applied here rather
+    // than at hangup: wrap-up is still part of the call, and going Available
+    // mid-recap would put the next one through before this one is written up.
+    // Going Unavailable again is theirs to do from the dialer, with a reason
+    // — which is the only place that choice is ever asked for.
+    setAvailability("available");
+    setBusyReason(null);
   };
 
   /**
@@ -759,6 +1029,55 @@ export function DialerPanel({
     resetToIdle();
   };
 
+  /**
+   * A dropped voicemail is not a call that ended — it is a call that never
+   * started. Nobody picked up, so there is nothing to dispose, nothing to
+   * summarise and no notes to file, and putting the agent through wrap-up for
+   * one is how a dialling session loses its rhythm. So this skips the recap
+   * entirely: the line is released, the dialer comes straight back, and the
+   * toast is the whole record of what happened.
+   *
+   * `finishClose` rather than `hangup`: the call *is* filed, so the status the
+   * agent lined up for afterwards applies now, the way it would once a recap
+   * had been closed.
+   */
+  const dropVoicemail = (greeting: VoicemailGreeting) => {
+    if (collapseTimer.current != null) {
+      window.clearTimeout(collapseTimer.current);
+      collapseTimer.current = null;
+    }
+    setAssistCollapsing(false);
+    finishClose();
+    setDroppedVoicemail(greeting.label);
+  };
+
+  // Nothing else dismisses it — the dialer under it is not a surface anyone
+  // acknowledges — so it goes on its own.
+  useEffect(() => {
+    if (!droppedVoicemail) return;
+    const timer = window.setTimeout(
+      () => setDroppedVoicemail(null),
+      VOICEMAIL_TOAST_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [droppedVoicemail]);
+
+  /**
+   * The transferred call arrives a moment after the dialer opens, so the agent
+   * sees the keypad first and the call lands on top of it — which is how a
+   * handover actually happens. One shot: declining puts the phone back on the
+   * keypad rather than ringing again.
+   */
+  useEffect(() => {
+    if (!inboundDemo) return;
+    const timer = window.setTimeout(
+      () => receiveCall(INBOUND_CALL),
+      INBOUND_ARRIVES_MS
+    );
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inboundDemo]);
+
   const callWrapped = talking && simulationAt(scenario, elapsedMs).wrapped;
 
   useEffect(() => {
@@ -826,7 +1145,10 @@ export function DialerPanel({
         className
       )}
     >
-      {onClose ? (
+      {/* Hidden during an offer for the same reason Escape is ignored there:
+          closing unmounts the panel, which would drop a ringing call with no
+          answer recorded. Absolutely positioned, so nothing shifts. */}
+      {onClose && !incoming ? (
         <button
           type="button"
           aria-label="Close dialer"
@@ -857,6 +1179,14 @@ export function DialerPanel({
             inputId={`${inputId}-arriving`}
             number={number}
             tab={tab}
+            availability={availability}
+            busyReason={busyReason}
+            busyReasons={busyReasons}
+            onAvailabilityChange={changeAvailability}
+            devices={devices}
+            drops={drops}
+            onAddDrop={addDrop}
+            onRemoveDrop={removeDrop}
             onNumberChange={setNumber}
             onTabChange={setTab}
             onDigit={appendDigit}
@@ -878,13 +1208,16 @@ export function DialerPanel({
             <InCallShell
               className={enter}
               scope={scope}
+              assistConfigured={assistConfigured}
               talking={talking}
               connecting={connecting}
               wrapping={wrapping}
               assistCollapsing={assistCollapsing}
               elapsedMs={elapsedMs}
-              contactName={scenario.contactName}
-              contactMeta={scenario.contactMeta}
+              caller={caller}
+              network={network}
+              availability={effectiveAvailability}
+              drops={drops}
               muted={muted}
               onHold={onHold}
               tab={tab}
@@ -896,7 +1229,15 @@ export function DialerPanel({
               onTabChange={setTab}
               onMute={() => setMuted((value) => !value)}
               onHoldToggle={() => setOnHold((value) => !value)}
+              // A warm transfer parks the customer, so the flow needs to *set*
+              // hold rather than flip it — cancelling a consult while the agent
+              // had also pressed Hold shouldn't take them off it.
+              onHoldChange={setOnHold}
               onHangup={hangup}
+              inbound={inbound}
+              onAccept={acceptCall}
+              onDecline={declineCall}
+              onVoicemailDropped={dropVoicemail}
               closing={closing}
               onCloseWrapUp={closeRecap}
             />
@@ -909,6 +1250,14 @@ export function DialerPanel({
                 inputId={inputId}
                 number={number}
                 tab={tab}
+                availability={availability}
+                busyReason={busyReason}
+                busyReasons={busyReasons}
+                onAvailabilityChange={changeAvailability}
+                devices={devices}
+                drops={drops}
+                onAddDrop={addDrop}
+                onRemoveDrop={removeDrop}
                 onNumberChange={setNumber}
                 onTabChange={setTab}
                 onDigit={appendDigit}
@@ -918,6 +1267,24 @@ export function DialerPanel({
           )
         }
       </ShellSwap>
+
+      {/* A voicemail drop is the one way a call ends with no recap to report
+          on, so the report is here instead. Bottom-centred rather than over
+          the phone: the agent's next act is dialling again, and the number
+          field must never be under an acknowledgement. */}
+      {droppedVoicemail ? (
+        <div
+          data-state="open"
+          className="toast-panel pointer-events-auto absolute bottom-8 left-1/2 z-30 w-[min(100%-48px,360px)] -translate-x-1/2"
+        >
+          <Alert
+            variant="success"
+            onClose={() => setDroppedVoicemail(null)}
+          >
+            Voicemail dropped · {droppedVoicemail}
+          </Alert>
+        </div>
+      ) : null}
     </div>,
     document.body
   );
@@ -927,6 +1294,14 @@ function IdleDialer({
   inputId,
   number,
   tab,
+  availability,
+  busyReason,
+  busyReasons,
+  onAvailabilityChange,
+  devices,
+  drops,
+  onAddDrop,
+  onRemoveDrop,
   className,
   onNumberChange,
   onTabChange,
@@ -936,6 +1311,17 @@ function IdleDialer({
   inputId: string;
   number: string;
   tab: DialerTab;
+  availability: AvailabilityId;
+  busyReason: BusyReasonId | null;
+  busyReasons: BusyReason[];
+  onAvailabilityChange: (
+    next: AvailabilityId,
+    reason: BusyReasonId | null
+  ) => void;
+  devices: AudioDeviceSelection;
+  drops: VoicemailGreeting[];
+  onAddDrop: (drop: VoicemailGreeting) => void;
+  onRemoveDrop: (id: string) => void;
   className?: string;
   onNumberChange: (value: string) => void;
   onTabChange: (tab: DialerTab) => void;
@@ -975,19 +1361,49 @@ function IdleDialer({
         className
       )}
     >
-      <div className="flex w-full items-center justify-center">
-        <div className="flex h-5 w-24 items-center justify-center gap-1.5 rounded-b-lg bg-badge-beta px-2">
-          <AvatarIndicator
-            status="available"
-            size="xs"
-            className="static size-2 shrink-0 border-0"
-          />
-          <span className="text-[10px] leading-3 font-normal whitespace-nowrap text-white">
-            Available
-          </span>
-        </div>
+      {/* On Settings the top of the card becomes a page header: the notch keeps
+          its place in it, and the title and Logout sit under it. Everywhere
+          else the notch is the only thing up here, on white. */}
+      <div
+        className={cn(
+          "flex w-full flex-col items-center",
+          tab === "settings" && "bg-brand"
+        )}
+      >
+        {/* Idle, the status is the agent's own — so unlike the in-call notch
+            this one sets it outright rather than queueing it. */}
+        <AvailabilityControl
+          status={availability}
+          reason={busyReason}
+          reasons={busyReasons}
+          onStatusChange={onAvailabilityChange}
+        />
+        {tab === "settings" ? (
+          <div className="relative flex h-11 w-full items-center justify-center px-3">
+            <h2 className="text-[16px] leading-6 font-medium text-white">
+              Settings
+            </h2>
+            {/* Signing out is the one thing on this page that ends the session
+                rather than changing it, so it sits in the chrome rather than in
+                the list — where it would read as a sixth setting. */}
+            <button
+              type="button"
+              className="absolute right-3 flex h-7 items-center rounded-full bg-white px-3 text-label-sm text-gray-700 outline-none transition-colors duration-base hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-white/50"
+            >
+              Logout
+            </button>
+          </div>
+        ) : null}
       </div>
 
+      {tab === "settings" ? (
+        <DialerSettingsPage
+          devices={devices}
+          drops={drops}
+          onAddDrop={onAddDrop}
+          onRemoveDrop={onRemoveDrop}
+        />
+      ) : (
       <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-between gap-4 p-4">
         <InputField
           id={inputId}
@@ -1007,27 +1423,12 @@ function IdleDialer({
           aria-label="Phone number"
         />
 
-        <div className="flex flex-col items-center gap-2">
-          {KEYPAD.map((row) => (
-            <div key={row.map((key) => key.digit).join("")} className="flex gap-2">
-              {row.map((key) => (
-                <button
-                  key={key.digit}
-                  type="button"
-                  onClick={() => onDigit(key.digit)}
-                  className="flex h-[52px] w-[104px] flex-col items-center justify-center rounded-full outline-none transition-colors hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-brand/24 active:scale-[0.97]"
-                >
-                  <span className="text-[18px] leading-[26px] font-medium text-brand tabular-nums">
-                    {key.digit}
-                  </span>
-                  <span className="min-h-3.5 text-[10px] leading-[14px] font-medium text-muted-foreground uppercase">
-                    {key.letters || "\u00a0"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
+        <KeypadGrid
+          onDigit={(digit) => {
+            onDigit(digit);
+            (document.getElementById(inputId) as HTMLInputElement | null)?.focus();
+          }}
+        />
 
         <div className="flex w-full items-center justify-center gap-3">
           <span className="size-14 shrink-0" aria-hidden="true" />
@@ -1060,11 +1461,12 @@ function IdleDialer({
             className="inline-flex h-8 items-center gap-1 rounded-[4px] border border-line bg-white px-2 outline-none transition-colors hover:border-gray-300 hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-brand/24"
           >
             <Flag />
-            <span className="text-label-sm text-foreground">Support outbound</span>
+              <span className="text-label-sm text-foreground">Support outbound</span>
             <IconChevronDown size={16} className="size-4 shrink-0 text-foreground" />
           </button>
         </div>
       </div>
+      )}
 
       <DialerNav tab={tab} onTabChange={onTabChange} />
     </div>
@@ -1074,13 +1476,16 @@ function IdleDialer({
 function InCallShell({
   className,
   scope,
+  assistConfigured,
   talking,
   connecting,
   wrapping,
   assistCollapsing,
   elapsedMs,
-  contactName,
-  contactMeta,
+  caller,
+  network,
+  availability,
+  drops,
   muted,
   onHold,
   tab,
@@ -1089,19 +1494,27 @@ function InCallShell({
   onTabChange,
   onMute,
   onHoldToggle,
+  onHoldChange,
   onHangup,
+  inbound,
+  onAccept,
+  onDecline,
+  onVoicemailDropped,
   closing,
   onCloseWrapUp,
 }: {
   className?: string;
   scope: AgentAssistScope;
+  assistConfigured: boolean;
   talking: boolean;
   connecting: boolean;
   wrapping: boolean;
   assistCollapsing: boolean;
   elapsedMs: number;
-  contactName: string;
-  contactMeta: string;
+  caller: CallerIdentity;
+  network: NetworkReading;
+  availability: AvailabilityId;
+  drops: VoicemailGreeting[];
   muted: boolean;
   onHold: boolean;
   tab: DialerTab;
@@ -1110,7 +1523,14 @@ function InCallShell({
   onTabChange: (tab: DialerTab) => void;
   onMute: () => void;
   onHoldToggle: () => void;
+  onHoldChange: (held: boolean) => void;
   onHangup: () => void;
+  /** Set while a transferred call is being offered — see `InboundCall`. */
+  inbound: InboundCall | null;
+  onAccept: () => void;
+  onDecline: () => void;
+  /** The message is away — release the line without a wrap-up. */
+  onVoicemailDropped: (greeting: VoicemailGreeting) => void;
   /** The recap is collapsing off the stage — see POST_CALL_CLOSE_MS. */
   closing: boolean;
   onCloseWrapUp: (fromKeyboard?: boolean) => void;
@@ -1148,31 +1568,45 @@ function InCallShell({
     >
       {(enter) =>
         wrapping ? (
-          <PostCallStage
-            className={enter}
-            scope={scope}
-            reduced={reduced}
-            elapsedMs={elapsedMs}
-            contactName={contactName}
-            contactMeta={contactMeta}
-            scenario={scenario}
-            actionStates={actionStates}
-            notes={notes}
-            onNotesChange={setNotes}
-            onScenarioChange={onScenarioChange}
-            closing={closing}
-            onClose={onCloseWrapUp}
-          />
+          assistConfigured ? (
+            <PostCallStage
+              className={enter}
+              scope={scope}
+              reduced={reduced}
+              elapsedMs={elapsedMs}
+              caller={caller}
+              scenario={scenario}
+              actionStates={actionStates}
+              notes={notes}
+              onNotesChange={setNotes}
+              onScenarioChange={onScenarioChange}
+              closing={closing}
+              onClose={onCloseWrapUp}
+            />
+          ) : (
+            <CompactWrapUp
+              className={enter}
+              elapsedMs={elapsedMs}
+              caller={caller}
+              notes={notes}
+              onNotesChange={setNotes}
+              closing={closing}
+              onClose={onCloseWrapUp}
+            />
+          )
         ) : (
           <CallMorphStage
             className={enter}
             scope={scope}
+            assistConfigured={assistConfigured}
             reduced={reduced}
             live={talking}
             connecting={connecting}
             elapsedMs={elapsedMs}
-            contactName={contactName}
-            contactMeta={contactMeta}
+            caller={caller}
+            network={network}
+            availability={availability}
+            drops={drops}
             localTime={localTime}
             muted={muted}
             onHold={onHold}
@@ -1185,7 +1619,12 @@ function InCallShell({
             onTabChange={onTabChange}
             onMute={onMute}
             onHoldToggle={onHoldToggle}
+            onHoldChange={onHoldChange}
             onHangup={onHangup}
+            inbound={inbound}
+            onAccept={onAccept}
+            onDecline={onDecline}
+            onVoicemailDropped={onVoicemailDropped}
             onActionStatesChange={setActionStates}
           />
         )
@@ -1211,12 +1650,15 @@ function InCallShell({
 function CallMorphStage({
   className,
   scope,
+  assistConfigured,
   reduced,
   live,
   connecting,
   elapsedMs,
-  contactName,
-  contactMeta,
+  caller,
+  network,
+  availability,
+  drops,
   localTime,
   muted,
   onHold,
@@ -1229,17 +1671,25 @@ function CallMorphStage({
   onTabChange,
   onMute,
   onHoldToggle,
+  onHoldChange,
   onHangup,
+  inbound,
+  onAccept,
+  onDecline,
+  onVoicemailDropped,
   onActionStatesChange,
 }: {
   className?: string;
   scope: AgentAssistScope;
+  assistConfigured: boolean;
   reduced: boolean;
   live: boolean;
   connecting: boolean;
   elapsedMs: number;
-  contactName: string;
-  contactMeta: string;
+  caller: CallerIdentity;
+  network: NetworkReading;
+  availability: AvailabilityId;
+  drops: VoicemailGreeting[];
   localTime: string;
   muted: boolean;
   onHold: boolean;
@@ -1252,7 +1702,17 @@ function CallMorphStage({
   onTabChange: (tab: DialerTab) => void;
   onMute: () => void;
   onHoldToggle: () => void;
+  onHoldChange: (held: boolean) => void;
   onHangup: () => void;
+  /**
+   * Forwarded to the phone and read nowhere here: the morph's capture and its
+   * state machine are direction-blind, which is exactly why accepting a
+   * transferred call plays the same move as an outbound pickup.
+   */
+  inbound: InboundCall | null;
+  onAccept: () => void;
+  onDecline: () => void;
+  onVoicemailDropped: (greeting: VoicemailGreeting) => void;
   onActionStatesChange?: (states: Record<string, ActionState>) => void;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -1263,12 +1723,43 @@ function CallMorphStage({
     { phase: "idle" | "settled" } | { phase: "run"; from: MorphCapture }
   >({ phase: "idle" });
 
-  // Measure while the phone is still the thing on screen.
+  /**
+   * The four things that belong to the *call* rather than to the panel showing
+   * them — tones already sent, a transfer in flight, a voicemail playing out,
+   * and the recording.
+   *
+   * They live at this level because the call has two possible faces: the wide
+   * workspace when Agent Assist is set up, and the 360px phone when it isn't.
+   * A transfer started from one has to still be running if the other is what
+   * is on screen, and holding the state here is what makes that true instead
+   * of true-by-coincidence.
+   */
+  const [mergedWith, setMergedWith] = useState<TransferTarget | null>(null);
+  const keypad = useKeypad();
+  const transfer = useTransferFlow({
+    // The same label the bar and the phone put in the headline, so the
+    // participant list doesn't call a named contact "Customer".
+    customerName: caller.known ? caller.name : caller.number,
+    elapsedMs,
+    customerHeld: onHold,
+    onCustomerHoldChange: onHoldChange,
+    onCallHandedOff: onHangup,
+    onMergedChange: setMergedWith,
+  });
+  const voicemail = useVoicemailDrop({
+    greetings: drops,
+    onDropped: onVoicemailDropped,
+  });
+  const recording = useRecording(elapsedMs);
+
+  // Measure while the phone is still the thing on screen. With nothing
+  // authored in Agent Assist there is no workspace to morph into — the phone
+  // keeps the stage for the whole call — so there is nothing to measure.
   useLayoutEffect(() => {
-    if (!connecting || reduced) return;
+    if (!connecting || reduced || !assistConfigured) return;
     const card = rootRef.current?.querySelector<HTMLElement>("[data-morph-card]");
     if (card) captured.current = captureMorph(card);
-  }, [connecting, reduced]);
+  }, [connecting, reduced, assistConfigured]);
 
   // Commit `run` in the same pass that mounts the bar, so the bar never gets a
   // painted frame at its settled size before the move starts.
@@ -1327,13 +1818,18 @@ function CallMorphStage({
             ref={ghostRef}
             className="call-morph-ghost"
           >
+            {/* No `inbound` here on purpose. The ghost is the copy of the
+                *connected* card that fades out during the move, so giving it
+                the offer's props would fade accept/decline out of a call that
+                has already been answered. */}
             <RingingPhone
               reduced
               connected
               ghost
               elapsedMs={elapsedMs}
-              contactName={contactName}
-              contactMeta={contactMeta}
+              caller={caller}
+              network={network}
+              availability={availability}
               localTime={localTime}
               tab={tab}
               onTabChange={() => {}}
@@ -1344,14 +1840,21 @@ function CallMorphStage({
         </>
       ) : null}
 
-      {live ? (
+      {live && assistConfigured ? (
         <LiveCallStage
           className="call-morph-stage"
           scope={scope}
           reduced={reduced}
           morphing={morphing}
           elapsedMs={elapsedMs}
-          contactName={contactName}
+          caller={caller}
+          network={network}
+          availability={availability}
+          keypad={keypad}
+          transfer={transfer}
+          voicemail={voicemail}
+          recording={recording}
+          mergedWith={mergedWith}
           muted={muted}
           onHold={onHold}
           scenario={scenario}
@@ -1368,14 +1871,30 @@ function CallMorphStage({
         <RingingPhone
           className={PHONE_SHELL_H}
           reduced={reduced}
-          connected={connecting}
+          connected={connecting || live}
+          // The phone is the call now, not a beat on the way to one, so its
+          // controls run the line rather than sitting armed and waiting.
+          live={live}
           elapsedMs={elapsedMs}
-          contactName={contactName}
-          contactMeta={contactMeta}
+          caller={caller}
+          network={network}
+          availability={availability}
+          keypad={keypad}
+          transfer={transfer}
+          voicemail={voicemail}
+          recording={recording}
+          mergedWith={mergedWith}
+          muted={muted}
+          onHold={onHold}
           localTime={localTime}
           tab={tab}
           onTabChange={onTabChange}
+          onMute={onMute}
+          onHoldToggle={onHoldToggle}
           onHangup={onHangup}
+          inbound={inbound}
+          onAccept={onAccept}
+          onDecline={onDecline}
         />
       )}
     </div>
@@ -1477,7 +1996,14 @@ function LiveCallStage({
   reduced,
   morphing,
   elapsedMs,
-  contactName,
+  caller,
+  network,
+  availability,
+  keypad,
+  transfer,
+  voicemail,
+  recording,
+  mergedWith,
   muted,
   onHold,
   scenario,
@@ -1495,7 +2021,14 @@ function LiveCallStage({
   reduced: boolean;
   morphing?: boolean;
   elapsedMs: number;
-  contactName: string;
+  caller: CallerIdentity;
+  network: NetworkReading;
+  availability: AvailabilityId;
+  keypad: KeypadFlow;
+  transfer: TransferFlow;
+  voicemail: VoicemailFlow;
+  recording: RecordingController;
+  mergedWith: TransferTarget | null;
   muted: boolean;
   onHold: boolean;
   scenario: CallScenario;
@@ -1541,6 +2074,9 @@ function LiveCallStage({
   const shownNotes = asideSwitch.shown === "notes";
   const shownTranscript = asideSwitch.shown === "transcript";
   const shownAssist = asideSwitch.shown === "assist";
+  const shownKeypad = asideSwitch.shown === "keypad";
+  const shownTransfer = asideSwitch.shown === "transfer";
+  const shownVoicemail = asideSwitch.shown === "voicemail";
 
   const notesEditorRef = useRef<NotesEditorHandle>(null);
   // Parent-owned: the editor unmounts with the column, the caret shouldn't.
@@ -1551,18 +2087,21 @@ function LiveCallStage({
   const notesControlRef = useRef<HTMLButtonElement>(null);
 
   /**
-   * Notes coming back is its own move, not a repeat of the introduction: the
-   * column re-opens the way any panel does, and the card fades up out of the
-   * edge it left through. Only ever set for an open the agent asked for.
+   * Card motion inside the column. Notes set the bar — fade up out of the
+   * right edge on enter, a shorter reverse on leave — and every view the
+   * column hosts plays the same pair. Only ever set for a move the agent
+   * asked for: the introduction opens and puts itself away on its own clock.
    */
-  const [notesReopening, setNotesReopening] = useState(false);
-  const reopenTimerRef = useRef(0);
+  const [asideMotion, setAsideMotion] = useState<"enter" | "leave" | null>(
+    null
+  );
+  const asideMotionTimerRef = useRef(0);
   /** The introduction has run and put the panel away, so an open is a re-open. */
   const introClosedRef = useRef(false);
   /** First keystroke of the call — reported once, whoever opened the panel. */
   const notesTypedRef = useRef(false);
 
-  useEffect(() => () => window.clearTimeout(reopenTimerRef.current), []);
+  useEffect(() => () => window.clearTimeout(asideMotionTimerRef.current), []);
 
   const [stageSettled, setStageSettled] = useState(false);
   useEffect(() => {
@@ -1592,15 +2131,28 @@ function LiveCallStage({
     setAsidePanel(null);
   };
 
-  /** Every open of Notes the agent asked for — the introduction's own is not one. */
-  const openNotesManually = () => {
-    if (introClosedRef.current) trackNotes("notes_panel_reopened");
+  /** The card arriving — same move Notes has always played, now shared. */
+  const playAsideEnter = () => {
     if (reduced) return;
-    window.clearTimeout(reopenTimerRef.current);
-    setNotesReopening(true);
-    reopenTimerRef.current = window.setTimeout(
-      () => setNotesReopening(false),
+    window.clearTimeout(asideMotionTimerRef.current);
+    setAsideMotion("enter");
+    asideMotionTimerRef.current = window.setTimeout(
+      () => setAsideMotion(null),
       DURATION.slow
+    );
+  };
+
+  /**
+   * The card leaving. Held through the column close so `both` fill does not
+   * snap the card back to opaque for the last frames of the clip.
+   */
+  const playAsideLeave = () => {
+    if (reduced) return;
+    window.clearTimeout(asideMotionTimerRef.current);
+    setAsideMotion("leave");
+    asideMotionTimerRef.current = window.setTimeout(
+      () => setAsideMotion(null),
+      ASIDE_CLOSE_MS
     );
   };
 
@@ -1651,16 +2203,21 @@ function LiveCallStage({
 
   const closeAside = () => {
     discovery.cancel();
+    playAsideLeave();
     dismissAside();
   };
 
   const toggleAside = (next: AsidePanel) => {
     discovery.cancel();
     if (asidePanel === next) {
+      playAsideLeave();
       dismissAside();
       return;
     }
-    if (next === "notes") openNotesManually();
+    if (next === "notes" && introClosedRef.current) {
+      trackNotes("notes_panel_reopened");
+    }
+    playAsideEnter();
     openAside(next);
   };
 
@@ -1721,6 +2278,18 @@ function LiveCallStage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aside.entered]);
 
+  const asideViewClass = (id: AsidePanel, extra?: string) =>
+    cn(
+      "call-aside-view",
+      asideSwitch.shown === id && "is-active",
+      asideSwitch.shown === id && asideMotion === "enter" && "is-entering",
+      asideSwitch.shown === id &&
+        asideMotion === "leave" &&
+        !(id === "notes" && discovery.handingOff) &&
+        "is-leaving",
+      extra
+    );
+
   return (
     <div
       className={cn(
@@ -1750,7 +2319,13 @@ function LiveCallStage({
         morphing={morphing}
         revealing={!reduced}
         elapsedMs={elapsedMs}
-        contactName={contactName}
+        caller={caller}
+        network={network}
+        availability={availability}
+        transfer={transfer}
+        voicemail={voicemail}
+        recording={recording}
+        mergedWith={mergedWith}
         muted={muted}
         onHold={onHold}
         notesOpen={asidePanel === "notes"}
@@ -1759,6 +2334,9 @@ function LiveCallStage({
         transcriptOpen={asidePanel === "transcript"}
         scope={scope}
         liveAssistOpen={asidePanel === "assist"}
+        keypadOpen={asidePanel === "keypad"}
+        transferOpen={asidePanel === "transfer"}
+        voicemailOpen={asidePanel === "voicemail"}
         help={liveAssist}
         onMute={onMute}
         onHoldToggle={onHoldToggle}
@@ -1769,6 +2347,9 @@ function LiveCallStage({
         }}
         onTranscriptToggle={() => toggleAside("transcript")}
         onLiveAssistToggle={() => toggleAside("assist")}
+        onKeypadToggle={() => toggleAside("keypad")}
+        onTransferToggle={() => toggleAside("transfer")}
+        onVoicemailToggle={() => toggleAside("voicemail")}
       />
 
       <div
@@ -1859,11 +2440,9 @@ function LiveCallStage({
           >
             <div
               ref={notesPaneRef}
-              className={cn(
-                "call-aside-view",
-                shownNotes && "is-active",
-                discovery.handingOff && "is-notes-handoff",
-                notesReopening && "is-notes-reopening"
+              className={asideViewClass(
+                "notes",
+                discovery.handingOff ? "is-notes-handoff" : undefined
               )}
               aria-hidden={!shownNotes}
               inert={!shownNotes || undefined}
@@ -1912,7 +2491,7 @@ function LiveCallStage({
               </div>
             </div>
             <div
-              className={cn("call-aside-view", shownTranscript && "is-active")}
+              className={asideViewClass("transcript")}
               aria-hidden={!shownTranscript}
               inert={!shownTranscript || undefined}
             >
@@ -1929,7 +2508,7 @@ function LiveCallStage({
               </div>
             </div>
             <div
-              className={cn("call-aside-view", shownAssist && "is-active")}
+              className={asideViewClass("assist")}
               aria-hidden={!shownAssist}
               inert={!shownAssist || undefined}
             >
@@ -1942,6 +2521,70 @@ function LiveCallStage({
                   className="h-full"
                 />
               </div>
+            </div>
+
+            {/* Keypad, transfer and voicemail drop. They hung off their bar
+                controls as popovers until now; all three are worked *during*
+                the call rather than in a pause in it, so they belong in the
+                column the agent is already reading from — and a popover that
+                shuts when the agent clicks the transcript behind it is a
+                popover that loses a half-typed extension. */}
+            <div
+              className={asideViewClass("keypad")}
+              aria-hidden={!shownKeypad}
+              inert={!shownKeypad || undefined}
+            >
+              <CallAsidePanel
+                title={KEYPAD_COPY.title}
+                icon={<IconCallKeypad size={16} />}
+                onClose={closeAside}
+              >
+                {/* `fill` — the column is a full-height card, like the phone's
+                    sheet and unlike the popover this used to size itself to. */}
+                <KeypadBody
+                  keypad={keypad}
+                  fill
+                  active={shownKeypad && aside.entered && !aside.leaving}
+                />
+              </CallAsidePanel>
+            </div>
+
+            <div
+              className={asideViewClass("transfer")}
+              aria-hidden={!shownTransfer}
+              inert={!shownTransfer || undefined}
+            >
+              <CallAsidePanel
+                {...transferCopy(transfer)}
+                icon={
+                  transfer.merged ? (
+                    <IconCallUsers size={16} />
+                  ) : (
+                    <IconCallTransfer size={16} />
+                  )
+                }
+                onClose={closeAside}
+                // The picker owns its own scroller: the confirmation is pinned
+                // to the panel's bottom edge and must not scroll off with the
+                // list underneath it.
+                scroll={false}
+              >
+                <TransferBody flow={transfer} />
+              </CallAsidePanel>
+            </div>
+
+            <div
+              className={asideViewClass("voicemail")}
+              aria-hidden={!shownVoicemail}
+              inert={!shownVoicemail || undefined}
+            >
+              <CallAsidePanel
+                {...voicemailCopy(voicemail)}
+                icon={<IconVoicemailDrop size={16} />}
+                onClose={closeAside}
+              >
+                <VoicemailBody flow={voicemail} />
+              </CallAsidePanel>
             </div>
           </div>
         </StagePane>
@@ -2064,13 +2707,24 @@ function StagePane({
  * the size difference should be read (text re-flows, controls keep their
  * proportions off their height). While the move runs the bar is transparent —
  * the morph surface behind it is the dark, and the two end on the same rect.
+ *
+ * The left half reports on the call — who, for how long, your status, whether
+ * it is being recorded, how the line is holding. The right half acts on it.
+ * Nothing crosses that line, which is why an agent can find Mute without
+ * reading the bar and why the recording pill has never been mistaken for one.
  */
 function CallBar({
   className,
   morphing,
   revealing,
   elapsedMs,
-  contactName,
+  caller,
+  network,
+  availability,
+  transfer,
+  voicemail,
+  recording,
+  mergedWith,
   muted,
   onHold,
   notesOpen,
@@ -2078,6 +2732,9 @@ function CallBar({
   notesFound,
   transcriptOpen,
   liveAssistOpen,
+  keypadOpen,
+  transferOpen,
+  voicemailOpen,
   scope = "v2",
   help,
   onMute,
@@ -2086,12 +2743,21 @@ function CallBar({
   onNotesToggle,
   onTranscriptToggle,
   onLiveAssistToggle,
+  onKeypadToggle,
+  onTransferToggle,
+  onVoicemailToggle,
 }: {
   className?: string;
   morphing?: boolean;
   revealing?: boolean;
   elapsedMs: number;
-  contactName: string;
+  caller: CallerIdentity;
+  network: NetworkReading;
+  availability: AvailabilityId;
+  transfer: TransferFlow;
+  voicemail: VoicemailFlow;
+  recording: RecordingController;
+  mergedWith: TransferTarget | null;
   muted: boolean;
   onHold: boolean;
   notesOpen?: boolean;
@@ -2100,6 +2766,10 @@ function CallBar({
   notesFound?: boolean;
   transcriptOpen?: boolean;
   liveAssistOpen?: boolean;
+  /** The three line controls open into the same column as Notes now. */
+  keypadOpen?: boolean;
+  transferOpen?: boolean;
+  voicemailOpen?: boolean;
   scope?: AgentAssistScope;
   help: LiveAssistThread;
   onMute: () => void;
@@ -2107,7 +2777,10 @@ function CallBar({
   onHangup: () => void;
   onNotesToggle?: () => void;
   onTranscriptToggle?: () => void;
-  onLiveAssistToggle: () => void;
+  onLiveAssistToggle?: () => void;
+  onKeypadToggle?: () => void;
+  onTransferToggle?: () => void;
+  onVoicemailToggle?: () => void;
 }) {
   const detail = (delay: number) =>
     revealing
@@ -2116,6 +2789,9 @@ function CallBar({
           style: { "--detail-delay": `${delay}ms` } as CSSProperties,
         }
       : {};
+  const detailStyle = {
+    "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms`,
+  } as CSSProperties;
 
   return (
     <div
@@ -2132,16 +2808,21 @@ function CallBar({
         className="min-w-0 max-w-[220px] shrink-0"
       >
         <p className="truncate text-[14px] leading-5 font-medium text-white">
-          {contactName}
+          {caller.known ? caller.name : caller.number}
         </p>
+        {/* Number and clock share the line. Both are things the agent reads off
+            the bar mid-sentence — "the call you are on, and how long it has
+            been" — and giving the number a row of its own would push the
+            controls in to buy nothing. */}
         <p className="truncate text-[12px] leading-4 text-white/60 tabular-nums">
-          {onHold ? "On hold · " : ""}
-          {formatDuration(elapsedMs)}
+          {caller.known ? `${caller.number} · ` : ""}
+          {mergedWith ? `3-way · ` : onHold ? "On hold · " : ""}
+          {formatCallDuration(elapsedMs)}
         </p>
       </div>
 
       <span
-        style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+        style={detailStyle}
         className={cn(
           "h-8 w-px shrink-0 bg-white/15",
           revealing && "call-bar-detail-in"
@@ -2150,35 +2831,39 @@ function CallBar({
       />
 
       <div className="flex shrink-0 items-center gap-2.5">
-        <button
-          type="button"
-          style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
-          className={cn(
-            "flex h-6 items-center gap-1.5 rounded-full bg-white px-2 outline-none focus-visible:ring-2 focus-visible:ring-white/40",
-            revealing && "call-bar-detail-in"
-          )}
-        >
-          <span className="size-2 rounded-full bg-error" aria-hidden="true" />
-          <span className="text-[10px] leading-3 whitespace-nowrap text-error">
-            Recording
-          </span>
-        </button>
+        <RecordingControl
+          recording={recording}
+          style={detailStyle}
+          className={cn(revealing && "call-bar-detail-in")}
+        />
 
         <span
-          style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+          style={detailStyle}
           className={cn(
-            "hidden items-end lg:flex",
+            "hidden items-center lg:flex",
             revealing && "call-bar-detail-in"
           )}
         >
-          <SignalBars />
+          <NetworkStatusControl reading={network} />
+        </span>
+
+        <span
+          style={detailStyle}
+          className={cn(
+            "hidden items-center xl:flex",
+            revealing && "call-bar-detail-in"
+          )}
+        >
+          <AvailabilityStatusPill status={availability} />
         </span>
       </div>
 
+      {/* Voice activity — a 48×20 reading, not a centrepiece. It yields at
+          `md` so the call controls never compress to make room for it. */}
       <span
-        style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+        style={detailStyle}
         className={cn(
-          "hidden min-w-0 flex-1 px-2 md:block",
+          "hidden shrink-0 items-center md:flex",
           revealing && "call-bar-detail-in"
         )}
       >
@@ -2198,33 +2883,48 @@ function CallBar({
           <BarControl
             morphKey="mute"
             label={muted ? "Unmute" : "Mute"}
+            tone="interrupt"
             pressed={muted}
             onClick={onMute}
           >
-            <IconVoice size={20} />
+            {muted ? <IconCallMuted size={20} /> : <IconVoice size={20} />}
           </BarControl>
           <BarControl
             morphKey="hold"
             label={onHold ? "Resume call" : "Hold"}
+            tone="interrupt"
             pressed={onHold}
             onClick={onHoldToggle}
           >
             <IconCallHold size={20} />
           </BarControl>
-          <BarControl morphKey="keypad" label="Keypad">
-            <IconCallKeypad size={20} />
-          </BarControl>
-          <BarControl morphKey="transfer" label="Transfer">
-            <IconCallTransfer size={20} />
-          </BarControl>
-          <BarControl label="Voicemail drop" {...detail(BAR_DETAIL_DELAY_MS)}>
-            <IconVoicemailDrop size={20} />
-          </BarControl>
+          <KeypadControl
+            morphKey="keypad"
+            open={keypadOpen}
+            onToggle={onKeypadToggle}
+          />
+          <TransferControl
+            morphKey="transfer"
+            flow={transfer}
+            open={transferOpen}
+            onToggle={onTransferToggle}
+          />
+          <VoicemailDropControl
+            flow={voicemail}
+            open={voicemailOpen}
+            onToggle={onVoicemailToggle}
+            {...detail(BAR_DETAIL_DELAY_MS)}
+          />
         </div>
 
-        {/* In-call tools — each opens a surface; none touch the call. */}
+        {/* In-call tools — each opens a surface; none touch the call.
+
+            Audio devices are not one of them. Picking a mic is a setting, not
+            an in-call move: it belongs on the Settings tab beside the other
+            things about this machine, and a speaker icon in a row of
+            conversation tools invited the agent to go hunting for it here. */}
         <div className="ml-3 flex items-center gap-1.5">
-          {scope === "v2" ? (
+          {scope === "v2" && onLiveAssistToggle ? (
             <LiveAssistControl
               help={help}
               panelOpen={Boolean(liveAssistOpen)}
@@ -2256,7 +2956,7 @@ function CallBar({
         </div>
 
         <span
-          style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+          style={detailStyle}
           className={cn(
             "mr-4 ml-2 h-8 w-px bg-white/15",
             revealing && "call-bar-detail-in"
@@ -2281,103 +2981,130 @@ function CallBar({
 }
 
 /**
- * One icon-only control on the bar. The label is the only naming the control
- * gets, so it does double duty: the accessible name, and the hover tooltip
- * that stands in for the caption the phone's controls wear. The bubble sits
- * below — the bar is pinned to the top of the workspace.
- */
-function BarControl({
-  label,
-  pressed,
-  badge,
-  morphKey,
-  buttonRef,
-  className,
-  style,
-  onClick,
-  children,
-}: {
-  label: string;
-  pressed?: boolean;
-  /** Something came back while the panel was shut — a dot, not a count. */
-  badge?: boolean;
-  morphKey?: string;
-  buttonRef?: RefObject<HTMLButtonElement | null>;
-  className?: string;
-  style?: CSSProperties;
-  onClick?: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <TooltipTrigger
-      placement="bottom"
-      content={<Tooltip theme="dark" arrow="top-center" title={label} />}
-      className="shrink-0"
-    >
-      <button
-        ref={buttonRef}
-        type="button"
-        aria-label={label}
-        aria-pressed={pressed}
-        data-morph={morphKey}
-        data-morph-scale={morphKey ? "height" : undefined}
-        style={style}
-        onClick={onClick}
-        className={cn(
-          "call-bar-control relative flex size-9 shrink-0 items-center justify-center rounded-full text-white outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]",
-          className
-        )}
-      >
-        <span className="relative flex size-5 items-center justify-center overflow-clip">
-          {children}
-        </span>
-        {badge ? (
-          <span
-            aria-hidden="true"
-            // Ringed in the bar's own dark so the dot reads as sitting on the
-            // icon rather than floating next to it.
-            className="absolute top-1.5 right-1.5 size-2 rounded-full border border-dialer-surface bg-brand"
-          />
-        ) : null}
-      </button>
-    </TooltipTrigger>
-  );
-}
-
-/**
- * Ringing — nothing to assist with yet, so the phone keeps the stage. With
- * `connected` it is the same phone on the beat after pickup: the label turns
- * over and the clock starts, but nothing has moved yet. Its `data-morph`
- * elements are the ones the call bar takes over.
+ * The phone, from ringing through to a live call.
+ *
+ * Two jobs, and which one it is doing depends on `live`. Without it the phone
+ * is a beat on the way somewhere: the line is ringing, or it has just been
+ * picked up and the workspace is about to take over, so the controls are drawn
+ * but inert and its `data-morph` elements are the ones the call bar takes over.
+ * With it the phone *is* the call — nothing is authored in Agent Assist, so
+ * there is no workspace to hand over to — and every control runs the line.
  *
  * `ghost` renders the same phone as the copy that fades out during the move.
  * It drops the capture marker so it can never be mistaken for the live phone.
  */
+type PhoneSheetKind = "keypad" | "transfer" | "voicemail" | "recording";
+
+/**
+ * Which title the sheet wears. A lookup rather than a nested ternary in the
+ * markup: six kinds and two fields each is where a conditional expression
+ * stops being readable, and each panel already owns its own wording.
+ */
+function sheetCopy(
+  kind: PhoneSheetKind,
+  flows: {
+    keypad?: KeypadFlow;
+    transfer?: TransferFlow;
+    voicemail?: VoicemailFlow;
+    recording?: RecordingController;
+  }
+): { title: string; description?: string } {
+  if (kind === "keypad") return KEYPAD_COPY;
+  if (kind === "transfer" && flows.transfer) return transferCopy(flows.transfer);
+  if (kind === "voicemail" && flows.voicemail)
+    return voicemailCopy(flows.voicemail);
+  if (kind === "recording" && flows.recording)
+    return recordingCopy(flows.recording);
+  return { title: "Call" };
+}
+
 function RingingPhone({
   className,
   reduced,
   connected,
+  live,
   ghost,
   elapsedMs,
-  contactName,
-  contactMeta,
+  caller,
+  network,
+  availability,
+  keypad,
+  transfer,
+  voicemail,
+  recording,
+  mergedWith,
+  muted,
+  onHold,
   localTime,
   tab,
   onTabChange,
+  onMute,
+  onHoldToggle,
   onHangup,
+  inbound,
+  onAccept,
+  onDecline,
 }: {
   className?: string;
   reduced: boolean;
   connected?: boolean;
+  /** The phone is the call, not a beat on the way to one. */
+  live?: boolean;
   ghost?: boolean;
   elapsedMs?: number;
-  contactName: string;
-  contactMeta: string;
+  caller: CallerIdentity;
+  network: NetworkReading;
+  availability: AvailabilityId;
+  keypad?: KeypadFlow;
+  transfer?: TransferFlow;
+  voicemail?: VoicemailFlow;
+  recording?: RecordingController;
+  mergedWith?: TransferTarget | null;
+  muted?: boolean;
+  onHold?: boolean;
   localTime: string;
   tab: DialerTab;
   onTabChange: (tab: DialerTab) => void;
+  onMute?: () => void;
+  onHoldToggle?: () => void;
   onHangup: () => void;
+  /** A colleague is handing this call over — see `InboundCall`. */
+  inbound?: InboundCall | null;
+  onAccept?: () => void;
+  onDecline?: () => void;
 }) {
+  // One sheet at a time. A 360px card can only hold one, and the card is the
+  // only thing in a position to enforce that — which is why the sheet is
+  // rendered here rather than by each control (see `PhoneSheet`).
+  const [sheet, setSheet] = useState<PhoneSheetKind | null>(null);
+  const presence = usePhoneSheetPresence(sheet !== null);
+  // The connection's advice is a modal over the body, not a sheet in the
+  // stack above — it is the design's own treatment, and it is the one panel
+  // here the agent opens *while* still reading the call behind it.
+  const quality = useCallQualityModal();
+
+  // Whatever the sheet was showing has to stay on screen through its exit, so
+  // the last kind is held rather than read from a state that has already gone.
+  const shownSheet = useRef<PhoneSheetKind | null>(null);
+  if (sheet) shownSheet.current = sheet;
+  const kind = sheet ?? shownSheet.current;
+
+  const openSheet = (next: PhoneSheetKind) =>
+    setSheet((current) => (current === next ? null : next));
+
+  /**
+   * The offer, and only the offer. Derived from both halves rather than
+   * threaded, because `connected` is what turns it off — which means the card
+   * this component renders at `connecting` is byte-for-byte the connected card
+   * the morph measured, and the ghost (which forces `connected` and is handed
+   * no `inbound`) can never show an accept button fading out of a live call.
+   *
+   * Gate every offer-only region on this. Gating on `inbound` alone, or on
+   * `!live`, would leave the offer's layout in the frame `captureMorph` reads
+   * and slide the caller's name in from the wrong height, silently.
+   */
+  const offering = Boolean(inbound) && !connected;
+
   return (
     <div
       data-morph-card={ghost ? undefined : true}
@@ -2387,127 +3114,316 @@ function RingingPhone({
       )}
     >
       <div className="flex w-full items-center justify-center px-4">
-        <div className="flex h-5 w-[54px] items-center justify-center gap-1.5 rounded-b-lg bg-badge-beta px-2">
-          <span className="size-2 shrink-0 rounded-full bg-warning" aria-hidden="true" />
-          <span className="text-[10px] leading-3 font-normal whitespace-nowrap text-white">
-            Busy
-          </span>
-        </div>
+        {/* The status is the phone's, not the agent's, for as long as there is
+            a call on it — so the notch reports what the phone decided and has
+            nothing to open. */}
+        <AvailabilityControl status={availability} locked />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col items-center gap-6 overflow-hidden p-4">
-        <div className="flex h-8 w-full items-center justify-center">
-          <p className="text-center text-[12px] leading-4 text-white/70">
-            It’s {localTime} there
-          </p>
-        </div>
-
-        <div className="flex w-full flex-col items-center gap-2">
-          <span
-            data-morph="avatar"
-            className="relative flex size-10 items-center justify-center overflow-clip rounded-full bg-gray-700"
-          >
-            <img src={userIcon} alt="" className="size-6 object-contain" />
-          </span>
-          {/* Hugs its text so the box centre is the text centre — that is what
-              the move aligns to when it travels into the bar. */}
-          <div
-            data-morph="identity"
-            className="flex max-w-full flex-col items-center gap-1 text-center"
-          >
-            <p className="text-[16px] leading-6 font-medium text-pretty text-white">
-              {contactName}
-            </p>
-            <p
-              className={cn(
-                "text-[12px] leading-4 text-white/70",
-                !reduced && "dialer-text-in"
-              )}
-            >
-              {contactMeta}
-            </p>
-          </div>
-          <div
-            data-morph="status"
-            className="flex h-11 flex-col items-center justify-end gap-1 text-center text-white"
-          >
-            {connected ? (
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col items-center gap-5 overflow-hidden p-4">
+          {/* Before pickup the useful thing is whether this is a decent hour to
+              be calling. Once the line is live it isn't — the agent is talking
+              to them — so the row turns over to the two readings that matter
+              while it is: what the connection is doing, and whether this is
+              being recorded. */}
+          <div className="flex h-8 w-full items-center justify-between gap-2">
+            {live && recording ? (
               <>
-                <p
-                  className={cn(
-                    "text-[10px] leading-3 tracking-[0.06em] text-white/60 uppercase",
-                    !reduced && "dialer-text-in"
-                  )}
-                >
-                  Connected
-                </p>
-                <p
-                  className={cn(
-                    "text-[16px] leading-6 font-medium tabular-nums",
-                    !reduced && "dialer-text-in"
-                  )}
-                >
-                  {formatDuration(elapsedMs ?? 0)}
-                </p>
+                <PhoneNetworkCheck
+                  reading={network}
+                  onTroubleshoot={quality.show}
+                />
+                <RecordingControl
+                  recording={recording}
+                  sheetOpen={sheet === "recording"}
+                  onOpenSheet={() => openSheet("recording")}
+                />
               </>
-            ) : (
-              <p
+            ) : offering && inbound ? (
+              /* Who handed it over, in the row that already exists — the local
+                 hour is the wrong reading for a call a colleague is passing
+                 you, and the fixed h-8 box takes an h-6 pill with slack, so
+                 the attribution costs the card no height. A dark pill rather
+                 than the DS `Tag`: every Tag colour is a light fill built for
+                 the white workspace, and §2 forbids re-styling one from the
+                 call site. This is the shape `AvailabilityBarPill` uses. */
+              <span
                 className={cn(
-                  "text-[16px] leading-6 font-medium",
+                  "mx-auto flex h-6 items-center rounded-full bg-white/12 px-2.5 text-[10px] leading-3 whitespace-nowrap text-white/80",
                   !reduced && "dialer-text-in"
                 )}
               >
-                Ringing
+                Transferred by {inbound.transferredBy.name}
+              </span>
+            ) : (
+              <p className="w-full text-center text-[12px] leading-4 text-white/70">
+                It’s {localTime} there
               </p>
+            )}
+          </div>
+
+          <div className="flex w-full flex-col items-center gap-2">
+            <span
+              data-morph="avatar"
+              className="relative flex size-10 items-center justify-center overflow-clip rounded-full bg-gray-700"
+            >
+              <img src={userIcon} alt="" className="size-6 object-contain" />
+            </span>
+            {/* Hugs its text so the box centre is the text centre — that is what
+                the move aligns to when it travels into the bar. */}
+            <div
+              data-morph="identity"
+              className="flex max-w-full flex-col items-center gap-1 text-center"
+            >
+              <p className="text-[16px] leading-6 font-medium text-pretty text-white">
+                {caller.known ? caller.name : caller.number}
+              </p>
+              <p
+                className={cn(
+                  "text-[12px] leading-4 tabular-nums",
+                  caller.known ? "text-white/70" : "text-white/50",
+                  !reduced && "dialer-text-in"
+                )}
+              >
+                {/* Name and number both, always — a call is filed against the
+                    number, and an agent reading a name back to a customer has
+                    to be able to see which line it came in on. Unknown, the
+                    number has already taken the headline, so this says so
+                    rather than repeating it. */}
+                {caller.known ? caller.number : "No matching contact"}
+              </p>
+              {caller.known ? (
+                <p className="text-[11px] leading-4 text-white/45">
+                  {caller.meta}
+                </p>
+              ) : null}
+            </div>
+            <div
+              data-morph="status"
+              className="flex h-11 flex-col items-center justify-end gap-1 text-center text-white"
+            >
+              {connected ? (
+                <>
+                  <p
+                    className={cn(
+                      "text-[10px] leading-3 tracking-[0.06em] text-white/60 uppercase",
+                      !reduced && "dialer-text-in"
+                    )}
+                  >
+                    {mergedWith
+                      ? `3-way with ${mergedWith.name.split(" ")[0]}`
+                      : onHold
+                        ? "On hold"
+                        : "Connected"}
+                  </p>
+                  <p
+                    className={cn(
+                      "text-[16px] leading-6 font-medium tabular-nums",
+                      !reduced && "dialer-text-in"
+                    )}
+                  >
+                    {formatCallDuration(elapsedMs ?? 0)}
+                  </p>
+                </>
+              ) : (
+                <p
+                  className={cn(
+                    "text-[16px] leading-6 font-medium",
+                    !reduced && "dialer-text-in"
+                  )}
+                >
+                  {/* Reuses the box that says "Ringing" rather than adding a
+                      row above the avatar, which is where the design puts it:
+                      this box is a `data-morph` anchor pinned at h-11, and a
+                      new row in a card fixed at 588px with overflow-hidden
+                      twice would push the nav out of sight. */}
+                  {offering ? "Incoming call" : "Ringing"}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* The four controls the call bar keeps. They come alive on connect,
+              which is also the moment they start travelling.
+
+              Absent entirely during an offer: there is nothing to mute on a
+              call you have not taken, the design shows open space here, and the
+              ~128px it frees is what lets the line-name row below fit a card
+              that cannot grow. Morph-safe because `offering` is already false
+              at `connecting`, so the grid is present when the move measures. */}
+          {offering ? null : (
+          <div className="flex flex-col items-center justify-center gap-4">
+            <div className="flex gap-4">
+              <CallControl
+                morphKey="mute"
+                label="Mute"
+                pressedLabel="Unmute"
+                tone="interrupt"
+                pressed={muted}
+                disabled={!connected}
+                onClick={live ? onMute : undefined}
+              >
+                {muted ? <IconCallMuted size={24} /> : <IconVoice size={24} />}
+              </CallControl>
+              <CallControl
+                morphKey="hold"
+                label="Hold"
+                pressedLabel="Resume"
+                tone="interrupt"
+                pressed={onHold}
+                disabled={!connected}
+                onClick={live ? onHoldToggle : undefined}
+              >
+                <IconCallHold size={24} />
+              </CallControl>
+            </div>
+            <div className="flex gap-4">
+              <CallControl
+                morphKey="keypad"
+                label="Keypad"
+                pressed={sheet === "keypad"}
+                disabled={!connected}
+                onClick={live ? () => openSheet("keypad") : undefined}
+              >
+                <IconCallKeypad size={24} />
+              </CallControl>
+              <CallControl
+                morphKey="transfer"
+                label={transfer?.merged ? "3-way" : "Transfer"}
+                pressed={sheet === "transfer" || transfer?.active}
+                disabled={!connected}
+                onClick={live ? () => openSheet("transfer") : undefined}
+              >
+                {transfer?.merged ? (
+                  <IconCallUsers size={24} />
+                ) : (
+                  <IconCallTransfer size={24} />
+                )}
+              </CallControl>
+            </div>
+          </div>
+          )}
+
+          {/* The offer's two answers sit 40px apart and centred; the live row
+              keeps the 16px spacing that balances End call against Voicemail
+              drop. Scoped rather than shared, or the normal call's row widens
+              too. */}
+          <div
+            className={cn(
+              "mt-auto flex items-center",
+              offering ? "justify-center gap-10" : "gap-4"
+            )}
+          >
+            {offering ? (
+              <>
+                {/* Accept left, decline right, 40px apart — the design's
+                    arrangement, and the order a two-answer prompt reads in.
+                    Neither carries `data-morph`: `end` belongs to the End call
+                    button that exists when the move measures, and a second
+                    claim on a key would have the bar invert onto the wrong
+                    rect. The glyphs are the two the card already ships —
+                    `phone-filled.svg` bakes a white fill so it needs a
+                    coloured face, which is exactly what it gets. */}
+                <button
+                  type="button"
+                  aria-label="Accept call"
+                  onClick={onAccept}
+                  className="flex size-14 items-center justify-center overflow-clip rounded-full bg-success outline-none transition-colors duration-base hover:bg-success/90 focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
+                >
+                  <Glyph src={phoneFilled} className="size-6" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Decline call"
+                  onClick={onDecline}
+                  className="flex size-14 items-center justify-center rounded-full bg-error text-white outline-none transition-colors duration-base hover:bg-error-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
+                >
+                  <IconClose size={24} />
+                </button>
+              </>
+            ) : (
+              <>
+            {/* Balances End call against Voicemail drop on the other side, so
+                the red button stays centred in the row. Audio devices used to
+                sit here; they are a setting about this machine, not a move on
+                the call, and they live on the Settings tab now. */}
+            <span className="size-12 shrink-0" aria-hidden="true" />
+            <button
+              type="button"
+              aria-label="End call"
+              data-morph="end"
+              onClick={onHangup}
+              className="flex h-14 w-32 items-center justify-center overflow-clip rounded-full bg-white outline-none transition-colors duration-base hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
+            >
+              <Glyph src={hangupIcon} className="size-7" />
+            </button>
+            {/* Reachable while the line is still ringing, which is the moment
+                it is actually for: nobody picked up. */}
+            <button
+              type="button"
+              aria-label="Voicemail drop"
+              aria-pressed={sheet === "voicemail" || voicemail?.running}
+              onClick={() => openSheet("voicemail")}
+              className={cn(
+                "flex size-12 items-center justify-center overflow-clip rounded-full outline-none transition-colors duration-base focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]",
+                voicemail?.running
+                  ? "bg-success text-white"
+                  : "bg-white text-success hover:bg-surface-hover"
+              )}
+            >
+              <IconVoicemailDrop size={24} className="size-6" />
+            </button>
+              </>
             )}
           </div>
         </div>
 
-        {/* The four controls the call bar keeps. They come alive on connect,
-            which is also the moment they start travelling. */}
-        <div className="flex flex-col items-center justify-center gap-4">
-          <div className="flex gap-4">
-            <CallControl morphKey="mute" label="Mute" disabled={!connected}>
-              <IconVoice size={24} />
-            </CallControl>
-            <CallControl morphKey="hold" label="Hold" disabled={!connected}>
-              <IconCallHold size={24} />
-            </CallControl>
-          </div>
-          <div className="flex gap-4">
-            <CallControl morphKey="keypad" label="Keypad" disabled={!connected}>
-              <IconCallKeypad size={24} />
-            </CallControl>
-            <CallControl
-              morphKey="transfer"
-              label="Transfer"
-              disabled={!connected}
-            >
-              <IconCallTransfer size={24} />
-            </CallControl>
-          </div>
-        </div>
+        {presence.mounted && kind ? (
+          <PhoneSheet
+            state={presence.state}
+            onClose={() => setSheet(null)}
+            {...sheetCopy(kind, { keypad, transfer, voicemail, recording })}
+          >
+            {kind === "keypad" && keypad ? (
+              <KeypadBody
+                keypad={keypad}
+                fill
+                active={presence.state === "open"}
+              />
+            ) : null}
+            {kind === "transfer" && transfer ? (
+              <TransferBody flow={transfer} />
+            ) : null}
+            {kind === "voicemail" && voicemail ? (
+              <VoicemailBody flow={voicemail} />
+            ) : null}
+            {kind === "recording" && recording ? (
+              <RecordingBody
+                recording={recording}
+                onDone={() => setSheet(null)}
+              />
+            ) : null}
+          </PhoneSheet>
+        ) : null}
 
-        <div className="flex items-center gap-4">
-          <span className="size-12 shrink-0" aria-hidden="true" />
-          <button
-            type="button"
-            aria-label="End call"
-            data-morph="end"
-            onClick={onHangup}
-            className="flex h-14 w-32 items-center justify-center overflow-clip rounded-full bg-white outline-none transition-transform hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
-          >
-            <Glyph src={hangupIcon} className="size-7" />
-          </button>
-          <button
-            type="button"
-            aria-label="Voicemail drop"
-            className="flex size-12 items-center justify-center overflow-clip rounded-full bg-white text-success outline-none transition-transform hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
-          >
-            <IconVoicemailDrop size={24} className="size-6" />
-          </button>
-        </div>
+        {quality.mounted ? (
+          <CallQualityModal
+            state={quality.state}
+            reading={network}
+            onClose={quality.close}
+          />
+        ) : null}
       </div>
+
+      {/* Which of the account's numbers was rung — its own row rather than a
+          second line under the number, so the caller's name stays the thing
+          the agent reads first. */}
+      {offering && inbound ? (
+        <p className="shrink-0 px-4 pb-2 text-center text-[10px] leading-3 text-white/40">
+          {inbound.lineName}
+        </p>
+      ) : null}
 
       <DialerNav tab={tab} onTabChange={onTabChange} />
     </div>
@@ -2530,8 +3446,7 @@ function PostCallStage({
   scope,
   reduced,
   elapsedMs,
-  contactName,
-  contactMeta,
+  caller,
   scenario,
   actionStates,
   notes,
@@ -2543,8 +3458,7 @@ function PostCallStage({
   className?: string;
   reduced: boolean;
   elapsedMs: number;
-  contactName: string;
-  contactMeta: string;
+  caller: CallerIdentity;
   scenario: CallScenario;
   actionStates?: Record<string, ActionState>;
   scope: AgentAssistScope;
@@ -2576,8 +3490,7 @@ function PostCallStage({
         // leaving after its own contents.
         className={cn("post-call-bar", !reduced && "call-bar-in")}
         elapsedMs={elapsedMs}
-        contactName={contactName}
-        contactMeta={contactMeta}
+        caller={caller}
         onClose={onClose}
       />
 
@@ -2599,7 +3512,16 @@ function PostCallStage({
         <StagePane index={1} reduced={reduced} grow={4}>
           <WrapUpPanel
             key={scenario.id}
-            suggestedOutcome={scenario.wrapUp.suggestedOutcome}
+            // V1 does not read the call for a disposition, so the field opens
+            // empty and the agent picks. Only V2 arrives filled.
+            suggestedOutcome={
+              scope === "v1" ? undefined : scenario.wrapUp.suggestedOutcome
+            }
+            // Only V1 hands the work back. On V2 each recap row runs its own,
+            // so repeating the offer here would be two buttons for one job.
+            actions={
+              scope === "v1" ? callActionCtas(scenario.wrapUp.actionItems) : undefined
+            }
             notes={notes}
             onNotesChange={onNotesChange}
             onClose={onClose}
@@ -2629,14 +3551,12 @@ function PostCallStage({
 function EndedCallBar({
   className,
   elapsedMs,
-  contactName,
-  contactMeta,
+  caller,
   onClose,
 }: {
   className?: string;
   elapsedMs: number;
-  contactName: string;
-  contactMeta: string;
+  caller: CallerIdentity;
   onClose: (fromKeyboard?: boolean) => void;
 }) {
   // The contact's clock stops being useful the moment the line drops — what
@@ -2653,10 +3573,10 @@ function EndedCallBar({
     >
       <div className="min-w-0">
         <p className="truncate text-[14px] leading-5 font-medium text-white">
-          {contactName}
+          {caller.known ? caller.name : caller.number}
         </p>
-        <p className="truncate text-[11px] leading-4 text-white/60">
-          {contactMeta} · Ended {endedAt}
+        <p className="truncate text-[11px] leading-4 text-white/60 tabular-nums">
+          {caller.known ? `${caller.number} · ` : ""}Ended {endedAt}
         </p>
       </div>
 
@@ -2665,7 +3585,7 @@ function EndedCallBar({
           Duration
         </p>
         <p className="text-[16px] leading-6 font-medium text-white tabular-nums">
-          {formatDuration(elapsedMs)}
+          {formatCallDuration(elapsedMs)}
         </p>
       </div>
 
@@ -2720,6 +3640,108 @@ function EndedCallBar({
 }
 
 /**
+ * Wrap-up with no Agent Assist behind it.
+ *
+ * The call never left the 360px phone, so filing it doesn't either — a call
+ * that ran in a card and then files itself across a 1504px stage would read as
+ * two different products. Same card, same top edge, same width: what changes is
+ * that the phone stops running a call and starts closing one out.
+ *
+ * There is no recap pane because there is nothing to recap. Agent Assist is
+ * what writes the summary, the moments and the suggested disposition, and this
+ * is the account that hasn't set it up — so the outcome starts empty and the
+ * notes are only what the agent typed. That absence is the state, not a gap to
+ * paper over with an empty panel.
+ */
+function CompactWrapUp({
+  className,
+  elapsedMs,
+  caller,
+  notes,
+  onNotesChange,
+  closing,
+  onClose,
+}: {
+  className?: string;
+  elapsedMs: number;
+  caller: CallerIdentity;
+  notes: NotesEditorValue;
+  onNotesChange: (value: NotesEditorValue) => void;
+  closing: boolean;
+  onClose: (fromKeyboard?: boolean) => void;
+}) {
+  const [endedAt] = useState(() => formatLocalTime(new Date()));
+  const [quality, setQuality] = useState<FeedbackVote>(null);
+
+  return (
+    <div className="flex h-full w-full items-start justify-center">
+      <div
+        data-closing={closing ? "true" : undefined}
+        inert={closing}
+        className={cn(
+          "post-call-stage flex w-[360px] shrink-0 flex-col overflow-hidden rounded-[16px] bg-white shadow-600",
+          PHONE_SHELL_H,
+          className
+        )}
+      >
+        <header className="post-call-bar flex shrink-0 items-center gap-3 bg-dialer-surface px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14px] leading-5 font-medium text-white">
+              {caller.known ? caller.name : caller.number}
+            </p>
+            {/* Three lines rather than the bar's two. The wide bar can lay the
+                number, the duration and the end time out across 1504px; at
+                360px they stack, and none of the three is droppable — the
+                number is what the call is filed against, and the other two are
+                what the agent reports it by. */}
+            <p className="truncate text-[11px] leading-4 text-white/70 tabular-nums">
+              {caller.known ? caller.number : "No matching contact"}
+            </p>
+            <p className="truncate text-[11px] leading-4 text-white/50 tabular-nums">
+              {formatCallDuration(elapsedMs)} · Ended {endedAt}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={(event) => onClose(event.detail === 0)}
+            className="call-close-press flex size-8 shrink-0 items-center justify-center rounded-[4px] text-white/70 outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/40 active:bg-white/16"
+          >
+            <IconClose size={20} className="call-close-icon" />
+          </button>
+        </header>
+
+        {/* Above the form rather than inside it, for the same reason the wide
+            recap keeps it on the bar: how the line sounded is our record, and
+            the disposition is the customer's. */}
+        <div className="post-call-body flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5">
+          <span className="min-w-0 flex-1 truncate text-label-sm text-muted-foreground">
+            How was the audio quality?
+          </span>
+          <FeedbackThumbs
+            size="sm"
+            shape="rounded"
+            emphasis="filled"
+            value={quality}
+            onChange={setQuality}
+            upLabel="Call quality was good"
+            downLabel="Call quality was poor"
+          />
+        </div>
+
+        <div className="post-call-body flex min-h-0 flex-1 flex-col">
+          <WrapUpPanel
+            notes={notes}
+            onNotesChange={onNotesChange}
+            onClose={onClose}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Wrap up — disposition and notes. The recap next door is the raw material: the
  * agent copies the generated summary from there if they want it in the notes,
  * or writes their own.
@@ -2728,23 +3750,43 @@ function EndedCallBar({
  * live Notes pane is already here, and editing either place edits the same
  * value. Nobody should have to re-type what they wrote while talking.
  *
- * The disposition arrives already filled: Agent Assist heard the whole call, so
- * making the agent re-derive it from memory is busywork. It stays a plain
- * dropdown — changing it is one click, and the sparkle says where it came from
- * so an agent who disagrees knows it wasn't their own earlier pick.
+ * In V2 the disposition arrives already filled: Agent Assist heard the whole
+ * call, so making the agent re-derive it from memory is busywork. It stays a
+ * plain dropdown — changing it is one click, and the sparkle says where it came
+ * from so an agent who disagrees knows it wasn't their own earlier pick. V1
+ * doesn't listen for a disposition, so there the agent picks it themselves.
+ *
+ * On V1 the follow-up work lands here too, as secondary buttons under the
+ * form. The recap can list what the call asked for but cannot do any of it, so
+ * the offer belongs where the agent already is when they close the call —
+ * once per kind of errand, rather than once per row.
  */
 function WrapUpPanel({
   suggestedOutcome,
+  actions,
   notes,
   onNotesChange,
   onClose,
 }: {
-  suggestedOutcome: CallOutcomeValue;
+  /**
+   * Omitted when nothing derived a disposition from the call — the account has
+   * no Agent Assist, or this is V1, which doesn't ship the suggestion. The
+   * field then opens empty and wears no sparkle, which is the honest version:
+   * an unfilled dropdown says "you pick", and a filled one with no mark would
+   * look like the agent's own earlier answer.
+   */
+  suggestedOutcome?: CallOutcomeValue;
+  /**
+   * The distinct jobs the recap's action items leave the agent, offered once
+   * each beside Save & close. Omitted where the recap runs its own work, and
+   * where there is no recap at all.
+   */
+  actions?: ReturnType<typeof callActionCtas>;
   notes: NotesEditorValue;
   onNotesChange: (value: NotesEditorValue) => void;
   onClose: (fromKeyboard?: boolean) => void;
 }) {
-  const [outcome, setOutcome] = useState<string>(suggestedOutcome);
+  const [outcome, setOutcome] = useState<string>(suggestedOutcome ?? "");
   // Read once, on the way in: the field stays labelled as carried over even
   // after the agent edits it, because that is still where the text came from.
   const [carriedOver] = useState(() => notes.text.trim().length > 0);
@@ -2753,6 +3795,10 @@ function WrapUpPanel({
   // Read at the click and spent half a second later, once the button has
   // finished confirming: by then the event that carried it is long gone.
   const savedByKeyboard = useRef(false);
+
+  // Either field is enough to file the call. An empty wrap-up is not — Save &
+  // close waits until the agent has picked an outcome or written a note.
+  const canSave = Boolean(outcome) || notes.text.trim().length > 0;
 
   useEffect(
     () => () => {
@@ -2763,7 +3809,7 @@ function WrapUpPanel({
 
   // Saving is the end of the call: confirm on the button, then let the wrap-up go.
   const save = (event: MouseEvent<HTMLButtonElement>) => {
-    if (saveTimer.current) return;
+    if (saveTimer.current || !canSave) return;
     savedByKeyboard.current = event.detail === 0;
     setSaved(true);
     saveTimer.current = window.setTimeout(
@@ -2781,7 +3827,7 @@ function WrapUpPanel({
   // The mark is about the value in the field, not about who typed it last: it
   // disappears the moment the agent picks something else, and comes back if
   // they land on the suggestion again.
-  const aiFilled = outcome === suggestedOutcome;
+  const aiFilled = Boolean(suggestedOutcome) && outcome === suggestedOutcome;
 
   return (
     <section
@@ -2793,15 +3839,11 @@ function WrapUpPanel({
         <p className="text-label-md-semi text-foreground">Wrap up</p>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-        <div className="relative">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-4 py-4">
+        <div className="relative shrink-0">
           <Dropdown
             searchable={false}
-            label={
-              <>
-                Call outcome <span className="text-error">*</span>
-              </>
-            }
+            label="Call outcome"
             placeholder="Select call outcome"
             options={outcomeOptions}
             leftIcon={selected ? <OutcomeDot tone={selected.tone} /> : undefined}
@@ -2837,8 +3879,13 @@ function WrapUpPanel({
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-2">
-          <div className="flex items-baseline justify-between gap-2">
+        {/* Same default height as the design-system textarea. The grabber
+            stretches the field only into leftover card space — not past the
+            pane, and not over Save & close. Size containment makes that cap
+            independent of the field's own height, so dragging cannot grow
+            the thing that is supposed to stop it. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+          <div className="flex shrink-0 items-baseline justify-between gap-2">
             <p className="text-label-md text-foreground">Notes</p>
             {/* Says why the field is already full, so a pre-filled box doesn't
                 read as someone else's text. */}
@@ -2848,16 +3895,19 @@ function WrapUpPanel({
               </p>
             ) : null}
           </div>
-          <div className="flex flex-col gap-1">
+          {/* 1.5rem is the counter row plus the gap above it, so the field
+              stops while those stay visible. */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 [container-type:size]">
             <NotesEditor
               placeholder="Add your notes about this call..."
               maxLength={NOTES_MAX}
               value={notes}
               onChange={onNotesChange}
-              className="h-32"
+              resizable
+              className="h-32 max-h-[calc(100cqh-1.5rem)]"
               ariaLabel="Notes"
             />
-            <p className="text-right text-label-sm text-muted-foreground tabular-nums">
+            <p className="shrink-0 text-right text-label-sm text-muted-foreground tabular-nums">
               {notes.text.length}/{NOTES_MAX}
             </p>
           </div>
@@ -2866,12 +3916,40 @@ function WrapUpPanel({
 
       {/* What closes the call sits on its own edge, not at the end of a scroll. */}
       <div className="flex shrink-0 flex-col gap-2 border-t border-line px-4 py-3">
+        {/* Above the primary, not beside it: these are the errands the call
+            left, and saving is the one thing that ends it. Grey outlines keep
+            them clearly the lesser weight. They grow to fill the footer the
+            way Save & close does, and wrap rather than shrink so a three-
+            errand call doesn't squeeze the labels. */}
+        {actions && actions.length > 0 ? (
+          <div
+            role="group"
+            aria-label="Follow up on this call"
+            className="flex flex-wrap gap-2"
+          >
+            {actions.map((action) => {
+              const ActionIcon = action.icon;
+              return (
+                <Button
+                  key={action.kind}
+                  type="button"
+                  variant="grey-outline"
+                  size="sm"
+                  className="flex-1"
+                  leftIcon={<ActionIcon size={16} />}
+                >
+                  {action.label}
+                </Button>
+              );
+            })}
+          </div>
+        ) : null}
         <Button
           type="button"
           variant="primary"
           size="md"
           className="w-full"
-          disabled={!outcome}
+          disabled={!canSave && !saved}
           leftIcon={saved ? <IconCheck size={20} /> : undefined}
           onClick={save}
         >
@@ -2891,52 +3969,6 @@ function OutcomeDot({ tone }: { tone: OutcomeTone }) {
   );
 }
 
-function CallControl({
-  label,
-  pressed,
-  disabled,
-  morphKey,
-  onClick,
-  children,
-}: {
-  label: string;
-  pressed?: boolean;
-  disabled?: boolean;
-  morphKey?: string;
-  onClick?: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={pressed}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "flex flex-col items-center gap-2 outline-none transition-opacity duration-150",
-        disabled && "cursor-not-allowed opacity-45"
-      )}
-    >
-      {/* The mark travels, not the button — circle to circle, so the ratio the
-          morph reads off the height is the two diameters. */}
-      <span
-        data-morph={morphKey}
-        className={cn(
-          "flex size-14 items-center justify-center overflow-clip rounded-full border border-white transition-colors",
-          pressed ? "bg-white/15" : "bg-transparent",
-          !disabled && "hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]"
-        )}
-      >
-        <span className="relative flex size-6 items-center justify-center overflow-clip text-white">
-          {children}
-        </span>
-      </span>
-      <span className="text-[10px] leading-3 whitespace-nowrap text-white">{label}</span>
-    </button>
-  );
-}
-
 /** Sticky-note mark for the light Notes pane — same shape as the dialer asset, muted like sibling headers. */
 function NotesPaneIcon({ className }: { className?: string }) {
   return (
@@ -2953,17 +3985,6 @@ function NotesPaneIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
       />
     </svg>
-  );
-}
-
-function SignalBars() {
-  return (
-    <span className="flex items-end gap-px" aria-hidden="true">
-      <span className="h-[5px] w-[3px] rounded-[2px] bg-success" />
-      <span className="h-2 w-[3px] rounded-[2px] bg-success" />
-      <span className="h-[11px] w-[3px] rounded-[2px] bg-success" />
-      <span className="h-3.5 w-[3px] rounded-[2px] bg-success" />
-    </span>
   );
 }
 

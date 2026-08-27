@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Sidenav, type SidenavItemsTransition } from "@/components/Sidenav";
 import { Dashboard } from "./Dashboard";
+import { DialerPanel } from "./DialerPanel";
 import {
   JustCallAiShell,
   JUSTCALL_AI_ITEMS,
@@ -9,6 +10,11 @@ import {
 } from "./JustCallAiShell";
 import { PrototypeLauncher } from "./PrototypeLauncher";
 import { type AgentAssistScope } from "./agentAssistScope";
+import {
+  readDialerWindowParams,
+  useSharedBusyReasons,
+  type DialerWindowParams,
+} from "./dialerWindow";
 
 /**
  * V1 and North Star each get their own view keys even though the V1 three
@@ -127,8 +133,40 @@ function InCallFlow({ scope = "v2" }: { scope?: AgentAssistScope }) {
   );
 }
 
+/**
+ * The popped-out webphone — V1's Dialer button opens this in a tab of its own
+ * rather than swapping it over the page. It is handed no `onClose`, so the
+ * close cross never renders: there is no page behind it for a cross to reveal,
+ * and a button whose only effect is an empty tab is worse than no button.
+ */
+function DialerWindow({ scope, assistConfigured }: DialerWindowParams) {
+  const busyReasons = useSharedBusyReasons();
+
+  // The tab is its own window now, so its title is the only label the agent
+  // has for it while it sits behind the page they popped it from.
+  useEffect(() => {
+    document.title = "Dialer — JustCall";
+  }, []);
+
+  return (
+    <DialerPanel
+      scope={scope}
+      assistConfigured={assistConfigured}
+      busyReasons={busyReasons}
+    />
+  );
+}
+
+// Read once, at module scope: whether this tab is the webphone is fixed for
+// the tab's lifetime, and nothing inside App should be able to change it.
+const DIALER_WINDOW = readDialerWindowParams(window.location.search);
+
 export default function App() {
   const [view, setView] = useState<AppView>("launcher");
+
+  if (DIALER_WINDOW) {
+    return <DialerWindow {...DIALER_WINDOW} />;
+  }
 
   if (view === "launcher") {
     return (

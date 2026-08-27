@@ -248,6 +248,12 @@ export interface CallScenario {
   id: string;
   scriptName: string;
   contactName: string;
+  /**
+   * The number on the line, as digits. Rendered through
+   * `formatPhoneNumber` — a scenario should never carry a formatted string,
+   * or the bar and the recap end up disagreeing about the spacing.
+   */
+  contactNumber: string;
   contactMeta: string;
   /** The CRM record actions on this call write to. */
   crmRecordLabel?: string;
@@ -467,6 +473,7 @@ const AUTHORED_SCENARIOS: CallScenario[] = [
     id: "discovery",
     scriptName: "Discovery call",
     contactName: "Elena Vasquez",
+    contactNumber: "14155550142",
     contactMeta: "Outbound · Sales",
     // Story follows the script: Aircall → after-hours pain → cost of
     // missed leads → Salesforce for the ops lead → price → book session.
@@ -933,6 +940,7 @@ Best,`,
     id: "account-issue",
     scriptName: "Account access support",
     contactName: "Priya Sharma",
+    contactNumber: "14155550177",
     contactMeta: "Inbound · Support",
     steps: [
       step(
@@ -1106,6 +1114,7 @@ Best,`,
     id: "billing",
     scriptName: "Billing support",
     contactName: "Marcus Chen",
+    contactNumber: "14155550163",
     contactMeta: "Inbound · Billing",
     steps: [
       step(

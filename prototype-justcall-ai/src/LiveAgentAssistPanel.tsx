@@ -1296,9 +1296,9 @@ export function LiveAgentAssistPanel({
         <p className="text-label-md-semi text-foreground">Conversation guidance</p>
         {/* Unread cards, both kinds, counted together. It is a control rather
             than a label: the count is only useful if it also takes the agent
-            to the card it is counting (§7). The arrow appears when the unread
-            cards are further down the column, so the agent knows which way to
-            look before they click. */}
+            to the card it is counting (§7). No direction arrow — beside a
+            collapsible card's own chevron it read as a second disclosure
+            control rather than as "scroll this way". */}
         {feed.unseenCount > 0 ? (
           <button
             type="button"
@@ -1314,15 +1314,6 @@ export function LiveAgentAssistPanel({
             )}
           >
             <span aria-hidden="true">·</span>
-            {feed.unseenDirection ? (
-              <IconChevronDown
-                size={16}
-                className={cn(
-                  "size-4 shrink-0",
-                  feed.unseenDirection === "up" && "rotate-180"
-                )}
-              />
-            ) : null}
             {feed.unseenCount} new
           </button>
         ) : null}

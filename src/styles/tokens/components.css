@@ -171,6 +171,24 @@
   /* ---------------------------------------------------------------- */
   --color-dialer-surface: #071532;
   --color-editor-toolbar: #2f2f33;
+  /* A panel opened FROM the call bar — the keypad, the transfer picker, the
+     network read-out. Lifted a step off the bar's navy rather than repeating
+     it, or a panel hanging under the bar reads as more bar. */
+  --color-dialer-raised: color-mix(
+    in srgb,
+    var(--color-dialer-surface) 86%,
+    var(--color-white)
+  );
+  /* Rules and dividers inside those panels. Translucent, so one value works
+     on the raised surface and on the bar itself. */
+  --color-dialer-line: color-mix(in srgb, var(--color-white) 12%, transparent);
+  /* Mute and Hold engaged are painted straight from --color-error rather than
+     through a --color-dialer-interrupt alias. A component token that is only
+     ever `var(--color-error)` adds a name and nothing else — §3 reserves this
+     tier for values no semantic role covers, and "this is stopping something"
+     is exactly what error means. A second-order alias also stops re-resolving
+     when the role it points at is overridden, so the palette check in §3 goes
+     quiet on it while --color-error's own dependents still move. */
 
   /* Radius */
   --radius-sm: 0.375rem;

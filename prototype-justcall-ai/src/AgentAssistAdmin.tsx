@@ -213,6 +213,7 @@ export function AgentAssistAdmin({
               onCoachingRulesChange={setCoachingRules}
               knowledgeSources={knowledgeSources}
               onOpenKnowledge={onOpenKnowledge}
+              scope={scope}
             />
           )}
         </div>

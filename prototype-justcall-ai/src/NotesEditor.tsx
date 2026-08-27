@@ -229,6 +229,8 @@ export const NotesEditor = forwardRef<
     className?: string;
     wrapperClassName?: string;
     ariaLabel?: string;
+    /** Native grabber in the bottom-right corner, the way a textarea has one. */
+    resizable?: boolean;
     /** Caret to restore on focus. Parent-owned, so it outlives a remount. */
     caretRef?: MutableRefObject<NotesEditorCaret>;
   }
@@ -241,6 +243,7 @@ export const NotesEditor = forwardRef<
     className,
     wrapperClassName,
     ariaLabel,
+    resizable,
     caretRef,
   },
   ref
@@ -725,7 +728,15 @@ export const NotesEditor = forwardRef<
   };
 
   return (
-    <div className={cn("relative flex min-h-0 w-full min-w-0 flex-col", wrapperClassName)}>
+    <div
+      className={cn(
+        "relative w-full min-w-0",
+        // Flex only when the parent is stretching this box. A resizable field
+        // has to be a block, or the browser's grabber has nothing to write to.
+        !resizable && "flex min-h-0 flex-col",
+        wrapperClassName
+      )}
+    >
       <div
         ref={rootRef}
         role="textbox"
@@ -735,9 +746,15 @@ export const NotesEditor = forwardRef<
         suppressContentEditableWarning
         spellCheck
         className={cn(
-          "notes-editor min-h-0 w-full overflow-y-auto rounded-[4px] border border-solid border-line",
+          "notes-editor w-full rounded-[4px] border border-solid border-line",
           "bg-white px-3 py-2.5 text-paragraph-md text-foreground outline-none transition-colors",
           "hover:border-control-border focus:border-brand focus:hover:border-brand",
+          // The grabber writes an inline size; without a cap it can be dragged
+          // past the parent. Width never leaves the column. Height is capped
+          // by the caller when the parent has a definite remaining size.
+          resizable
+            ? "max-h-full max-w-full resize-y overflow-auto"
+            : "min-h-0 overflow-y-auto",
           className
         )}
         onKeyDown={onKeyDown}

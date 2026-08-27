@@ -22,19 +22,20 @@ import { cn } from "@/lib/utils";
  * pair read as two things you can press before it is gone.
  *
  * ── Motion ─────────────────────────────────────────────────────────────
- * The glyph presses in and back on every click, including a click that only
- * repeats an existing vote. That is deliberate: a vote you have already cast
- * is the case where nothing else on screen changes, so without the press the
- * control looks broken. The animation is re-triggered by remounting the glyph
- * under a bumped key — `animation-name` alone won't restart a running one.
- * The keyframes live on `.thumb-press` in base.css, at `base` with
- * `ease-standard`, and go away under reduced motion.
+ * Casting a vote pops the glyph (scale + a nod in the thumb's direction)
+ * and throws a short burst off the icon — a one-shot at `emphasis`, gone
+ * before the next sentence. Clearing a vote is the exit of that move: a
+ * quicker reverse nod, no burst, fill dropping back to a stroke. The glyph
+ * is never remounted to replay those — a keyed remount next to the burst
+ * used to leave the previous SVG in the tree, so a second click stacked
+ * another thumb. Replay is a reflow restart instead. Reduced motion drops
+ * the travel and keeps the fill change.
  */
 
 export type FeedbackVote = "up" | "down" | null;
 
 const thumbButton = cva(
-  "inline-flex cursor-pointer items-center justify-center outline-none " +
+  "inline-flex cursor-pointer items-center justify-center overflow-visible outline-none " +
     "transition-colors duration-base",
   {
     variants: {
@@ -170,13 +171,20 @@ export function FeedbackThumbs({
   className,
   ...props
 }: FeedbackThumbsProps) {
-  // One counter per thumb rather than one shared: pressing up and then down
+  // One pulse per thumb rather than one shared: pressing up and then down
   // has to animate the thumb that was actually clicked, not both.
-  const [upPress, setUpPress] = React.useState(0);
-  const [downPress, setDownPress] = React.useState(0);
+  const [upPulse, setUpPulse] = React.useState<ThumbPulse>(IDLE_PULSE);
+  const [downPulse, setDownPulse] = React.useState<ThumbPulse>(IDLE_PULSE);
 
   const vote = (next: Exclude<FeedbackVote, null>) => {
-    onChange(clearable && value === next ? null : next);
+    const clearing = clearable && value === next;
+    const bump = (current: ThumbPulse): ThumbPulse => ({
+      count: current.count + 1,
+      pop: !clearing,
+    });
+    if (next === "up") setUpPulse(bump);
+    else setDownPulse(bump);
+    onChange(clearing ? null : next);
   };
 
   return (
@@ -185,10 +193,7 @@ export function FeedbackThumbs({
         type="button"
         aria-label={upLabel}
         aria-pressed={value === "up"}
-        onClick={() => {
-          setUpPress((current) => current + 1);
-          vote("up");
-        }}
+        onClick={() => vote("up")}
         className={cn(
           thumbButton({
             tone,
@@ -197,15 +202,16 @@ export function FeedbackThumbs({
             emphasis,
             labeled: Boolean(upText),
             selected: value === "up",
-          })
+          }),
+          upPulse.pop && "relative z-10"
         )}
       >
-        <span
-          key={upPress}
-          className={cn("inline-flex", upPress > 0 && "thumb-press")}
-        >
-          <ThumbUpIcon size={GLYPH[size]} filled={value === "up"} />
-        </span>
+        <ThumbGlyph
+          direction="up"
+          pulse={upPulse}
+          size={GLYPH[size]}
+          filled={value === "up"}
+        />
         {upText ? <span>{upText}</span> : null}
       </button>
 
@@ -213,10 +219,7 @@ export function FeedbackThumbs({
         type="button"
         aria-label={downLabel}
         aria-pressed={value === "down"}
-        onClick={() => {
-          setDownPress((current) => current + 1);
-          vote("down");
-        }}
+        onClick={() => vote("down")}
         className={cn(
           thumbButton({
             tone,
@@ -225,18 +228,110 @@ export function FeedbackThumbs({
             emphasis,
             labeled: Boolean(downText),
             selected: value === "down",
-          })
+          }),
+          downPulse.pop && "relative z-10"
         )}
       >
-        <span
-          key={downPress}
-          className={cn("inline-flex", downPress > 0 && "thumb-press")}
-        >
-          <ThumbDownIcon size={GLYPH[size]} filled={value === "down"} />
-        </span>
+        <ThumbGlyph
+          direction="down"
+          pulse={downPulse}
+          size={GLYPH[size]}
+          filled={value === "down"}
+        />
         {downText ? <span>{downText}</span> : null}
       </button>
     </div>
+  );
+}
+
+type ThumbPulse = { count: number; pop: boolean };
+
+const IDLE_PULSE: ThumbPulse = { count: 0, pop: false };
+
+function ThumbGlyph({
+  direction,
+  pulse,
+  size,
+  filled,
+}: {
+  direction: Exclude<FeedbackVote, null>;
+  pulse: ThumbPulse;
+  size: number;
+  filled: boolean;
+}) {
+  const Icon = direction === "up" ? ThumbUpIcon : ThumbDownIcon;
+  const popClass = direction === "up" ? "thumb-like" : "thumb-dislike";
+  const unlikeClass = direction === "up" ? "thumb-unlike" : "thumb-unlike-down";
+  const animClass =
+    pulse.count > 0 ? (pulse.pop ? popClass : unlikeClass) : undefined;
+  const iconWrapRef = React.useRef<HTMLSpanElement>(null);
+
+  // Replay the pop/unlike without remounting the SVG. A keyed remount as a
+  // sibling of the burst left the previous glyph in the tree — each click
+  // stacked another thumb in the button.
+  React.useLayoutEffect(() => {
+    const el = iconWrapRef.current;
+    if (!el || pulse.count === 0) return;
+    el.style.animation = "none";
+    void el.offsetWidth;
+    el.style.animation = "";
+  }, [pulse.count]);
+
+  return (
+    <span
+      className="relative inline-block shrink-0"
+      style={{ width: size, height: size }}
+    >
+      <span
+        ref={iconWrapRef}
+        className={cn(
+          "absolute inset-0 inline-flex items-center justify-center",
+          animClass
+        )}
+      >
+        <Icon size={size} filled={filled} />
+      </span>
+      {pulse.count > 0 && pulse.pop ? (
+        <ThumbBurst key={pulse.count} direction={direction} />
+      ) : null}
+    </span>
+  );
+}
+
+/*
+ * Positions are the travel of each speck, not layout — they have to live
+ * as custom properties so the keyframe can interpolate to them. Irregular
+ * on purpose: a perfect hexagon reads as a loading spinner, not a burst.
+ */
+const BURST: { x: number; y: number; size: number; spark?: boolean }[] = [
+  { x: 1, y: -14, size: 3 },
+  { x: 11, y: -8, size: 5, spark: true },
+  { x: -9, y: -11, size: 2 },
+  { x: 14, y: 3, size: 2.5 },
+  { x: -13, y: 1, size: 5, spark: true },
+  { x: 5, y: 12, size: 2 },
+  { x: -6, y: 10, size: 2.5 },
+];
+
+function ThumbBurst({ direction }: { direction: Exclude<FeedbackVote, null> }) {
+  const flip = direction === "down" ? -1 : 1;
+  return (
+    <span className="thumb-burst" aria-hidden="true">
+      <span className="thumb-burst-ring" />
+      {BURST.map((dot, i) => (
+        <span
+          key={i}
+          className={cn("thumb-burst-dot", dot.spark && "thumb-burst-spark")}
+          style={
+            {
+              "--burst-x": `${dot.x}px`,
+              "--burst-y": `${dot.y * flip}px`,
+              "--burst-size": `${dot.size}px`,
+            } as React.CSSProperties
+          }
+        />
+      ))}
+    </span>
   );
 }
 

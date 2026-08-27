@@ -90,6 +90,7 @@ import {
 import { CoachingCueIcon, coachingTone } from "./coachingVisuals";
 import { PageEmptyState } from "./PageEmptyState";
 import type { KnowledgeSourceRecord } from "./knowledgeData";
+import { type AgentAssistScope } from "./agentAssistScope";
 
 /**
  * Scripts, Response Cards, and Behavioral Coaching — three lists that answer
@@ -404,6 +405,8 @@ export interface AgentAssistPlaybooksPageProps {
   onCoachingRulesChange: (next: CoachingRule[]) => void;
   knowledgeSources: KnowledgeSourceRecord[];
   onOpenKnowledge: () => void;
+  /** V1 offers AI drafting from a Knowledge Base on response cards. */
+  scope?: AgentAssistScope;
 }
 
 export function AgentAssistPlaybooksPage({
@@ -415,6 +418,7 @@ export function AgentAssistPlaybooksPage({
   onCoachingRulesChange,
   knowledgeSources,
   onOpenKnowledge,
+  scope = "v2",
 }: AgentAssistPlaybooksPageProps) {
   const [search, setSearch] = React.useState("");
   const [filtersOpen, setFiltersOpen] = React.useState(false);
@@ -439,7 +443,10 @@ export function AgentAssistPlaybooksPage({
     mode: "create" | "edit";
     item: GuidanceItem;
     templateId?: GuidanceTemplateId | null;
+    /** Opens the AI drafting step straight away. */
+    generate?: boolean;
   } | null>(null);
+  const allowGenerate = scope === "v1";
   const [coachingLaunch, setCoachingLaunch] = React.useState<{
     mode: "create" | "edit";
     rule: CoachingRule;
@@ -593,6 +600,15 @@ export function AgentAssistPlaybooksPage({
 
   const handleGuidanceTemplateSelect = (choice: GuidanceStartChoice) => {
     setGuidanceTemplatesOpen(false);
+    if (choice.type === "generate") {
+      // AI proposes the draft; the admin still reviews it in the editor.
+      setGuidanceLaunch({
+        mode: "create",
+        item: createEmptyGuidance(),
+        generate: true,
+      });
+      return;
+    }
     if (choice.type === "scratch") {
       setGuidanceLaunch({ mode: "create", item: createEmptyGuidance() });
       return;
@@ -710,7 +726,13 @@ export function AgentAssistPlaybooksPage({
         mode={guidanceLaunch.mode}
         templateId={guidanceLaunch.templateId}
         knowledgeSources={knowledgeSources}
+        allowGenerate={allowGenerate}
+        startWithGenerate={guidanceLaunch.generate}
         onUseKnowledgeInstead={() => {
+          setGuidanceLaunch(null);
+          onOpenKnowledge();
+        }}
+        onOpenKnowledge={() => {
           setGuidanceLaunch(null);
           onOpenKnowledge();
         }}
@@ -1025,6 +1047,7 @@ export function AgentAssistPlaybooksPage({
         open={guidanceTemplatesOpen}
         onClose={() => setGuidanceTemplatesOpen(false)}
         onSelect={handleGuidanceTemplateSelect}
+        allowGenerate={allowGenerate}
       />
       <CoachingTemplatesModal
         open={coachingTemplatesOpen}
