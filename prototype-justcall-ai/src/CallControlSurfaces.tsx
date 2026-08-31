@@ -1,26 +1,27 @@
 import {
   useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
-  type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/Button";
-import { useDropdownPresence } from "@/components/Dropdown/useDropdownPresence";
 import {
   IconCallOnHold,
   IconCheck,
   IconClear,
+  IconClose,
   IconQueue,
   IconSearch,
   IconVoicemailDrop,
 } from "@/components/Icon";
+import {
+  IconCallKeypad,
+  IconCallTransfer,
+} from "./icons/CallControlIcons";
 import { WaveformLoader } from "@/components/WaveformLoader";
 import {
   TRANSFER_TARGETS,
@@ -33,9 +34,11 @@ import {
  * The three call-bar controls that open something rather than toggling
  * something: the DTMF keypad, the transfer picker, and the voicemail drop.
  *
- * All three hang off their own icon on the bar, so they share one shell —
- * `BarPopover` — which does the anchoring, the outside-click, the Escape, and
- * the exit animation. Each surface is then just its content.
+ * All three open into the call workspace's right-hand column — the same shell
+ * Notes, Transcript and Live Assist use — so every panel the bar can open
+ * arrives in one place instead of some over the stage and some beside it.
+ * They share `SurfacePanel` for the card and its header; each surface is then
+ * just its content. The column itself is owned by `LiveCallStage`.
  *
  * The state they act on lives in `DialerPanel`, above the ringing → live
  * morph: a transfer that ends the call and tones sent down the line both
@@ -67,13 +70,6 @@ export type CallTransfer = {
 /** The greeting is playing out; the line closes when it finishes. */
 export type VoicemailDrop = { greetingId: string };
 
-/** Gap between the bar control and the panel that belongs to it. */
-const ANCHOR_GAP = 8;
-/** Keep the panel off the window edge even when its control is nearly at one. */
-const VIEWPORT_MARGIN = 12;
-/** How often to look again for a control that hasn't arrived yet. */
-const ANCHOR_RETRY_MS = 16;
-
 /**
  * Cold transfer: how long "Transferring to Dana…" stands before the line
  * closes. Long enough to read, short enough that the agent isn't waiting on a
@@ -93,144 +89,53 @@ export const DTMF_READOUT_MAX = 14;
 /* ── Shell ──────────────────────────────────────────────────────────────── */
 
 /**
- * A panel anchored under one bar control.
+ * One panel in the call workspace's right-hand column.
  *
- * Fixed-positioned in a body portal rather than absolutely inside the bar: the
- * call workspace clips its own horizontal overflow, and a scroll container on
- * one axis clips the other too, so a panel parented to the bar would be cut
- * off by the stage it hangs over.
- *
- * `role="dialog"` is what keeps Escape sane. Both Escape handlers already in
- * the dialer count `[role="dialog"]` nodes and defer to the topmost one, so
- * announcing this as a dialog makes the popover win Escape without either of
- * them learning about it.
+ * The same card the Notes and Transcript panels use — white, hairline border,
+ * an 11-high header — so a surface the bar opens is recognisably the same kind
+ * of object as a surface the tools open, and the column never changes shape
+ * under the agent as they switch between them.
  */
-function BarPopover({
-  anchorRef,
-  open,
-  label,
-  width,
-  autoFocus = true,
+function SurfacePanel({
+  icon,
+  title,
+  closeLabel,
   onClose,
   children,
 }: {
-  anchorRef: RefObject<HTMLButtonElement | null>;
-  open: boolean;
-  label: string;
-  width: number;
-  /** Transfer focus into the panel on open. */
-  autoFocus?: boolean;
+  icon: ReactNode;
+  title: string;
+  closeLabel: string;
   onClose: () => void;
   children: ReactNode;
 }) {
-  const { mounted, state } = useDropdownPresence(open);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState<{ top: number; left: number } | null>(null);
-
-  /** False when the control isn't on screen yet, so there is nothing to hang off. */
-  const place = () => {
-    const anchor = anchorRef.current;
-    if (!anchor) return false;
-    const rect = anchor.getBoundingClientRect();
-    // Centred on its control, then pulled back inside the window. A panel that
-    // reads as belonging to one icon has to point at that icon.
-    const centred = rect.left + rect.width / 2 - width / 2;
-    const maxLeft = window.innerWidth - width - VIEWPORT_MARGIN;
-    setBox({
-      top: rect.bottom + ANCHOR_GAP,
-      left: Math.max(VIEWPORT_MARGIN, Math.min(centred, maxLeft)),
-    });
-    return true;
-  };
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    // The control can open its panel before it exists: Keypad on the ringing
-    // phone sets the same state the bar's Keypad does, and the bar is still
-    // half a morph away. So keep looking rather than opening into nowhere —
-    // and on a timer, not a frame callback, because the prototype is often
-    // read in a hidden preview pane where rAF never fires.
-    let poll = 0;
-    const attempt = () => {
-      if (place()) return;
-      poll = window.setTimeout(attempt, ANCHOR_RETRY_MS);
-    };
-    attempt();
-    const onReposition = () => place();
-    window.addEventListener("resize", onReposition);
-    window.addEventListener("scroll", onReposition, true);
-    return () => {
-      window.clearTimeout(poll);
-      window.removeEventListener("resize", onReposition);
-      window.removeEventListener("scroll", onReposition, true);
-    };
-    // `place` closes over props that don't change for the life of one open.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, width]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointer = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      // The control itself is a toggle — let its own click close the panel,
-      // or the two fire and it re-opens on the same press.
-      if (anchorRef.current?.contains(target)) return;
-      if (panelRef.current?.contains(target)) return;
-      onClose();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      onClose();
-      anchorRef.current?.focus();
-    };
-    window.addEventListener("pointerdown", onPointer);
-    window.addEventListener("keydown", onKey, true);
-    return () => {
-      window.removeEventListener("pointerdown", onPointer);
-      window.removeEventListener("keydown", onKey, true);
-    };
-    // `onClose` is re-created each render by design; re-binding is cheap and
-    // keeps the handler pointed at the current close.
-  }, [open, onClose, anchorRef]);
-
-  useEffect(() => {
-    if (!open || !autoFocus) return;
-    // A beat, so focus lands after the panel has been placed and painted —
-    // and on a timer for the same reason placement uses one.
-    const timer = window.setTimeout(() => {
-      const panel = panelRef.current;
-      if (!panel) return;
-      const first = panel.querySelector<HTMLElement>("[data-autofocus]");
-      (first ?? panel).focus({ preventScroll: true });
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [open, autoFocus]);
-
-  if (!mounted || !box) return null;
-
-  return createPortal(
-    <div
-      ref={panelRef}
-      role="dialog"
-      aria-label={label}
-      data-call-surface
-      data-state={state}
-      tabIndex={-1}
-      style={{ top: box.top, left: box.left, width }}
-      // z-50 puts it over the dialer surface (z-40) and under tooltips (z-100),
-      // so the control's own tooltip still reads while the panel is open.
-      className="dropdown-panel fixed z-50 flex flex-col overflow-hidden rounded-lg border border-line bg-white shadow-400 outline-none"
-    >
+  return (
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[16px] border border-line bg-white">
+      <header className="flex h-11 shrink-0 items-center justify-between gap-1.5 border-b border-line px-4">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            aria-hidden="true"
+            className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
+          >
+            {icon}
+          </span>
+          <p className="truncate text-label-md-semi text-foreground">{title}</p>
+        </div>
+        <button
+          type="button"
+          aria-label={closeLabel}
+          onClick={onClose}
+          className="flex size-6 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+        >
+          <IconClose size={16} />
+        </button>
+      </header>
       {children}
-    </div>,
-    document.body
+    </div>
   );
 }
 
-/** Section heading inside a popover — quiet, so the rows under it stay loud. */
+/** Section heading inside a panel — quiet, so the rows under it stay loud. */
 function SurfaceLabel({ children }: { children: ReactNode }) {
   return (
     <p className="text-label-xs text-muted-foreground uppercase">{children}</p>
@@ -247,29 +152,24 @@ const DTMF_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
  * the IVR on the other end has been told, which is the readout at the top.
  */
 export function KeypadSurface({
-  anchorRef,
-  open,
   tones,
   onTone,
   onClear,
   onClose,
 }: {
-  anchorRef: RefObject<HTMLButtonElement | null>;
-  open: boolean;
   tones: string;
   onTone: (digit: string) => void;
   onClear: () => void;
   onClose: () => void;
 }) {
   return (
-    <BarPopover
-      anchorRef={anchorRef}
-      open={open}
-      label="Keypad"
-      width={248}
+    <SurfacePanel
+      icon={<IconCallKeypad size={16} />}
+      title="Keypad"
+      closeLabel="Close keypad"
       onClose={onClose}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2.5">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-2.5">
         <div className="min-w-0">
           <SurfaceLabel>Tones sent</SurfaceLabel>
           <p
@@ -294,21 +194,24 @@ export function KeypadSurface({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-3 gap-0.5 p-2">
-        {DTMF_KEYS.map((digit) => (
-          <button
-            key={digit}
-            type="button"
-            data-autofocus={digit === "1" ? "" : undefined}
-            onClick={() => onTone(digit)}
-            aria-label={`Send ${digit}`}
-            className="button-press flex h-11 items-center justify-center rounded-md text-heading-lg text-brand tabular-nums outline-none hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24"
-          >
-            {digit}
-          </button>
-        ))}
+      {/* The column is wider than the pad wants to be. Capped and centred, so
+          the keys stay square-ish targets rather than stretching into bars. */}
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="mx-auto grid w-full max-w-[264px] grid-cols-3 gap-1">
+          {DTMF_KEYS.map((digit) => (
+            <button
+              key={digit}
+              type="button"
+              onClick={() => onTone(digit)}
+              aria-label={`Send ${digit}`}
+              className="button-press flex h-12 items-center justify-center rounded-md text-heading-lg text-brand tabular-nums outline-none hover:bg-brand-subtle focus-visible:ring-2 focus-visible:ring-brand/24"
+            >
+              {digit}
+            </button>
+          ))}
+        </div>
       </div>
-    </BarPopover>
+    </SurfacePanel>
   );
 }
 
@@ -324,16 +227,15 @@ export function KeypadSurface({
  * safer of two irreversible acts should be the easier one to hit.
  */
 export function TransferSurface({
-  anchorRef,
-  open,
+  active,
   transfer,
   onStart,
   onComplete,
   onCancel,
   onClose,
 }: {
-  anchorRef: RefObject<HTMLButtonElement | null>;
-  open: boolean;
+  /** The column is showing this panel — hidden siblings stay mounted. */
+  active: boolean;
   transfer: CallTransfer | null;
   onStart: (target: TransferTarget, mode: TransferMode) => void;
   onComplete: () => void;
@@ -343,13 +245,26 @@ export function TransferSurface({
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const listId = useId();
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  // A closed panel forgets the search but not much else — the next open should
-  // start from the full list rather than from a filter the agent can't see.
+  // A panel the column has switched away from forgets the search but not much
+  // else — coming back should start from the full list rather than from a
+  // filter the agent can no longer see.
   useEffect(() => {
-    if (open) return;
+    if (active) return;
     setQuery("");
-  }, [open]);
+  }, [active]);
+
+  // Searching is the first thing this panel is for, so arriving puts the caret
+  // there — the same courtesy Notes does when its column opens.
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setTimeout(
+      () => searchRef.current?.focus({ preventScroll: true }),
+      0
+    );
+    return () => window.clearTimeout(timer);
+  }, [active]);
 
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -373,11 +288,10 @@ export function TransferSurface({
   const consulting = transfer?.mode === "warm";
 
   return (
-    <BarPopover
-      anchorRef={anchorRef}
-      open={open}
-      label="Transfer call"
-      width={320}
+    <SurfacePanel
+      icon={<IconCallTransfer size={16} />}
+      title="Transfer call"
+      closeLabel="Close transfer"
       onClose={onClose}
     >
       {consulting && transfer ? (
@@ -396,7 +310,7 @@ export function TransferSurface({
                 aria-hidden="true"
               />
               <input
-                data-autofocus
+                ref={searchRef}
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
@@ -412,7 +326,11 @@ export function TransferSurface({
             id={listId}
             role="listbox"
             aria-label="Transfer destinations"
-            className="max-h-[264px] min-h-0 flex-1 overflow-y-auto p-1"
+            // Inline, not a popup: it lives in the column for as long as the
+            // panel does. The dialer's Escape handler steps aside for an open
+            // dropdown's listbox, and this marks itself as not being one.
+            data-inline-listbox
+            className="min-h-0 flex-1 overflow-y-auto p-1"
           >
             {matches.length === 0 ? (
               <p className="px-3 py-6 text-center text-paragraph-sm text-muted-foreground">
@@ -467,7 +385,7 @@ export function TransferSurface({
           </div>
         </>
       )}
-    </BarPopover>
+    </SurfacePanel>
   );
 }
 
@@ -615,37 +533,29 @@ function TargetRow({
  * one plays and commits, rather than firing the last-used one off one click.
  */
 export function VoicemailSurface({
-  anchorRef,
-  open,
   onDrop,
   onClose,
 }: {
-  anchorRef: RefObject<HTMLButtonElement | null>;
-  open: boolean;
   onDrop: (greetingId: string) => void;
   onClose: () => void;
 }) {
   const [greetingId, setGreetingId] = useState(VOICEMAIL_GREETINGS[0].id);
 
   return (
-    <BarPopover
-      anchorRef={anchorRef}
-      open={open}
-      label="Drop a voicemail"
-      width={332}
+    <SurfacePanel
+      icon={<IconVoicemailDrop size={16} />}
+      title="Voicemail drop"
+      closeLabel="Close voicemail drop"
       onClose={onClose}
     >
-      <div className="border-b border-line px-3 py-2.5">
-        <p className="text-label-md-semi text-foreground">Drop a voicemail</p>
-        <p className="text-paragraph-sm text-muted-foreground">
-          The greeting plays to the customer and the call ends.
-        </p>
-      </div>
+      <p className="shrink-0 border-b border-line px-4 py-2.5 text-paragraph-sm text-muted-foreground">
+        The greeting plays to the customer and the call ends.
+      </p>
 
       <div
         role="radiogroup"
         aria-label="Greeting"
-        className="flex flex-col gap-0.5 p-1"
+        className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-1"
       >
         {VOICEMAIL_GREETINGS.map((greeting) => {
           const active = greeting.id === greetingId;
@@ -655,7 +565,6 @@ export function VoicemailSurface({
               type="button"
               role="radio"
               aria-checked={active}
-              data-autofocus={active ? "" : undefined}
               onClick={() => setGreetingId(greeting.id)}
               className={cn(
                 "flex w-full flex-col gap-0.5 rounded-md px-2.5 py-2 text-left outline-none transition-colors",
@@ -682,7 +591,7 @@ export function VoicemailSurface({
         })}
       </div>
 
-      <div className="flex items-center gap-2 border-t border-line p-3">
+      <div className="flex shrink-0 items-center gap-2 border-t border-line p-3">
         <Button
           variant="grey-outline"
           size="sm"
@@ -701,7 +610,7 @@ export function VoicemailSurface({
           Drop
         </Button>
       </div>
-    </BarPopover>
+    </SurfacePanel>
   );
 }
 
@@ -757,51 +666,4 @@ export function callStatusLabel(
   }
   if (onHold) return "On hold";
   return null;
-}
-
-/**
- * The three panels, anchored to the three controls that open them.
- *
- * Rendered once by the bar rather than by each control, so only one can be
- * open and the bar keeps deciding which — the same rule the aside column
- * follows on the other side of the divider.
- */
-export function CallBarSurfaces({
-  controls,
-  keypadRef,
-  transferRef,
-  voicemailRef,
-}: {
-  controls: CallControlsModel;
-  keypadRef: RefObject<HTMLButtonElement | null>;
-  transferRef: RefObject<HTMLButtonElement | null>;
-  voicemailRef: RefObject<HTMLButtonElement | null>;
-}) {
-  return (
-    <>
-      <KeypadSurface
-        anchorRef={keypadRef}
-        open={controls.surface === "keypad"}
-        tones={controls.tones}
-        onTone={controls.onTone}
-        onClear={controls.onTonesClear}
-        onClose={controls.onSurfaceClose}
-      />
-      <TransferSurface
-        anchorRef={transferRef}
-        open={controls.surface === "transfer"}
-        transfer={controls.transfer}
-        onStart={controls.onTransferStart}
-        onComplete={controls.onTransferComplete}
-        onCancel={controls.onTransferCancel}
-        onClose={controls.onSurfaceClose}
-      />
-      <VoicemailSurface
-        anchorRef={voicemailRef}
-        open={controls.surface === "voicemail"}
-        onDrop={controls.onVoicemailDrop}
-        onClose={controls.onSurfaceClose}
-      />
-    </>
-  );
 }

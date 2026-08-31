@@ -86,8 +86,10 @@ import {
 } from "./callSimulation";
 import type { ActionState } from "./actionsData";
 import {
-  CallBarSurfaces,
   callStatusLabel,
+  KeypadSurface,
+  TransferSurface,
+  VoicemailSurface,
   DTMF_READOUT_MAX,
   TRANSFER_CONNECT_MS,
   VOICEMAIL_DROP_MS,
@@ -1708,6 +1710,9 @@ function LiveCallStage({
   const shownNotes = asideSwitch.shown === "notes";
   const shownTranscript = asideSwitch.shown === "transcript";
   const shownAssist = asideSwitch.shown === "assist";
+  const shownKeypad = asideSwitch.shown === "keypad";
+  const shownTransfer = asideSwitch.shown === "transfer";
+  const shownVoicemail = asideSwitch.shown === "voicemail";
 
   const notesEditorRef = useRef<NotesEditorHandle>(null);
   // Parent-owned: the editor unmounts with the column, the caret shouldn't.
@@ -1773,6 +1778,9 @@ function LiveCallStage({
 
   const openAside = (next: AsidePanel) => {
     if (asidePanel === "notes") saveNotesCaret();
+    // One column, one panel: opening a tool releases whichever call surface
+    // the bar was holding, so `controls.surface` and the column agree.
+    if (controls.surface && controls.surface !== next) controls.onSurfaceClose();
     if (!asidePanel && workspace.workspaceWidth > 0) {
       closedSnapshotRef.current = {
         script: workspace.widths.script,
@@ -1818,8 +1826,37 @@ function LiveCallStage({
 
   const closeAside = () => {
     discovery.cancel();
+    controls.onSurfaceClose();
     dismissAside();
   };
+
+  /**
+   * The bar owns which call surface is open — the ringing phone can set it
+   * half a morph before the bar exists, and a completed transfer clears it
+   * from under everyone. The column just follows that state into and out of
+   * the same shell Notes uses.
+   */
+  const surface = controls.surface;
+  // Starts at null, not at the current surface: Keypad pressed on the ringing
+  // phone sets it half a morph before this stage exists, and mounting with it
+  // already set has to count as an open or the panel never arrives.
+  const prevSurface = useRef<CallSurface | null>(null);
+  useEffect(() => {
+    const was = prevSurface.current;
+    prevSurface.current = surface;
+    if (surface === was) return;
+    if (surface) {
+      discovery.cancel();
+      openAside(surface);
+      return;
+    }
+    // Cleared, not switched: close the column only if it is still showing the
+    // surface that went away, not if the agent has since moved to Notes.
+    if (was && asidePanel === was) dismissAside();
+    // `discovery`, `openAside` and `dismissAside` are rebuilt every render;
+    // the surface change is the trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [surface]);
 
   const toggleAside = (next: AsidePanel) => {
     discovery.cancel();
@@ -1856,7 +1893,11 @@ function LiveCallStage({
       // itself is a dialog, so only a second one means something else is up.
       const dialogs = document.querySelectorAll('[role="dialog"]');
       if (dialogs.length > 1) return;
-      if (document.querySelector('[role="listbox"]')) return;
+      // An open dropdown's listbox owns Escape. The transfer panel's list is
+      // inline — it is in the column for as long as the panel is — so it marks
+      // itself out rather than swallowing every Escape the column gets.
+      if (document.querySelector('[role="listbox"]:not([data-inline-listbox])'))
+        return;
       // The notes formatting overlay dismisses itself first.
       if (document.querySelector("[data-notes-overlay]")) return;
       if (!asidePanel) return;
@@ -2113,6 +2154,45 @@ function LiveCallStage({
                 />
               </div>
             </div>
+            {/* The three the bar opens. Same column, same card, same crossfade
+                as the tools above — the only difference is which control the
+                agent reached for. */}
+            <div
+              className={cn("call-aside-view", shownKeypad && "is-active")}
+              aria-hidden={!shownKeypad}
+              inert={!shownKeypad || undefined}
+            >
+              <KeypadSurface
+                tones={controls.tones}
+                onTone={controls.onTone}
+                onClear={controls.onTonesClear}
+                onClose={closeAside}
+              />
+            </div>
+            <div
+              className={cn("call-aside-view", shownTransfer && "is-active")}
+              aria-hidden={!shownTransfer}
+              inert={!shownTransfer || undefined}
+            >
+              <TransferSurface
+                active={shownTransfer && aside.entered && !aside.leaving}
+                transfer={controls.transfer}
+                onStart={controls.onTransferStart}
+                onComplete={controls.onTransferComplete}
+                onCancel={controls.onTransferCancel}
+                onClose={closeAside}
+              />
+            </div>
+            <div
+              className={cn("call-aside-view", shownVoicemail && "is-active")}
+              aria-hidden={!shownVoicemail}
+              inert={!shownVoicemail || undefined}
+            >
+              <VoicemailSurface
+                onDrop={controls.onVoicemailDrop}
+                onClose={closeAside}
+              />
+            </div>
           </div>
         </StagePane>
         ) : null}
@@ -2293,12 +2373,6 @@ function CallBar({
         }
       : {};
 
-  // Each opening control anchors its own panel, so the panel points at the
-  // icon it came from rather than at the bar as a whole.
-  const keypadRef = useRef<HTMLButtonElement | null>(null);
-  const transferRef = useRef<HTMLButtonElement | null>(null);
-  const voicemailRef = useRef<HTMLButtonElement | null>(null);
-
   const status = callStatusLabel(controls, onHold);
   // Mid-transfer the bar is reporting, not offering: the line is already on
   // its way somewhere and a second Hold would be a lie.
@@ -2439,7 +2513,6 @@ function CallBar({
             morphKey="keypad"
             label="Keypad"
             pressed={controls.surface === "keypad"}
-            buttonRef={keypadRef}
             disabled={locked}
             // A tone already sent is the only trace of an IVR the agent
             // navigated, so the icon carries it while the pad is shut.
@@ -2452,7 +2525,6 @@ function CallBar({
             morphKey="transfer"
             label="Transfer"
             pressed={controls.surface === "transfer" || controls.transfer !== null}
-            buttonRef={transferRef}
             disabled={locked}
             onClick={() => controls.onSurfaceToggle("transfer")}
           >
@@ -2461,7 +2533,6 @@ function CallBar({
           <BarControl
             label="Voicemail drop"
             pressed={controls.surface === "voicemail"}
-            buttonRef={voicemailRef}
             disabled={locked}
             onClick={() => controls.onSurfaceToggle("voicemail")}
             {...detail(BAR_DETAIL_DELAY_MS)}
@@ -2528,12 +2599,6 @@ function CallBar({
       {/* Hosted by the bar, not by each control: only one may be open, and the
           bar is what decides which — the same rule the aside column follows on
           the other side of the divider. */}
-      <CallBarSurfaces
-        controls={controls}
-        keypadRef={keypadRef}
-        transferRef={transferRef}
-        voicemailRef={voicemailRef}
-      />
     </div>
   );
 }
@@ -3137,7 +3202,7 @@ function WrapUpPanel({
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className="flex shrink-0 flex-col gap-2">
           <div className="flex items-baseline justify-between gap-2">
             <p className="text-label-md text-foreground">Notes</p>
             {/* Says why the field is already full, so a pre-filled box doesn't
@@ -3148,7 +3213,7 @@ function WrapUpPanel({
               </p>
             ) : null}
           </div>
-          <div className="flex flex-col gap-1">
+          <div className="flex shrink-0 flex-col gap-1">
             <NotesEditor
               placeholder="Add your notes about this call..."
               maxLength={NOTES_MAX}
