@@ -229,6 +229,11 @@ export const NotesEditor = forwardRef<
     className?: string;
     wrapperClassName?: string;
     ariaLabel?: string;
+    /**
+     * Grabber in the bottom-right corner, the way a textarea has one. The
+     * height the caller sets is the starting point, not the ceiling.
+     */
+    resizable?: boolean;
     /** Caret to restore on focus. Parent-owned, so it outlives a remount. */
     caretRef?: MutableRefObject<NotesEditorCaret>;
   }
@@ -241,6 +246,7 @@ export const NotesEditor = forwardRef<
     className,
     wrapperClassName,
     ariaLabel,
+    resizable,
     caretRef,
   },
   ref
@@ -725,7 +731,16 @@ export const NotesEditor = forwardRef<
   };
 
   return (
-    <div className={cn("relative flex min-h-0 w-full min-w-0 flex-col", wrapperClassName)}>
+    <div
+      className={cn(
+        "relative flex min-h-0 w-full min-w-0 flex-col",
+        // A dragged height is the agent's decision, so the column it sits in
+        // has to stop squeezing it — otherwise the box grows out through the
+        // bottom of the card instead of making the card scroll.
+        resizable && "shrink-0",
+        wrapperClassName
+      )}
+    >
       <div
         ref={rootRef}
         role="textbox"
@@ -738,6 +753,9 @@ export const NotesEditor = forwardRef<
           "notes-editor min-h-0 w-full overflow-y-auto rounded-[4px] border border-solid border-line",
           "bg-white px-3 py-2.5 text-paragraph-md text-foreground outline-none transition-colors",
           "hover:border-control-border focus:border-brand focus:hover:border-brand",
+          // Vertical only: the column it sits in owns the width, and letting
+          // the box push past it would break the card rather than the field.
+          resizable && "resize-y",
           className
         )}
         onKeyDown={onKeyDown}
