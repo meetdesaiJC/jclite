@@ -123,3 +123,29 @@ export function IconCallTranscript(props: CallIconProps) {
     </CallIcon>
   );
 }
+
+/**
+ * Pin — the drawing-pin seen from the side, head to the upper right. Two
+ * strokes: the head-and-shaft, and the crossbar that keeps it from reading as
+ * a balloon at 16.
+ */
+export function IconCallPin(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <path d="M9 15l-5.5 5.5M14.5 3.5l6 6M16.5 5.5l-7 2-3 3 5.5 5.5 3-3 2-7" />
+    </CallIcon>
+  );
+}
+
+/**
+ * Pin, driven home — the same geometry filled, so a pinned card's control
+ * reads as "already done" without changing shape or size.
+ */
+export function IconCallPinFilled(props: CallIconProps) {
+  return (
+    <CallIcon {...props} fill="currentColor">
+      <path d="M9 15l-5.5 5.5" fill="none" />
+      <path d="M14.5 3.5l6 6M16.5 5.5l-7 2-3 3 5.5 5.5 3-3 2-7" />
+    </CallIcon>
+  );
+}

@@ -73,6 +73,12 @@ import {
   type GuidanceStreamCard,
 } from "./useGuidanceStream";
 import { isAtFeedGrowthEdge, useGuidanceFeed } from "./useGuidanceFeed";
+import {
+  CallSearchBar,
+  CallSearchResults,
+  PinnedStack,
+  useCallSearch,
+} from "./CallSearchPanel";
 
 /**
  * In-call Agent Assist — one panel for everything the agent gets in real time.
@@ -920,6 +926,15 @@ export function LiveAgentAssistPanel({
     feedGrowth: FEED_GROWTH,
   });
   const coaching = useCoachingStack(snapshot.coaching, scenario.id, reduced);
+  /**
+   * The agent's own lookups. Reads the same published library the stream does,
+   * so what search can find and what guidance can surface never disagree.
+   */
+  const search = useCallSearch({
+    cards: guidanceItems,
+    sources: knowledgeSources,
+    resetKey: scenario.id,
+  });
 
   useEffect(() => {
     setViewingResource(null);
@@ -1298,8 +1313,14 @@ export function LiveAgentAssistPanel({
             than a label: the count is only useful if it also takes the agent
             to the card it is counting (§7). The arrow appears when the unread
             cards are further down the column, so the agent knows which way to
-            look before they click. */}
-        {feed.unseenCount > 0 ? (
+            look before they click.
+
+            Hidden while searching, because the stream it counts is unmounted
+            behind the results — the count would still be right and the click
+            would silently go nowhere, and a control that does nothing is worse
+            than one that isn't there. The seen/unseen state survives, so it
+            comes back reading the same once the search is cleared. */}
+        {feed.unseenCount > 0 && !search.searching ? (
           <button
             type="button"
             aria-live="polite"
@@ -1328,6 +1349,10 @@ export function LiveAgentAssistPanel({
         ) : null}
       </header>
 
+      {/* Always present, never modal: the agent should be able to start typing
+          without first deciding to "open search". */}
+      <CallSearchBar model={search} reduced={reduced} />
+
       <div
         ref={feedRef}
         className={cn(
@@ -1336,7 +1361,27 @@ export function LiveAgentAssistPanel({
         )}
         {...stream.scrollHandlers}
       >
-        <GuidanceListeningState show={nothingYet} preparing={preparing} />
+        {/* Above everything, searching or not — a pin is the agent saying
+            "keep this in front of me", and a search two seconds later must
+            not push it off screen. */}
+        <PinnedStack
+          model={search}
+          reduced={reduced}
+          onViewResource={setViewingResource}
+        />
+
+        {search.searching ? (
+          <CallSearchResults
+            model={search}
+            reduced={reduced}
+            onViewResource={setViewingResource}
+          />
+        ) : (
+          <>
+        <GuidanceListeningState
+          show={nothingYet && search.pinned.length === 0}
+          preparing={preparing}
+        />
 
         {stream.criticalAlert ? (
           <CriticalGuidanceAlert
@@ -1362,6 +1407,8 @@ export function LiveAgentAssistPanel({
           ) : (
             renderKnowledge(item.surface)
           )
+        )}
+          </>
         )}
       </div>
 
