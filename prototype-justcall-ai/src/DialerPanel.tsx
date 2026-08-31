@@ -85,6 +85,22 @@ import {
   type CallScenario,
 } from "./callSimulation";
 import type { ActionState } from "./actionsData";
+import {
+  CallBarSurfaces,
+  callStatusLabel,
+  DTMF_READOUT_MAX,
+  TRANSFER_CONNECT_MS,
+  VOICEMAIL_DROP_MS,
+  type CallControlsModel,
+  type CallSurface,
+  type CallTransfer,
+  type TransferMode,
+  type VoicemailDrop,
+} from "./CallControlSurfaces";
+import {
+  VOICEMAIL_GREETINGS,
+  type TransferTarget,
+} from "./callTransferData";
 import usFlag from "./assets/dialer/us-flag.svg";
 import phoneFilled from "./assets/dialer/phone-filled.svg";
 import hangupIcon from "./assets/dialer/hangup.svg";
@@ -549,6 +565,14 @@ export function DialerPanel({
   const [elapsedMs, setElapsedMs] = useState(0);
   const [muted, setMuted] = useState(false);
   const [onHold, setOnHold] = useState(false);
+  // The three controls that open something rather than toggle something, and
+  // what they leave behind. Owned here, above the ringing → live morph: a
+  // transfer takes the call with it, so it cannot live in the bar it started
+  // from. See CallControlSurfaces.tsx.
+  const [surface, setSurface] = useState<CallSurface | null>(null);
+  const [tones, setTones] = useState("");
+  const [transfer, setTransfer] = useState<CallTransfer | null>(null);
+  const [voicemail, setVoicemail] = useState<VoicemailDrop | null>(null);
   const [scenarioId, setScenarioId] = useState(CALL_SCENARIOS[0].id);
   const [assistCollapsing, setAssistCollapsing] = useState(false);
   // The completed call is on its way out: the recap is collapsing and the
@@ -646,6 +670,14 @@ export function DialerPanel({
     setNumber((current) => `${current}${digit}`);
   };
 
+  /** New line, clean slate — no panel, no tones, nothing in flight. */
+  const clearCallControls = () => {
+    setSurface(null);
+    setTones("");
+    setTransfer(null);
+    setVoicemail(null);
+  };
+
   const startCall = (opts?: {
     skipRinging?: boolean;
     scenarioId?: string;
@@ -655,6 +687,7 @@ export function DialerPanel({
     const seek = opts?.elapsedMs ?? 0;
     setMuted(false);
     setOnHold(false);
+    clearCallControls();
     setElapsedMs(seek);
     setScenarioId(opts?.scenarioId ?? CALL_SCENARIOS[0].id);
     holdStartedAt.current = null;
@@ -679,6 +712,7 @@ export function DialerPanel({
     setElapsedMs(0);
     setMuted(false);
     setOnHold(false);
+    clearCallControls();
     setScenarioId(CALL_SCENARIOS[0].id);
   };
 
@@ -736,6 +770,7 @@ export function DialerPanel({
     setAssistCollapsing(false);
     setMuted(false);
     setOnHold(false);
+    clearCallControls();
     setPhase("wrapup");
   };
 
@@ -758,6 +793,99 @@ export function DialerPanel({
     setOnHold(false);
     resetToIdle();
   };
+
+  /* ── The three controls that open something ──────────────────────────────
+     Keypad, Transfer and Voicemail drop. Toggling ones (Mute, Hold) are just
+     booleans; these three own a surface and two of them end the call, so the
+     line's fate is decided here rather than inside the panel that asked. */
+
+  /** The line is leaving. Nothing else on the bar may touch it. */
+  const controlsBusy = transfer?.stage === "connecting" || voicemail !== null;
+
+  const toggleSurface = (next: CallSurface) => {
+    if (controlsBusy) return;
+    setSurface((current) => (current === next ? null : next));
+  };
+
+  const sendTone = (digit: string) => {
+    // The readout is a reminder of what the IVR was told, not a transcript —
+    // past a dozen tones the agent is reading the wrong end of the string.
+    setTones((current) => `${current}${digit}`.slice(-DTMF_READOUT_MAX));
+  };
+
+  /**
+   * "Ask first" holds the customer and puts the agent on with the target;
+   * "Transfer now" hands the call straight over. Either way the panel closes
+   * on a cold transfer — there is nothing left to decide — and stays open on a
+   * warm one, because the consult is the next thing it has to show.
+   */
+  const startTransfer = (target: TransferTarget, mode: TransferMode) => {
+    setTransfer({
+      targetId: target.id,
+      mode,
+      stage: mode === "warm" ? "consulting" : "connecting",
+      heldBefore: onHold,
+    });
+    if (mode === "warm") {
+      setOnHold(true);
+      return;
+    }
+    setSurface(null);
+  };
+
+  const completeTransfer = () => {
+    setTransfer((current) =>
+      current ? { ...current, stage: "connecting" } : current
+    );
+    setSurface(null);
+  };
+
+  /** Backing out of a consult gives the customer back — held or not, as found. */
+  const cancelTransfer = () => {
+    setOnHold(transfer?.heldBefore ?? false);
+    setTransfer(null);
+  };
+
+  const dropVoicemail = (greetingId: string) => {
+    setVoicemail({ greetingId });
+    setSurface(null);
+  };
+
+  const callControls: CallControlsModel = {
+    surface,
+    tones,
+    transfer,
+    voicemail,
+    busy: controlsBusy,
+    onSurfaceToggle: toggleSurface,
+    onSurfaceClose: () => setSurface(null),
+    onTone: sendTone,
+    onTonesClear: () => setTones(""),
+    onTransferStart: startTransfer,
+    onTransferComplete: completeTransfer,
+    onTransferCancel: cancelTransfer,
+    onVoicemailDrop: dropVoicemail,
+  };
+
+  // A transfer that has stopped consulting is the call leaving. Let the bar
+  // say where it went before the line closes — the recap that follows is the
+  // only record the agent gets.
+  useEffect(() => {
+    if (transfer?.stage !== "connecting") return;
+    const timer = window.setTimeout(hangup, TRANSFER_CONNECT_MS);
+    return () => window.clearTimeout(timer);
+    // `hangup` is rebuilt every render; the stage change is the trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transfer?.stage]);
+
+  // The greeting plays out, then the line closes. No cancel: by the time the
+  // bar says this, the customer already has the recording.
+  useEffect(() => {
+    if (!voicemail) return;
+    const timer = window.setTimeout(hangup, VOICEMAIL_DROP_MS);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voicemail]);
 
   const callWrapped = talking && simulationAt(scenario, elapsedMs).wrapped;
 
@@ -896,6 +1024,7 @@ export function DialerPanel({
               onTabChange={setTab}
               onMute={() => setMuted((value) => !value)}
               onHoldToggle={() => setOnHold((value) => !value)}
+              controls={callControls}
               onHangup={hangup}
               closing={closing}
               onCloseWrapUp={closeRecap}
@@ -1089,6 +1218,7 @@ function InCallShell({
   onTabChange,
   onMute,
   onHoldToggle,
+  controls,
   onHangup,
   closing,
   onCloseWrapUp,
@@ -1110,6 +1240,7 @@ function InCallShell({
   onTabChange: (tab: DialerTab) => void;
   onMute: () => void;
   onHoldToggle: () => void;
+  controls: CallControlsModel;
   onHangup: () => void;
   /** The recap is collapsing off the stage — see POST_CALL_CLOSE_MS. */
   closing: boolean;
@@ -1184,6 +1315,7 @@ function InCallShell({
             onTabChange={onTabChange}
             onMute={onMute}
             onHoldToggle={onHoldToggle}
+            controls={controls}
             onHangup={onHangup}
             onActionStatesChange={setActionStates}
           />
@@ -1228,6 +1360,7 @@ function CallMorphStage({
   onTabChange,
   onMute,
   onHoldToggle,
+  controls,
   onHangup,
   onActionStatesChange,
 }: {
@@ -1251,6 +1384,7 @@ function CallMorphStage({
   onTabChange: (tab: DialerTab) => void;
   onMute: () => void;
   onHoldToggle: () => void;
+  controls: CallControlsModel;
   onHangup: () => void;
   onActionStatesChange?: (states: Record<string, ActionState>) => void;
 }) {
@@ -1360,6 +1494,7 @@ function CallMorphStage({
           onScenarioChange={onScenarioChange}
           onMute={onMute}
           onHoldToggle={onHoldToggle}
+          controls={controls}
           onHangup={onHangup}
           onActionStatesChange={onActionStatesChange}
         />
@@ -1373,7 +1508,12 @@ function CallMorphStage({
           contactMeta={contactMeta}
           localTime={localTime}
           tab={tab}
+          muted={muted}
+          onHold={onHold}
+          controls={controls}
           onTabChange={onTabChange}
+          onMute={onMute}
+          onHoldToggle={onHoldToggle}
           onHangup={onHangup}
         />
       )}
@@ -1486,6 +1626,7 @@ function LiveCallStage({
   onScenarioChange,
   onMute,
   onHoldToggle,
+  controls,
   onHangup,
   onActionStatesChange,
 }: {
@@ -1504,6 +1645,7 @@ function LiveCallStage({
   onScenarioChange: (id: string) => void;
   onMute: () => void;
   onHoldToggle: () => void;
+  controls: CallControlsModel;
   onHangup: () => void;
   onActionStatesChange?: (states: Record<string, ActionState>) => void;
 }) {
@@ -1761,6 +1903,7 @@ function LiveCallStage({
         help={liveAssist}
         onMute={onMute}
         onHoldToggle={onHoldToggle}
+        controls={controls}
         onHangup={onHangup}
         onNotesToggle={() => {
           trackNotes("notes_icon_clicked", { opening: asidePanel !== "notes" });
@@ -2079,6 +2222,7 @@ function CallBar({
   liveAssistOpen,
   scope = "v2",
   help,
+  controls,
   onMute,
   onHoldToggle,
   onHangup,
@@ -2101,6 +2245,7 @@ function CallBar({
   liveAssistOpen?: boolean;
   scope?: AgentAssistScope;
   help: LiveAssistThread;
+  controls: CallControlsModel;
   onMute: () => void;
   onHoldToggle: () => void;
   onHangup: () => void;
@@ -2115,6 +2260,17 @@ function CallBar({
           style: { "--detail-delay": `${delay}ms` } as CSSProperties,
         }
       : {};
+
+  // Each opening control anchors its own panel, so the panel points at the
+  // icon it came from rather than at the bar as a whole.
+  const keypadRef = useRef<HTMLButtonElement | null>(null);
+  const transferRef = useRef<HTMLButtonElement | null>(null);
+  const voicemailRef = useRef<HTMLButtonElement | null>(null);
+
+  const status = callStatusLabel(controls, onHold);
+  // Mid-transfer the bar is reporting, not offering: the line is already on
+  // its way somewhere and a second Hold would be a lie.
+  const locked = controls.busy;
 
   return (
     <div
@@ -2133,8 +2289,11 @@ function CallBar({
         <p className="truncate text-[14px] leading-5 font-medium text-white">
           {contactName}
         </p>
-        <p className="truncate text-[12px] leading-4 text-white/60 tabular-nums">
-          {onHold ? "On hold · " : ""}
+        <p
+          aria-live="polite"
+          className="truncate text-[12px] leading-4 text-white/60 tabular-nums"
+        >
+          {status ? `${status} · ` : ""}
           {formatDuration(elapsedMs)}
         </p>
       </div>
@@ -2198,6 +2357,7 @@ function CallBar({
             morphKey="mute"
             label={muted ? "Unmute" : "Mute"}
             pressed={muted}
+            disabled={locked}
             onClick={onMute}
           >
             <IconVoice size={20} />
@@ -2206,17 +2366,42 @@ function CallBar({
             morphKey="hold"
             label={onHold ? "Resume call" : "Hold"}
             pressed={onHold}
+            disabled={locked}
             onClick={onHoldToggle}
           >
             <IconCallHold size={20} />
           </BarControl>
-          <BarControl morphKey="keypad" label="Keypad">
+          <BarControl
+            morphKey="keypad"
+            label="Keypad"
+            pressed={controls.surface === "keypad"}
+            buttonRef={keypadRef}
+            disabled={locked}
+            // A tone already sent is the only trace of an IVR the agent
+            // navigated, so the icon carries it while the pad is shut.
+            badge={Boolean(controls.tones) && controls.surface !== "keypad"}
+            onClick={() => controls.onSurfaceToggle("keypad")}
+          >
             <IconCallKeypad size={20} />
           </BarControl>
-          <BarControl morphKey="transfer" label="Transfer">
+          <BarControl
+            morphKey="transfer"
+            label="Transfer"
+            pressed={controls.surface === "transfer" || controls.transfer !== null}
+            buttonRef={transferRef}
+            disabled={locked}
+            onClick={() => controls.onSurfaceToggle("transfer")}
+          >
             <IconCallTransfer size={20} />
           </BarControl>
-          <BarControl label="Voicemail drop" {...detail(BAR_DETAIL_DELAY_MS)}>
+          <BarControl
+            label="Voicemail drop"
+            pressed={controls.surface === "voicemail"}
+            buttonRef={voicemailRef}
+            disabled={locked}
+            onClick={() => controls.onSurfaceToggle("voicemail")}
+            {...detail(BAR_DETAIL_DELAY_MS)}
+          >
             <IconVoicemailDrop size={20} />
           </BarControl>
         </div>
@@ -2275,6 +2460,16 @@ function CallBar({
           </span>
         </button>
       </div>
+
+      {/* Hosted by the bar, not by each control: only one may be open, and the
+          bar is what decides which — the same rule the aside column follows on
+          the other side of the divider. */}
+      <CallBarSurfaces
+        controls={controls}
+        keypadRef={keypadRef}
+        transferRef={transferRef}
+        voicemailRef={voicemailRef}
+      />
     </div>
   );
 }
@@ -2289,6 +2484,7 @@ function BarControl({
   label,
   pressed,
   badge,
+  disabled,
   morphKey,
   buttonRef,
   className,
@@ -2300,6 +2496,8 @@ function BarControl({
   pressed?: boolean;
   /** Something came back while the panel was shut — a dot, not a count. */
   badge?: boolean;
+  /** The line is on its way elsewhere and this control no longer applies. */
+  disabled?: boolean;
   morphKey?: string;
   buttonRef?: RefObject<HTMLButtonElement | null>;
   className?: string;
@@ -2318,12 +2516,17 @@ function BarControl({
         type="button"
         aria-label={label}
         aria-pressed={pressed}
+        disabled={disabled}
         data-morph={morphKey}
         data-morph-scale={morphKey ? "height" : undefined}
         style={style}
         onClick={onClick}
         className={cn(
-          "call-bar-control relative flex size-9 shrink-0 items-center justify-center rounded-full text-white outline-none focus-visible:ring-2 focus-visible:ring-white/40 active:scale-[0.97]",
+          "call-bar-control relative flex size-9 shrink-0 items-center justify-center rounded-full text-white outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+          // The hover tint and the press nudge both come off `.call-bar-control`,
+          // so a locked control has to opt out of the press rather than the
+          // class — `disabled:` already stops the tint.
+          disabled ? "cursor-not-allowed opacity-40" : "active:scale-[0.97]",
           className
         )}
       >
@@ -2362,7 +2565,12 @@ function RingingPhone({
   contactMeta,
   localTime,
   tab,
+  muted,
+  onHold,
+  controls,
   onTabChange,
+  onMute,
+  onHoldToggle,
   onHangup,
 }: {
   className?: string;
@@ -2374,7 +2582,17 @@ function RingingPhone({
   contactMeta: string;
   localTime: string;
   tab: DialerTab;
+  /**
+   * The line's state, and the controls that change it. Optional because the
+   * morph ghost is a picture of this phone — it renders the same markup with
+   * nothing behind it, and must never be able to act on the call.
+   */
+  muted?: boolean;
+  onHold?: boolean;
+  controls?: CallControlsModel;
   onTabChange: (tab: DialerTab) => void;
+  onMute?: () => void;
+  onHoldToggle?: () => void;
   onHangup: () => void;
 }) {
   return (
@@ -2451,12 +2669,13 @@ function RingingPhone({
               </>
             ) : (
               <p
+                aria-live="polite"
                 className={cn(
                   "text-[16px] leading-6 font-medium",
                   !reduced && "dialer-text-in"
                 )}
               >
-                Ringing
+                {controls?.voicemail ? "Dropping voicemail" : "Ringing"}
               </p>
             )}
           </div>
@@ -2466,21 +2685,45 @@ function RingingPhone({
             which is also the moment they start travelling. */}
         <div className="flex flex-col items-center justify-center gap-4">
           <div className="flex gap-4">
-            <CallControl morphKey="mute" label="Mute" disabled={!connected}>
+            <CallControl
+              morphKey="mute"
+              label={muted ? "Unmute" : "Mute"}
+              pressed={muted}
+              disabled={!connected}
+              onClick={onMute}
+            >
               <IconVoice size={24} />
             </CallControl>
-            <CallControl morphKey="hold" label="Hold" disabled={!connected}>
+            <CallControl
+              morphKey="hold"
+              label={onHold ? "Resume" : "Hold"}
+              pressed={onHold}
+              disabled={!connected}
+              onClick={onHoldToggle}
+            >
               <IconCallHold size={24} />
             </CallControl>
           </div>
           <div className="flex gap-4">
-            <CallControl morphKey="keypad" label="Keypad" disabled={!connected}>
+            {/* These two open a panel the phone has no room for, so they set
+                the state and the bar — half a morph away — shows it. Same
+                control either side of the move, so pressing it before the
+                workspace lands is not a click into nothing. */}
+            <CallControl
+              morphKey="keypad"
+              label="Keypad"
+              pressed={controls?.surface === "keypad"}
+              disabled={!connected}
+              onClick={() => controls?.onSurfaceToggle("keypad")}
+            >
               <IconCallKeypad size={24} />
             </CallControl>
             <CallControl
               morphKey="transfer"
               label="Transfer"
+              pressed={controls?.surface === "transfer"}
               disabled={!connected}
+              onClick={() => controls?.onSurfaceToggle("transfer")}
             >
               <IconCallTransfer size={24} />
             </CallControl>
@@ -2501,7 +2744,11 @@ function RingingPhone({
           <button
             type="button"
             aria-label="Voicemail drop"
-            className="flex size-12 items-center justify-center overflow-clip rounded-full bg-white text-success outline-none transition-transform hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
+            disabled={Boolean(controls?.voicemail)}
+            onClick={() =>
+              controls?.onVoicemailDrop(VOICEMAIL_GREETINGS[0].id)
+            }
+            className="flex size-12 items-center justify-center overflow-clip rounded-full bg-white text-success outline-none transition-transform hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <IconVoicemailDrop size={24} className="size-6" />
           </button>
