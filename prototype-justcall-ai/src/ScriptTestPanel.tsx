@@ -1,6 +1,14 @@
 import * as React from "react";
 import { Modal } from "@/components/Modal";
-import { flattenSteps, spokenLineFor, type ScriptPlaybook } from "./scriptPlaybook";
+import { SegmentedTabs } from "@/components/SegmentedTabs";
+import {
+  flattenSteps,
+  playbookUsedFields,
+  spokenLineFor,
+  type ScriptPlaybook,
+} from "./scriptPlaybook";
+import { resolveFieldText } from "./contactFields";
+import { PREVIEW_CONTACTS, type PreviewContactKey } from "./ContactFieldControls";
 import {
   ScriptStepRow,
   prefersReducedMotion,
@@ -19,6 +27,18 @@ export interface ScriptPreviewModalProps {
 export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewModalProps) {
   const steps = React.useMemo(() => flattenSteps(playbook), [playbook]);
   const reduced = prefersReducedMotion();
+  /**
+   * Which contact the script is being read against. A script with no fields
+   * reads the same either way, so the switch only appears when there is a
+   * difference to see.
+   */
+  const [contactKey, setContactKey] = React.useState<PreviewContactKey>("complete");
+  const usesFields = playbookUsedFields(playbook).length > 0;
+  const contact = PREVIEW_CONTACTS[contactKey].record;
+  const resolve = React.useCallback(
+    (text: string) => resolveFieldText(text, contact, playbook.fieldFallbacks),
+    [contact, playbook.fieldFallbacks]
+  );
   const [completed, setCompleted] = React.useState<Set<number>>(() => new Set());
   const [lastChecked, setLastChecked] = React.useState<number | null>(null);
   const activeRef = React.useRef<HTMLLIElement | null>(null);
@@ -42,7 +62,12 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
   React.useEffect(() => {
     if (!listening) return;
     if (!heard || heard === consumedRef.current) return;
-    const hits = matchingOpenStepIndexes(heard, steps, completed);
+    // The agent speaks the resolved line, so that is what the match runs on.
+    const hits = matchingOpenStepIndexes(
+      heard,
+      steps.map((item) => ({ ...item, suggestedWording: resolve(item.suggestedWording) })),
+      completed
+    );
     if (hits.length === 0) return;
     consumedRef.current = heard;
     setLastChecked(hits[0] ?? null);
@@ -51,7 +76,7 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
       hits.forEach((index) => next.add(index));
       return next;
     });
-  }, [heard, listening, completed, steps]);
+  }, [heard, listening, completed, steps, resolve]);
 
   const { phases, glowing } = useScriptChecklistMotion({
     completed,
@@ -68,7 +93,7 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
   }, [lastChecked, open, reduced]);
 
   const announced = lastChecked != null ? steps[lastChecked] : undefined;
-  const announcedLine = announced ? spokenLineFor(announced) : "";
+  const announcedLine = announced ? resolve(spokenLineFor(announced)) : "";
 
   return (
     <Modal
@@ -85,6 +110,28 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
         </p>
       ) : (
         <div className="flex flex-col gap-3">
+          {usesFields ? (
+            <div className="flex flex-col gap-1.5">
+              <SegmentedTabs
+                aria-label="Preview contact"
+                value={contactKey}
+                onValueChange={(key) => setContactKey(key as PreviewContactKey)}
+                items={[
+                  { key: "complete", label: PREVIEW_CONTACTS.complete.label },
+                  { key: "sparse", label: PREVIEW_CONTACTS.sparse.label },
+                ]}
+              />
+              {/* The second half of the promise: the script has to read as a
+                  sentence when the CRM knows nothing, not just when it knows
+                  everything. */}
+              <p className="text-paragraph-sm text-muted-foreground">
+                {contactKey === "complete"
+                  ? "Reading against a contact with every field filled in."
+                  : "Reading against a contact with only a phone number — the rest falls back."}
+              </p>
+            </div>
+          ) : null}
+
           <SpeakProgressHint listening={status === "listening"}>
             {status === "denied" ? (
               "Microphone access is needed to check the script. Allow it, then open Preview again."
@@ -108,7 +155,7 @@ export function ScriptPreviewModal({ open, playbook, onClose }: ScriptPreviewMod
 
           <ol className="flex flex-col" aria-label="Call script">
             {steps.map((step, index) => {
-              const wording = step.suggestedWording.trim();
+              const wording = resolve(step.suggestedWording).trim();
               return (
                 <li key={step.id} ref={lastChecked === index ? activeRef : undefined}>
                   <ScriptStepRow

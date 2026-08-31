@@ -18,6 +18,14 @@ import {
   type WordingTone,
 } from "./scriptPlaybook";
 import { useScriptCardReorder } from "./useScriptCardReorder";
+import {
+  hasFields,
+  insertFieldToken,
+  SAMPLE_CONTACT,
+  type ContactFieldMeta,
+  type FieldFallbacks,
+} from "./contactFields";
+import { FieldPreviewLine, InsertFieldButton } from "./ContactFieldControls";
 
 function DragHandleIcon({ size = 16 }: { size?: number }) {
   return (
@@ -320,6 +328,7 @@ export function PlaybookEditor({
                   stepIndex={stepIndex}
                   stepsLength={steps.length}
                   canRewrite={canRewrite}
+                  fallbacks={playbook.fieldFallbacks}
                   menuOpen={menuStepId === item.id}
                   customOpen={customStepId === item.id}
                   draft={itemDraft}
@@ -385,6 +394,7 @@ export function PlaybookEditor({
                 canRewrite={Boolean(
                   floatingStep.title.trim() || floatingStep.suggestedWording.trim()
                 )}
+                fallbacks={playbook.fieldFallbacks}
                 menuOpen={false}
                 customOpen={false}
                 draft={draft?.stepId === floatingStep.id ? draft : null}
@@ -423,6 +433,7 @@ function ScriptStepCard({
   stepIndex,
   stepsLength,
   canRewrite,
+  fallbacks,
   menuOpen,
   customOpen,
   draft,
@@ -447,6 +458,7 @@ function ScriptStepCard({
   stepIndex: number;
   stepsLength: number;
   canRewrite: boolean;
+  fallbacks: FieldFallbacks;
   menuOpen: boolean;
   customOpen: boolean;
   draft: AiDraft | null;
@@ -477,6 +489,25 @@ function ScriptStepCard({
       start: target.selectionStart,
       end: target.selectionEnd,
     };
+  };
+
+  /**
+   * Insert at the caret the admin left, not at the end — they clicked into the
+   * sentence for a reason. Focus comes back to the field with the caret past
+   * the token, so the next thing they type continues the sentence.
+   */
+  const insertField = (field: ContactFieldMeta) => {
+    const source = item.suggestedWording;
+    const at = selectionRef.current ?? { start: source.length, end: source.length };
+    const next = insertFieldToken(source, at.start, at.end, field);
+    onUpdate({ suggestedWording: next.text });
+    selectionRef.current = { start: next.caret, end: next.caret };
+    requestAnimationFrame(() => {
+      const node = textareaRef.current;
+      if (!node) return;
+      node.focus();
+      node.setSelectionRange(next.caret, next.caret);
+    });
   };
 
   const handleButton = (
@@ -539,6 +570,8 @@ function ScriptStepCard({
         item={item}
         preview={preview}
         canRewrite={canRewrite}
+        fallbacks={fallbacks}
+        onInsertField={insertField}
         menuOpen={menuOpen}
         customOpen={customOpen}
         draft={draft}
@@ -575,6 +608,8 @@ function ScriptWordingField({
   item,
   preview,
   canRewrite,
+  fallbacks,
+  onInsertField,
   menuOpen,
   customOpen,
   draft,
@@ -596,6 +631,8 @@ function ScriptWordingField({
   item: PlaybookStep;
   preview: boolean;
   canRewrite: boolean;
+  fallbacks: FieldFallbacks;
+  onInsertField: (field: ContactFieldMeta) => void;
   menuOpen: boolean;
   customOpen: boolean;
   draft: AiDraft | null;
@@ -616,13 +653,19 @@ function ScriptWordingField({
 }) {
   const menuPresence = useDropdownPresence(menuOpen && !preview);
 
+  // The preview only earns its line when there is something to resolve, and
+  // never while an AI draft is on screen — that draft is not what the agent
+  // will hear yet.
+  const showPreview = hasFields(item.suggestedWording) && !showingAi;
+
   return (
-    <div
-      className={cn(
-        "relative rounded-[4px] border bg-white transition-colors",
-        showingAi ? "border-ai-border" : "border-line focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/16"
-      )}
-    >
+    <div className="flex flex-col gap-2">
+      <div
+        className={cn(
+          "relative rounded-[4px] border bg-white transition-colors",
+          showingAi ? "border-ai-border" : "border-line focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/16"
+        )}
+      >
       {showingAi && draft ? (
         <AiSuggestionState
           draft={draft}
@@ -663,34 +706,46 @@ function ScriptWordingField({
           rows={3}
           readOnly={preview}
           tabIndex={preview ? -1 : 0}
-          className="min-h-[72px] w-full resize-y rounded-[4px] bg-transparent px-3 py-2 pr-10 text-paragraph-md text-foreground outline-none placeholder:text-muted-foreground"
+          className="min-h-[72px] w-full resize-y rounded-[4px] bg-transparent px-3 py-2 pr-16 text-paragraph-md text-foreground outline-none placeholder:text-muted-foreground"
         />
       )}
 
       {!showingAi ? (
-        <button
-          ref={sparklesRef}
-          type="button"
-          tabIndex={preview ? -1 : 0}
-          disabled={preview || !canRewrite}
-          aria-label="Improve with AI"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onMouseDown={(event) => {
-            event.preventDefault();
-            if (textareaRef.current) onCaptureSelection(textareaRef.current);
-          }}
-          onClick={() => {
-            if (preview) return;
-            onToggleMenu();
-          }}
-          className={cn(
-            "absolute top-1.5 right-1.5 flex size-7 items-center justify-center rounded-[4px] text-ai hover:bg-ai/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/24 disabled:pointer-events-none disabled:opacity-40",
-            menuOpen && "bg-ai/8"
-          )}
-        >
-          <IconSparkles size={16} />
-        </button>
+        // Two affordances, one corner: insert a field, or rewrite the line.
+        // The field control comes first because it acts on the caret, and the
+        // AI one acts on everything around it.
+        <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5">
+          <InsertFieldButton
+            disabled={preview}
+            onBeforeOpen={() => {
+              if (textareaRef.current) onCaptureSelection(textareaRef.current);
+            }}
+            onInsert={onInsertField}
+          />
+          <button
+            ref={sparklesRef}
+            type="button"
+            tabIndex={preview ? -1 : 0}
+            disabled={preview || !canRewrite}
+            aria-label="Improve with AI"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              if (textareaRef.current) onCaptureSelection(textareaRef.current);
+            }}
+            onClick={() => {
+              if (preview) return;
+              onToggleMenu();
+            }}
+            className={cn(
+              "flex size-7 items-center justify-center rounded-[4px] text-ai hover:bg-ai/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai/24 disabled:pointer-events-none disabled:opacity-40",
+              menuOpen && "bg-ai/8"
+            )}
+          >
+            <IconSparkles size={16} />
+          </button>
+        </div>
       ) : null}
 
       {menuPresence.mounted ? (
@@ -703,6 +758,16 @@ function ScriptWordingField({
           onRequestCustom={onRequestCustom}
           onBackFromCustom={onBackFromCustom}
           onGenerate={onGenerate}
+        />
+      ) : null}
+      </div>
+
+      {showPreview ? (
+        <FieldPreviewLine
+          text={item.suggestedWording}
+          contact={SAMPLE_CONTACT}
+          fallbacks={fallbacks}
+          className="px-0.5"
         />
       ) : null}
     </div>

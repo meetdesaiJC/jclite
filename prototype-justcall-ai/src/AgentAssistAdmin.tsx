@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Button } from "@/components/Button";
 import { IconChevronLeft } from "@/components/Icon";
 import { Toggle } from "@/components/Toggle";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
@@ -92,6 +93,8 @@ export function AgentAssistAdmin({
   knowledgeSources,
   onOpenKnowledge,
 }: AgentAssistAdminProps) {
+  const planAvailable =
+    new URLSearchParams(window.location.search).get("assist") !== "locked";
   const [area, setArea] = React.useState<AgentAssistArea>("scripts");
   /**
    * The section the admin picked, held while the one on screen fades out. The
@@ -196,14 +199,19 @@ export function AgentAssistAdmin({
           className="aa-section-content flex min-h-0 min-w-0 flex-1 flex-col"
           data-motion={contentMotion}
         >
-          {area === "actions" ? (
+          {!planAvailable ? (
+            <AgentAssistPlanLocked />
+          ) : (
+            <>
+              {!seeded ? <AgentAssistSetupIncomplete /> : null}
+              {area === "actions" ? (
             <ActionsPage
               actions={actions}
               onActionsChange={setActions}
               integrations={integrations}
               onIntegrationsChange={setIntegrations}
             />
-          ) : (
+              ) : (
             <AgentAssistPlaybooksPage
               view={area === "response-cards" ? "guidance" : area}
               seeded={seeded}
@@ -215,10 +223,54 @@ export function AgentAssistAdmin({
               onOpenKnowledge={onOpenKnowledge}
               scope={scope}
             />
+              )}
+            </>
           )}
         </div>
       </div>
     </AgentAssistTakeoverContext.Provider>
+  );
+}
+
+function AgentAssistPlanLocked() {
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+      <section className="flex w-full max-w-[520px] flex-col items-start gap-4 rounded-xl border border-line bg-white p-6 shadow-100">
+        <div className="flex size-10 items-center justify-center rounded-lg bg-brand-subtle text-brand">
+          <span className="text-heading-lg">✦</span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <h1 className="text-heading-xl text-foreground">Agent Assist isn’t included in your plan</h1>
+          <p className="text-paragraph-md text-muted-foreground">
+            Upgrade to give agents live scripts, response cards, and answers from your knowledge base during calls.
+          </p>
+        </div>
+        <Button size="sm">View plans and upgrade</Button>
+        <p className="text-label-sm text-muted-foreground">
+          Your calling features and existing data are unchanged.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function AgentAssistSetupIncomplete() {
+  return (
+    <section className="mx-6 mt-5 shrink-0 rounded-lg border border-info-border bg-info-secondary px-4 py-3">
+      <div className="flex items-start justify-between gap-6">
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-label-md-semi text-foreground">Agent Assist is included, but setup is incomplete</p>
+          <p className="text-paragraph-sm text-muted-foreground">
+            Agents will see guidance after at least one item is created, published, and assigned.
+          </p>
+        </div>
+        <ol className="grid shrink-0 grid-cols-3 gap-3 text-label-sm text-foreground">
+          <li><span className="mr-1 text-brand">1.</span>Create</li>
+          <li><span className="mr-1 text-brand">2.</span>Publish</li>
+          <li><span className="mr-1 text-brand">3.</span>Assign</li>
+        </ol>
+      </div>
+    </section>
   );
 }
 

@@ -10,12 +10,12 @@ import {
 import { cn } from "@/lib/utils";
 import {
   Avatar,
-  avatarColorFromId,
   initialsFromName,
   type AvatarStatus,
 } from "@/components/Avatar";
 import { Button } from "@/components/Button";
 import { InputField } from "@/components/InputField";
+import { Tabs } from "@/components/Tabs";
 import { WaveformLoader } from "@/components/WaveformLoader";
 import {
   IconAlertTriangleFilled,
@@ -35,13 +35,11 @@ import { BarControl } from "./CallBarControl";
 import {
   CallPopoverRow,
   CallPopoverSection,
-  CallPopoverTabs,
 } from "./CallPopover";
 import {
   TRANSFER_ANSWER_MS,
   TRANSFER_COMPLETE_MS,
   TRANSFER_TARGETS,
-  availabilityById,
   formatCallDuration,
   transferTargetLine,
   type AvailabilityId,
@@ -600,13 +598,14 @@ export function TransferBody({ flow }: { flow: TransferFlow }) {
           "which outside party owns this" — and the design splits them for the
           same reason the phone's own contacts app does: the agent already
           knows which kind of person they are looking for. */}
-      <CallPopoverTabs
+      <Tabs
         items={[
           { key: "team", label: "My Team" },
           { key: "contacts", label: "Contacts" },
         ]}
         value={flow.directory}
-        onValueChange={flow.setDirectory}
+        onValueChange={(key) => flow.setDirectory(key as TransferDirectory)}
+        className="flex w-full shrink-0 justify-around gap-0 border-b border-line px-4"
       />
 
       <div className="shrink-0 px-4 py-3">
@@ -696,15 +695,14 @@ export function TransferControl({
 /**
  * The presence dot the avatar carries, from the status the directory reports.
  *
- * `busy` becomes `dnd` rather than getting a status of its own: the avatar's
- * scale is about what a *dot* can say, and "chose not to take calls" and "do
- * not disturb" are the same red to everyone but the person who set it.
+ * Transfer only needs a binary answer: green can receive the call, grey
+ * cannot. More specific source statuses do not change the agent's next step.
  */
 const AVATAR_STATUS: Record<AvailabilityId, AvatarStatus> = {
   available: "available",
-  busy: "dnd",
-  "on-call": "on-call",
-  "wrap-up": "wrap-up",
+  busy: "ooo",
+  "on-call": "ooo",
+  "wrap-up": "ooo",
 };
 
 /**
@@ -734,7 +732,6 @@ function TransferRow({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const status = availabilityById(target.availability);
   // A teammate on a call or on DND can't take a transfer. A saved number
   // always can — there is no presence on the far end of one to read.
   const unavailable =
@@ -767,13 +764,13 @@ function TransferRow({
         aria-hidden="true"
         size="md"
         initials={initialsFromName(target.name)}
-        color={avatarColorFromId(target.id)}
+        color="indigo"
         status={
           target.kind === "agent"
             ? AVATAR_STATUS[target.availability]
             : undefined
         }
-        className="pointer-events-none"
+        className="pointer-events-none [&>span.absolute]:size-2 [&>span.absolute]:border"
       />
       <span className="min-w-0 flex-1">
         <span
@@ -790,16 +787,18 @@ function TransferRow({
           </span>
         </span>
       </span>
-      {/* The real status, not a flat "Unavailable" — "On a call" tells the
-          agent to wait a beat and try again, and "Busy" tells them not to. */}
-      <span
-        className={cn(
-          "shrink-0 text-[12px] leading-4",
-          unavailable ? "text-muted-foreground" : "text-success"
-        )}
-      >
-        {unavailable ? status.label : "Available"}
-      </span>
+      {/* Presence only applies to teammates. Saved contacts are phone-book
+          entries, so showing them as "Available" would imply live status. */}
+      {target.kind === "agent" ? (
+        <span
+          className={cn(
+            "shrink-0 text-[12px] leading-4",
+            unavailable ? "text-muted-foreground" : "text-success"
+          )}
+        >
+          {unavailable ? "Unavailable" : "Available"}
+        </span>
+      ) : null}
     </button>
   );
 }

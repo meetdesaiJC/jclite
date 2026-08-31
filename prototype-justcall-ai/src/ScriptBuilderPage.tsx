@@ -12,11 +12,15 @@ import {
   countSteps,
   createBlankPlaybook,
   createPlaybookFromTemplate,
+  playbookUnknownFields,
+  playbookUsedFields,
   SCRIPT_TEAM_MEMBERS,
   SCRIPT_USER_GROUPS,
   type ScriptPlaybook,
   type ScriptTemplateId,
 } from "./scriptPlaybook";
+import { FieldFallbacksCard } from "./ContactFieldControls";
+import { contactFieldMeta } from "./contactFields";
 
 export type BuilderLaunch =
   | { type: "blank" }
@@ -45,6 +49,16 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
     playbook.assignedMembers.length > 0 || playbook.assignedGroups.length > 0;
   const canConfirmPublish = canPublish && hasAssignees;
   const stepCount = countSteps(playbook);
+  const usedFields = playbookUsedFields(playbook);
+  const unknownFields = playbookUnknownFields(playbook);
+  /**
+   * A field left to say nothing is a decision, not an omission — but it is one
+   * worth showing before publish, because the sentence the admin wrote is not
+   * the sentence half their calls will hear.
+   */
+  const silentFields = usedFields.filter(
+    (id) => (playbook.fieldFallbacks[id] ?? "").trim().length === 0
+  );
 
   const updatePlaybook = (patch: Partial<ScriptPlaybook>) => {
     setPlaybook((current) => ({ ...current, ...patch }));
@@ -86,7 +100,7 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
       </header>
 
       <div className="flex min-h-0 flex-1 gap-6 overflow-hidden bg-white px-6 py-6">
-          <aside className="flex w-[300px] shrink-0 flex-col">
+          <aside className="flex w-[300px] shrink-0 flex-col gap-4 overflow-y-auto">
             <AssignTeamAndGroups
               members={SCRIPT_TEAM_MEMBERS}
               groups={SCRIPT_USER_GROUPS}
@@ -94,6 +108,13 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
               selectedGroups={playbook.assignedGroups}
               onMembersChange={(assignedMembers) => updatePlaybook({ assignedMembers })}
               onGroupsChange={(assignedGroups) => updatePlaybook({ assignedGroups })}
+            />
+            {/* Appears the moment the first field goes in, and only then —
+                a script with no fields has nothing to fall back to. */}
+            <FieldFallbacksCard
+              used={usedFields}
+              fallbacks={playbook.fieldFallbacks}
+              onChange={(fieldFallbacks) => updatePlaybook({ fieldFallbacks })}
             />
           </aside>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
@@ -174,6 +195,32 @@ export function ScriptBuilderPage({ launch, onClose, onPublish }: ScriptBuilderP
               onMembersChange={(assignedMembers) => updatePlaybook({ assignedMembers })}
               onGroupsChange={(assignedGroups) => updatePlaybook({ assignedGroups })}
             />
+            {usedFields.length > 0 ? (
+              <div className="min-w-0">
+                <dt className="text-label-sm text-muted-foreground">
+                  Contact fields
+                </dt>
+                <dd className="text-paragraph-md text-foreground">
+                  {usedFields.map((id) => contactFieldMeta(id).label).join(", ")}
+                </dd>
+                {silentFields.length > 0 ? (
+                  <p className="mt-1 text-paragraph-sm text-warning-text">
+                    {silentFields.map((id) => contactFieldMeta(id).label).join(", ")}
+                    {silentFields.length === 1 ? " has" : " have"} no fallback —
+                    agents will skip {silentFields.length === 1 ? "it" : "them"}{" "}
+                    when the record is empty.
+                  </p>
+                ) : null}
+                {unknownFields.length > 0 ? (
+                  <p className="mt-1 text-paragraph-sm text-error">
+                    {unknownFields.map((name) => `{{${name}}}`).join(", ")}{" "}
+                    {unknownFields.length === 1 ? "is not a" : "are not"} contact
+                    field{unknownFields.length === 1 ? "" : "s"} and will be
+                    dropped from what agents see.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {!hasAssignees ? (
               <p className="text-paragraph-sm text-muted-foreground">
                 Assign at least one team member or user group to publish.
