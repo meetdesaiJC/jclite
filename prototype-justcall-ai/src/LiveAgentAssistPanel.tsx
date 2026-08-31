@@ -66,6 +66,12 @@ import {
   useGuidanceStream,
   type GuidanceStreamCard,
 } from "./useGuidanceStream";
+import {
+  CallSearchBar,
+  CallSearchResults,
+  PinnedStack,
+  useCallSearch,
+} from "./CallSearchPanel";
 
 /**
  * In-call Agent Assist — one panel for everything the agent gets in real time.
@@ -867,6 +873,15 @@ export function LiveAgentAssistPanel({
     handledIds: snapshot.handledIds,
   });
   const coaching = useCoachingStack(snapshot.coaching, scenario.id, reduced);
+  /**
+   * The agent's own lookups. Reads the same published library the stream does,
+   * so what search can find and what guidance can surface never disagree.
+   */
+  const search = useCallSearch({
+    cards: guidanceItems,
+    sources: knowledgeSources,
+    resetKey: scenario.id,
+  });
 
   useEffect(() => {
     setViewingResource(null);
@@ -1187,6 +1202,10 @@ export function LiveAgentAssistPanel({
         ) : null}
       </header>
 
+      {/* Always present, never modal: the agent should be able to start typing
+          without first deciding to "open search". */}
+      <CallSearchBar model={search} reduced={reduced} />
+
       <div
         className={cn(
           "call-pane-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-2.5",
@@ -1194,7 +1213,27 @@ export function LiveAgentAssistPanel({
         )}
         {...stream.scrollHandlers}
       >
-        <GuidanceListeningState show={nothingYet} preparing={preparing} />
+        {/* Above everything, searching or not — a pin is the agent saying
+            "keep this in front of me", and a search two seconds later must
+            not push it off screen. */}
+        <PinnedStack
+          model={search}
+          reduced={reduced}
+          onViewResource={setViewingResource}
+        />
+
+        {search.searching ? (
+          <CallSearchResults
+            model={search}
+            reduced={reduced}
+            onViewResource={setViewingResource}
+          />
+        ) : (
+          <>
+        <GuidanceListeningState
+          show={nothingYet && search.pinned.length === 0}
+          preparing={preparing}
+        />
 
         {stream.criticalAlert ? (
           <CriticalGuidanceAlert
@@ -1220,6 +1259,8 @@ export function LiveAgentAssistPanel({
           ) : (
             renderKnowledge(item.surface)
           )
+        )}
+          </>
         )}
       </div>
 
