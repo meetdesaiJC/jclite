@@ -565,6 +565,10 @@ export function DialerPanel({
   const [elapsedMs, setElapsedMs] = useState(0);
   const [muted, setMuted] = useState(false);
   const [onHold, setOnHold] = useState(false);
+  // Recording is the one bar control that reports rather than acts, so pausing
+  // it is the exception the agent reaches for — a card number about to be read
+  // aloud — and the pill has to say so plainly while it is off.
+  const [recordingPaused, setRecordingPaused] = useState(false);
   // The three controls that open something rather than toggle something, and
   // what they leave behind. Owned here, above the ringing → live morph: a
   // transfer takes the call with it, so it cannot live in the bar it started
@@ -687,6 +691,7 @@ export function DialerPanel({
     const seek = opts?.elapsedMs ?? 0;
     setMuted(false);
     setOnHold(false);
+    setRecordingPaused(false);
     clearCallControls();
     setElapsedMs(seek);
     setScenarioId(opts?.scenarioId ?? CALL_SCENARIOS[0].id);
@@ -712,6 +717,7 @@ export function DialerPanel({
     setElapsedMs(0);
     setMuted(false);
     setOnHold(false);
+    setRecordingPaused(false);
     clearCallControls();
     setScenarioId(CALL_SCENARIOS[0].id);
   };
@@ -770,6 +776,7 @@ export function DialerPanel({
     setAssistCollapsing(false);
     setMuted(false);
     setOnHold(false);
+    setRecordingPaused(false);
     clearCallControls();
     setPhase("wrapup");
   };
@@ -791,6 +798,7 @@ export function DialerPanel({
     pausedMs.current = 0;
     setMuted(false);
     setOnHold(false);
+    setRecordingPaused(false);
     resetToIdle();
   };
 
@@ -1015,6 +1023,7 @@ export function DialerPanel({
               contactMeta={scenario.contactMeta}
               muted={muted}
               onHold={onHold}
+              recordingPaused={recordingPaused}
               tab={tab}
               scenario={scenario}
               onScenarioChange={(id) => {
@@ -1024,6 +1033,7 @@ export function DialerPanel({
               onTabChange={setTab}
               onMute={() => setMuted((value) => !value)}
               onHoldToggle={() => setOnHold((value) => !value)}
+              onRecordingToggle={() => setRecordingPaused((value) => !value)}
               controls={callControls}
               onHangup={hangup}
               closing={closing}
@@ -1212,12 +1222,14 @@ function InCallShell({
   contactMeta,
   muted,
   onHold,
+  recordingPaused,
   tab,
   scenario,
   onScenarioChange,
   onTabChange,
   onMute,
   onHoldToggle,
+  onRecordingToggle,
   controls,
   onHangup,
   closing,
@@ -1234,12 +1246,14 @@ function InCallShell({
   contactMeta: string;
   muted: boolean;
   onHold: boolean;
+  recordingPaused: boolean;
   tab: DialerTab;
   scenario: CallScenario;
   onScenarioChange: (id: string) => void;
   onTabChange: (tab: DialerTab) => void;
   onMute: () => void;
   onHoldToggle: () => void;
+  onRecordingToggle: () => void;
   controls: CallControlsModel;
   onHangup: () => void;
   /** The recap is collapsing off the stage — see POST_CALL_CLOSE_MS. */
@@ -1306,6 +1320,7 @@ function InCallShell({
             localTime={localTime}
             muted={muted}
             onHold={onHold}
+            recordingPaused={recordingPaused}
             tab={tab}
             scenario={scenario}
             assistCollapsing={assistCollapsing}
@@ -1315,6 +1330,7 @@ function InCallShell({
             onTabChange={onTabChange}
             onMute={onMute}
             onHoldToggle={onHoldToggle}
+            onRecordingToggle={onRecordingToggle}
             controls={controls}
             onHangup={onHangup}
             onActionStatesChange={setActionStates}
@@ -1351,6 +1367,7 @@ function CallMorphStage({
   localTime,
   muted,
   onHold,
+  recordingPaused,
   tab,
   scenario,
   assistCollapsing,
@@ -1360,6 +1377,7 @@ function CallMorphStage({
   onTabChange,
   onMute,
   onHoldToggle,
+  onRecordingToggle,
   controls,
   onHangup,
   onActionStatesChange,
@@ -1375,6 +1393,7 @@ function CallMorphStage({
   localTime: string;
   muted: boolean;
   onHold: boolean;
+  recordingPaused: boolean;
   tab: DialerTab;
   scenario: CallScenario;
   assistCollapsing: boolean;
@@ -1384,6 +1403,7 @@ function CallMorphStage({
   onTabChange: (tab: DialerTab) => void;
   onMute: () => void;
   onHoldToggle: () => void;
+  onRecordingToggle: () => void;
   controls: CallControlsModel;
   onHangup: () => void;
   onActionStatesChange?: (states: Record<string, ActionState>) => void;
@@ -1487,6 +1507,7 @@ function CallMorphStage({
           contactName={contactName}
           muted={muted}
           onHold={onHold}
+          recordingPaused={recordingPaused}
           scenario={scenario}
           assistCollapsing={assistCollapsing}
           notes={notes}
@@ -1494,6 +1515,7 @@ function CallMorphStage({
           onScenarioChange={onScenarioChange}
           onMute={onMute}
           onHoldToggle={onHoldToggle}
+          onRecordingToggle={onRecordingToggle}
           controls={controls}
           onHangup={onHangup}
           onActionStatesChange={onActionStatesChange}
@@ -1619,6 +1641,7 @@ function LiveCallStage({
   contactName,
   muted,
   onHold,
+  recordingPaused,
   scenario,
   assistCollapsing,
   notes,
@@ -1626,6 +1649,7 @@ function LiveCallStage({
   onScenarioChange,
   onMute,
   onHoldToggle,
+  onRecordingToggle,
   controls,
   onHangup,
   onActionStatesChange,
@@ -1638,6 +1662,7 @@ function LiveCallStage({
   contactName: string;
   muted: boolean;
   onHold: boolean;
+  recordingPaused: boolean;
   scenario: CallScenario;
   assistCollapsing: boolean;
   notes: NotesEditorValue;
@@ -1645,6 +1670,7 @@ function LiveCallStage({
   onScenarioChange: (id: string) => void;
   onMute: () => void;
   onHoldToggle: () => void;
+  onRecordingToggle: () => void;
   controls: CallControlsModel;
   onHangup: () => void;
   onActionStatesChange?: (states: Record<string, ActionState>) => void;
@@ -1894,6 +1920,7 @@ function LiveCallStage({
         contactName={contactName}
         muted={muted}
         onHold={onHold}
+        recordingPaused={recordingPaused}
         notesOpen={asidePanel === "notes"}
         notesControlRef={notesControlRef}
         notesFound={discovery.pulsing}
@@ -1903,6 +1930,7 @@ function LiveCallStage({
         help={liveAssist}
         onMute={onMute}
         onHoldToggle={onHoldToggle}
+        onRecordingToggle={onRecordingToggle}
         controls={controls}
         onHangup={onHangup}
         onNotesToggle={() => {
@@ -2215,6 +2243,7 @@ function CallBar({
   contactName,
   muted,
   onHold,
+  recordingPaused,
   notesOpen,
   notesControlRef,
   notesFound,
@@ -2225,6 +2254,7 @@ function CallBar({
   controls,
   onMute,
   onHoldToggle,
+  onRecordingToggle,
   onHangup,
   onNotesToggle,
   onTranscriptToggle,
@@ -2237,6 +2267,7 @@ function CallBar({
   contactName: string;
   muted: boolean;
   onHold: boolean;
+  recordingPaused: boolean;
   notesOpen?: boolean;
   notesControlRef?: RefObject<HTMLButtonElement | null>;
   /** The introduction has just landed here — light up, once. */
@@ -2248,6 +2279,7 @@ function CallBar({
   controls: CallControlsModel;
   onMute: () => void;
   onHoldToggle: () => void;
+  onRecordingToggle: () => void;
   onHangup: () => void;
   onNotesToggle?: () => void;
   onTranscriptToggle?: () => void;
@@ -2308,19 +2340,51 @@ function CallBar({
       />
 
       <div className="flex shrink-0 items-center gap-2.5">
-        <button
-          type="button"
-          style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
-          className={cn(
-            "flex h-6 items-center gap-1.5 rounded-full bg-white px-2 outline-none focus-visible:ring-2 focus-visible:ring-white/40",
-            revealing && "call-bar-detail-in"
-          )}
+        {/* The pill states what the line is doing, so the tooltip has to carry
+            the verb — "Recording" is the status, "Pause recording" is the act.
+            Paused drops the red rather than the pill: the agent still needs to
+            see, at a glance, that recording is a thing this call has. */}
+        <TooltipTrigger
+          placement="bottom"
+          content={
+            <Tooltip
+              theme="dark"
+              arrow="top-center"
+              title={recordingPaused ? "Resume recording" : "Pause recording"}
+            />
+          }
+          className="shrink-0"
         >
-          <span className="size-2 rounded-full bg-error" aria-hidden="true" />
-          <span className="text-[10px] leading-3 whitespace-nowrap text-error">
-            Recording
-          </span>
-        </button>
+          <button
+            type="button"
+            aria-label={recordingPaused ? "Resume recording" : "Pause recording"}
+            aria-pressed={recordingPaused}
+            disabled={locked}
+            onClick={onRecordingToggle}
+            style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+            className={cn(
+              "flex h-6 items-center gap-1.5 rounded-full bg-white px-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-white/40",
+              locked ? "cursor-not-allowed opacity-40" : "active:scale-[0.97]",
+              revealing && "call-bar-detail-in"
+            )}
+          >
+            <span
+              className={cn(
+                "size-2 rounded-full transition-colors",
+                recordingPaused ? "bg-muted-foreground" : "bg-error"
+              )}
+              aria-hidden="true"
+            />
+            <span
+              className={cn(
+                "text-[10px] leading-3 whitespace-nowrap transition-colors",
+                recordingPaused ? "text-muted-foreground" : "text-error"
+              )}
+            >
+              {recordingPaused ? "Paused" : "Recording"}
+            </span>
+          </button>
+        </TooltipTrigger>
 
         <span
           style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
@@ -3090,7 +3154,10 @@ function WrapUpPanel({
               maxLength={NOTES_MAX}
               value={notes}
               onChange={onNotesChange}
-              className="h-32"
+              // Opens at the height it always had; the grabber is there for the
+              // call that needed more room than one screen of notes.
+              resizable
+              className="h-32 min-h-32"
               ariaLabel="Notes"
             />
             <p className="text-right text-label-sm text-muted-foreground tabular-nums">
