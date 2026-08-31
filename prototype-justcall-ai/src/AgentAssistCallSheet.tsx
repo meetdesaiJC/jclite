@@ -42,6 +42,7 @@ import {
   type TranscriptTurn,
 } from "./callSimulation";
 import type { ActionState } from "./actionsData";
+import type { AgentAssistScope } from "./agentAssistScope";
 import {
   SEED_GUIDANCE,
   type GuidanceItem,
@@ -127,6 +128,8 @@ export interface AgentAssistCallSheetProps {
   guidanceDetached?: boolean;
   /** Actions already run on this call — the recap must not re-offer them. */
   actionStates?: Record<string, ActionState>;
+  /** V1 has no in-call actions, so the recap can never open pre-completed. */
+  scope?: AgentAssistScope;
   className?: string;
 }
 
@@ -143,6 +146,7 @@ export function AgentAssistCallSheet({
   transcriptDetached = false,
   guidanceDetached = false,
   actionStates,
+  scope = "v2",
   className,
 }: AgentAssistCallSheetProps) {
   const [view, setView] = useState<"assist" | "transcript">("assist");
@@ -304,6 +308,7 @@ export function AgentAssistCallSheet({
             actionStates={actionStates}
             reduced={reduced}
             recap={recap}
+            scope={scope}
           />
         )
       ) : preparing ? (
@@ -383,16 +388,22 @@ function AssistStream({
   onViewResource: (resource: GuidanceResource) => void;
 }) {
   const playhead = Math.min(snapshot.scriptIndex, scenario.steps.length);
+  /** Guidance sits inline in the script here, so the script's scroller is the
+   *  feed — the same rule applies either way: a card that lands while the agent
+   *  is reading further up does not drag the column to itself (§6, §8). */
+  const feedRef = useRef<HTMLDivElement | null>(null);
   const stream = useGuidanceStream({
     suggestions: guidanceDetached ? EMPTY_SUGGESTIONS : snapshot.suggestions,
     steps: scenario.steps,
     playhead,
     reduced,
     handledIds: snapshot.handledIds,
+    feedRef,
   });
 
   return (
     <div
+      ref={feedRef}
       className={cn(
         "call-pane-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3",
         !reduced && collapsing && "assist-stream-out"
@@ -692,21 +703,24 @@ function PostCallAssist({
   actionStates,
   reduced,
   recap,
+  scope,
 }: {
   scenario: CallScenario;
   snapshot: SimulationSnapshot;
   actionStates?: Record<string, ActionState>;
   reduced: boolean;
   recap: PostCallGeneration;
+  scope: AgentAssistScope;
 }) {
   const resolved = useMemo(
     () =>
       resolvePostCallActionItems(
         scenario.wrapUp.actionItems,
         snapshot,
-        actionStates
+        actionStates,
+        scope
       ),
-    [scenario.wrapUp.actionItems, snapshot, actionStates]
+    [scenario.wrapUp.actionItems, snapshot, actionStates, scope]
   );
   const [overrides, setOverrides] = useState<
     Record<string, { status: CallActionStatus; markedManually?: boolean }>

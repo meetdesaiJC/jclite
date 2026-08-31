@@ -15,6 +15,12 @@ import { cn } from "@/lib/utils";
  * parent's data — it gets logged, it survives a re-render, and in most places
  * it arrives from the server already set.
  *
+ * Two weights, chosen by how long the question is on screen. Inside a card the
+ * reader is already there, so a bare glyph that surfaces on hover is enough.
+ * On a bar that appears for a few seconds after a call, nobody hovers to find
+ * out what is offered — `emphasis="filled"` plus `upText`/`downText` makes the
+ * pair read as two things you can press before it is gone.
+ *
  * ── Motion ─────────────────────────────────────────────────────────────
  * The glyph presses in and back on every click, including a click that only
  * repeats an existing vote. That is deliberate: a vote you have already cast
@@ -43,17 +49,31 @@ const thumbButton = cva(
           "text-white/70 hover:bg-white/10 hover:text-white " +
           "focus-visible:ring-2 focus-visible:ring-white/40",
       },
-      size: {
-        sm: "size-7",
-        md: "size-8",
-      },
+      // A bare thumb is a glyph that only appears when hovered; a filled one
+      // carries its own resting surface. Reach for `filled` where the question
+      // has to be *found* rather than merely answered — a bar that slides in
+      // after a call has no dwell time in which a bare glyph gets noticed.
+      emphasis: { bare: "", filled: "" },
+      size: { sm: "", md: "" },
       shape: {
         pill: "rounded-full",
         rounded: "rounded-md",
       },
+      labeled: { true: "gap-1.5", false: "" },
       selected: { true: "", false: "" },
     },
     compoundVariants: [
+      // A labelled thumb can't be square, so both dimensions are decided
+      // here rather than by `size` alone — `size-8` and `h-8 px-3` are the
+      // same class group, and tw-merge resolves that pair the wrong way.
+      { size: "sm", labeled: false, class: "size-7" },
+      { size: "md", labeled: false, class: "size-8" },
+      { size: "sm", labeled: true, class: "h-7 px-2 text-label-sm" },
+      { size: "md", labeled: true, class: "h-8 px-2.5 text-label-md" },
+
+      { tone: "light", emphasis: "filled", class: "bg-secondary-bg text-foreground hover:bg-muted" },
+      { tone: "dark", emphasis: "filled", class: "bg-white/10 text-white hover:bg-white/16" },
+
       {
         tone: "light",
         selected: true,
@@ -66,8 +86,24 @@ const thumbButton = cva(
         selected: true,
         class: "bg-white/15 text-white hover:bg-white/15 hover:text-white",
       },
+      {
+        // A selected fill only reads as selected if it clears the resting one.
+        // White/15 over a bare surface is unmistakable; over the filled
+        // white/10 it is a rounding error, so the filled variant answers a
+        // step brighter.
+        tone: "dark",
+        emphasis: "filled",
+        selected: true,
+        class: "bg-white/28 text-white hover:bg-white/28 hover:text-white",
+      },
     ],
-    defaultVariants: { tone: "light", size: "sm", shape: "pill" },
+    defaultVariants: {
+      tone: "light",
+      emphasis: "bare",
+      size: "sm",
+      shape: "pill",
+      labeled: false,
+    },
   }
 );
 
@@ -85,6 +121,7 @@ const GLYPH: Record<FeedbackThumbsSize, number> = { sm: 14, md: 16 };
 export type FeedbackThumbsTone = "light" | "dark";
 export type FeedbackThumbsSize = "sm" | "md";
 export type FeedbackThumbsShape = "pill" | "rounded";
+export type FeedbackThumbsEmphasis = "bare" | "filled";
 
 /**
  * The variant props are spelled out rather than lifted off `VariantProps`:
@@ -95,6 +132,8 @@ export interface FeedbackThumbsProps
   tone?: FeedbackThumbsTone;
   size?: FeedbackThumbsSize;
   shape?: FeedbackThumbsShape;
+  /** `filled` gives each thumb a resting surface instead of a bare glyph. */
+  emphasis?: FeedbackThumbsEmphasis;
   /** The vote on record. `null` means unanswered. */
   value: FeedbackVote;
   /**
@@ -106,6 +145,14 @@ export interface FeedbackThumbsProps
   clearable?: boolean;
   upLabel?: string;
   downLabel?: string;
+  /**
+   * Visible text beside each glyph. Short — "Good" / "Bad" — because the full
+   * sentence stays on `upLabel`/`downLabel` for screen readers, which is where
+   * "Call quality was good" belongs and where it costs no width. Supplying one
+   * without the other is fine; the unlabelled thumb stays square.
+   */
+  upText?: string;
+  downText?: string;
 }
 
 export function FeedbackThumbs({
@@ -114,9 +161,12 @@ export function FeedbackThumbs({
   tone = "light",
   size = "sm",
   shape = "pill",
+  emphasis = "bare",
   clearable = true,
   upLabel = "Helpful",
   downLabel = "Not helpful",
+  upText,
+  downText,
   className,
   ...props
 }: FeedbackThumbsProps) {
@@ -139,7 +189,16 @@ export function FeedbackThumbs({
           setUpPress((current) => current + 1);
           vote("up");
         }}
-        className={cn(thumbButton({ tone, size, shape, selected: value === "up" }))}
+        className={cn(
+          thumbButton({
+            tone,
+            size,
+            shape,
+            emphasis,
+            labeled: Boolean(upText),
+            selected: value === "up",
+          })
+        )}
       >
         <span
           key={upPress}
@@ -147,6 +206,7 @@ export function FeedbackThumbs({
         >
           <ThumbUpIcon size={GLYPH[size]} filled={value === "up"} />
         </span>
+        {upText ? <span>{upText}</span> : null}
       </button>
 
       <button
@@ -158,7 +218,14 @@ export function FeedbackThumbs({
           vote("down");
         }}
         className={cn(
-          thumbButton({ tone, size, shape, selected: value === "down" })
+          thumbButton({
+            tone,
+            size,
+            shape,
+            emphasis,
+            labeled: Boolean(downText),
+            selected: value === "down",
+          })
         )}
       >
         <span
@@ -167,6 +234,7 @@ export function FeedbackThumbs({
         >
           <ThumbDownIcon size={GLYPH[size]} filled={value === "down"} />
         </span>
+        {downText ? <span>{downText}</span> : null}
       </button>
     </div>
   );

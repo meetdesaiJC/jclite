@@ -18,6 +18,10 @@ const SCALE: { name: DurationName; use: string }[] = [
   { name: "moderate", use: "Content swaps, panel-internal movement" },
   { name: "slow", use: "Large travel — sidesheet, drawer" },
   { name: "emphasis", use: "One-shot attention pulse — not a transition" },
+  {
+    name: "settle",
+    use: "One-shot arrival highlight — holds, then lets go. Not a transition",
+  },
 ];
 
 const EASES = [

@@ -16,6 +16,14 @@
      to follow and lose interest in, not a state change. Only for an
      attention pulse that plays once — never for an enter or an exit. */
   --duration-emphasis: 600ms; /* one-shot attention pulse */
+  /* The same idea over a longer arc: a card that just landed in a live feed
+     has to stay findable while the agent finishes the sentence they were
+     reading, which `emphasis` is far too short for. Holds for the first
+     quarter and releases over the rest — 400ms found, 1200ms letting go.
+     No `@utility`: like the ambient loops below it only ever drives an
+     `animation`, and a `duration-settle` class would set
+     `transition-duration` instead — wrong in a way that looks right. */
+  --duration-settle: 1600ms; /* one-shot arrival highlight, hold then release */
 
   /* Three curves, chosen by direction rather than by component. */
   --ease-entrance: cubic-bezier(0, 0, 0.38, 0.9); /* arriving — fast, then settles */
