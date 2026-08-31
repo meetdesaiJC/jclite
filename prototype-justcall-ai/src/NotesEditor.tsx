@@ -229,7 +229,10 @@ export const NotesEditor = forwardRef<
     className?: string;
     wrapperClassName?: string;
     ariaLabel?: string;
-    /** Native grabber in the bottom-right corner, the way a textarea has one. */
+    /**
+     * Grabber in the bottom-right corner, the way a textarea has one. The
+     * height the caller sets is the starting point, not the ceiling.
+     */
     resizable?: boolean;
     /** Caret to restore on focus. Parent-owned, so it outlives a remount. */
     caretRef?: MutableRefObject<NotesEditorCaret>;
@@ -730,10 +733,11 @@ export const NotesEditor = forwardRef<
   return (
     <div
       className={cn(
-        "relative w-full min-w-0",
-        // Flex only when the parent is stretching this box. A resizable field
-        // has to be a block, or the browser's grabber has nothing to write to.
-        !resizable && "flex min-h-0 flex-col",
+        "relative flex min-h-0 w-full min-w-0 flex-col",
+        // A dragged height is the agent's decision, so the column it sits in
+        // has to stop squeezing it — otherwise the box grows out through the
+        // bottom of the card instead of making the card scroll.
+        resizable && "shrink-0",
         wrapperClassName
       )}
     >
@@ -749,12 +753,9 @@ export const NotesEditor = forwardRef<
           "notes-editor w-full rounded-[4px] border border-solid border-line",
           "bg-white px-3 py-2.5 text-paragraph-md text-foreground outline-none transition-colors",
           "hover:border-control-border focus:border-brand focus:hover:border-brand",
-          // The grabber writes an inline size; without a cap it can be dragged
-          // past the parent. Width never leaves the column. Height is capped
-          // by the caller when the parent has a definite remaining size.
-          resizable
-            ? "max-h-full max-w-full resize-y overflow-auto"
-            : "min-h-0 overflow-y-auto",
+          // Vertical only: the column it sits in owns the width, and letting
+          // the box push past it would break the card rather than the field.
+          resizable && "resize-y",
           className
         )}
         onKeyDown={onKeyDown}

@@ -2,6 +2,11 @@ import { useLayoutEffect, useRef, useState } from "react";
 
 export const ASIDE_SWITCH_MS = 150;
 
+/**
+ * Everything the right-side column can show. The three tools the agent opens
+ * alongside the call, and the three call surfaces the bar opens — one column,
+ * one at a time, so a panel never has to argue with another for the space.
+ */
 export type AsidePanel =
   | "notes"
   | "transcript"
