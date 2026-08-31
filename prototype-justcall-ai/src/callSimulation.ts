@@ -47,6 +47,12 @@ import {
   type SuggestedAction,
 } from "./actionsData";
 import type { AgentAssistScope } from "./agentAssistScope";
+import {
+  DEFAULT_FIELD_FALLBACKS,
+  resolveFieldText,
+  type ContactRecord,
+  type FieldFallbacks,
+} from "./contactFields";
 
 /**
  * Demo pacing. The scenarios below are authored on a natural conversation
@@ -255,6 +261,10 @@ export interface CallScenario {
    */
   contactNumber: string;
   contactMeta: string;
+  /** CRM values used to personalise authored script fields on this call. */
+  contact?: ContactRecord;
+  /** Admin-authored words used whenever a requested CRM value is empty. */
+  fieldFallbacks?: FieldFallbacks;
   /** The CRM record actions on this call write to. */
   crmRecordLabel?: string;
   steps: ScriptStep[];
@@ -277,6 +287,19 @@ export interface SimulationSnapshot {
   /** Every cue fired so far — the panel shows the live one, not the pile. */
   coaching: CoachingCue[];
   actions: ActionSurface[];
+}
+
+/** Script wording as the agent sees it—resolved values or safe fallbacks only. */
+export function resolveScenarioText(
+  scenario: CallScenario,
+  text: string | undefined
+): string | undefined {
+  if (!text) return text;
+  return resolveFieldText(
+    text,
+    scenario.contact ?? {},
+    scenario.fieldFallbacks ?? DEFAULT_FIELD_FALLBACKS
+  );
 }
 
 const ACTION_OUTCOMES: Record<CallActionKind, string> = {
@@ -475,12 +498,19 @@ const AUTHORED_SCENARIOS: CallScenario[] = [
     contactName: "Elena Vasquez",
     contactNumber: "14155550142",
     contactMeta: "Outbound · Sales",
+    contact: {
+      first_name: "Elena",
+      last_name: "Vasquez",
+      company: "Acme Corp",
+      email: "elena@acmecorp.com",
+      phone: "+1 415 555 0142",
+    },
     // Story follows the script: Aircall → after-hours pain → cost of
     // missed leads → Salesforce for the ops lead → price → book session.
     steps: [
       step(
         "Set the purpose of the call",
-        "I'd love to spend this time understanding how you're handling calls today, then see if it's worth a closer look."
+        "Hi {{first_name}} — I'd love to spend this time understanding how you're handling calls at {{company}} today, then see if it's worth a closer look."
       ),
       step(
         "Confirm time and attendees",
@@ -489,7 +519,7 @@ const AUTHORED_SCENARIOS: CallScenario[] = [
       ),
       step(
         "Ask how they handle this today",
-        "Walk me through how this works on your team today.",
+        "I understand your team currently uses {{crm_name}}. How are calls being managed there today?",
         true,
         ["g-status-quo", "g-aircall"]
       ),
@@ -942,14 +972,22 @@ Best,`,
     contactName: "Priya Sharma",
     contactNumber: "14155550177",
     contactMeta: "Inbound · Support",
+    contact: {
+      first_name: "Priya",
+      phone: "+1 415 555 0177",
+    },
+    fieldFallbacks: {
+      ...DEFAULT_FIELD_FALLBACKS,
+      email: "the email on file",
+    },
     steps: [
       step(
         "Greet the customer",
-        "Hi, thanks for calling JustCall support. How can I help you today?"
+        "Hi {{first_name}}, thanks for calling JustCall support. How can I help you today?"
       ),
       step(
         "Confirm which account they're accessing",
-        "Which email or phone number is on the account you're trying to open?"
+        "Is {{email}} still the right address for the account you're trying to open?"
       ),
       step(
         "Diagnose account access issue",

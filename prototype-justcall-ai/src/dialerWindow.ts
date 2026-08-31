@@ -27,6 +27,7 @@ const WINDOW_NAME = "justcall-webphone";
 export interface DialerWindowParams {
   scope: AgentAssistScope;
   assistConfigured: boolean;
+  assistAvailable: boolean;
 }
 
 /**
@@ -39,7 +40,10 @@ export function readDialerWindowParams(search: string): DialerWindowParams | nul
   if (params.get(VIEW_PARAM) !== DIALER_VIEW) return null;
   return {
     scope: params.get(SCOPE_PARAM) === "v1" ? "v1" : "v2",
-    assistConfigured: params.get(ASSIST_PARAM) !== "0",
+    assistConfigured: !["0", "locked"].includes(
+      params.get(ASSIST_PARAM) ?? "1"
+    ),
+    assistAvailable: params.get(ASSIST_PARAM) !== "locked",
   };
 }
 

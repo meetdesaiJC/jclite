@@ -601,6 +601,8 @@ export interface DialerPanelProps {
    * starts in.
    */
   assistConfigured?: boolean;
+  /** False when the account's plan does not include Agent Assist. */
+  assistAvailable?: boolean;
   /**
    * The unavailability reasons the admin has set up for this account. The
    * dialer reads this list, it never authors it — going Unavailable asks for a
@@ -628,6 +630,7 @@ export function DialerPanel({
   onClose,
   scope = "v2",
   assistConfigured = true,
+  assistAvailable = true,
   busyReasons = SEED_BUSY_REASONS,
   inboundDemo = false,
 }: DialerPanelProps) {
@@ -1209,6 +1212,7 @@ export function DialerPanel({
               className={enter}
               scope={scope}
               assistConfigured={assistConfigured}
+              assistAvailable={assistAvailable}
               talking={talking}
               connecting={connecting}
               wrapping={wrapping}
@@ -1477,6 +1481,7 @@ function InCallShell({
   className,
   scope,
   assistConfigured,
+  assistAvailable,
   talking,
   connecting,
   wrapping,
@@ -1506,6 +1511,7 @@ function InCallShell({
   className?: string;
   scope: AgentAssistScope;
   assistConfigured: boolean;
+  assistAvailable: boolean;
   talking: boolean;
   connecting: boolean;
   wrapping: boolean;
@@ -1599,6 +1605,7 @@ function InCallShell({
             className={enter}
             scope={scope}
             assistConfigured={assistConfigured}
+            assistAvailable={assistAvailable}
             reduced={reduced}
             live={talking}
             connecting={connecting}
@@ -1651,6 +1658,7 @@ function CallMorphStage({
   className,
   scope,
   assistConfigured,
+  assistAvailable,
   reduced,
   live,
   connecting,
@@ -1682,6 +1690,7 @@ function CallMorphStage({
   className?: string;
   scope: AgentAssistScope;
   assistConfigured: boolean;
+  assistAvailable: boolean;
   reduced: boolean;
   live: boolean;
   connecting: boolean;
@@ -1868,36 +1877,72 @@ function CallMorphStage({
           onActionStatesChange={onActionStatesChange}
         />
       ) : (
-        <RingingPhone
-          className={PHONE_SHELL_H}
-          reduced={reduced}
-          connected={connecting || live}
-          // The phone is the call now, not a beat on the way to one, so its
-          // controls run the line rather than sitting armed and waiting.
-          live={live}
-          elapsedMs={elapsedMs}
-          caller={caller}
-          network={network}
-          availability={availability}
-          keypad={keypad}
-          transfer={transfer}
-          voicemail={voicemail}
-          recording={recording}
-          mergedWith={mergedWith}
-          muted={muted}
-          onHold={onHold}
-          localTime={localTime}
-          tab={tab}
-          onTabChange={onTabChange}
-          onMute={onMute}
-          onHoldToggle={onHoldToggle}
-          onHangup={onHangup}
-          inbound={inbound}
-          onAccept={onAccept}
-          onDecline={onDecline}
-        />
+        <div className="flex flex-col items-stretch gap-3">
+          <RingingPhone
+            className={PHONE_SHELL_H}
+            reduced={reduced}
+            connected={connecting || live}
+            // The phone is the call now, not a beat on the way to one, so its
+            // controls run the line rather than sitting armed and waiting.
+            live={live}
+            elapsedMs={elapsedMs}
+            caller={caller}
+            network={network}
+            availability={availability}
+            keypad={keypad}
+            transfer={transfer}
+            voicemail={voicemail}
+            recording={recording}
+            mergedWith={mergedWith}
+            muted={muted}
+            onHold={onHold}
+            localTime={localTime}
+            tab={tab}
+            onTabChange={onTabChange}
+            onMute={onMute}
+            onHoldToggle={onHoldToggle}
+            onHangup={onHangup}
+            inbound={inbound}
+            onAccept={onAccept}
+            onDecline={onDecline}
+          />
+          {live && !assistConfigured ? (
+            <AgentAssistCallState available={assistAvailable} />
+          ) : null}
+        </div>
       )}
     </div>
+  );
+}
+
+function AgentAssistCallState({ available }: { available: boolean }) {
+  return (
+    <aside className="w-[360px] rounded-lg border border-line bg-white p-4 shadow-100">
+      <div className="flex flex-col gap-2">
+        <p className="text-label-md-semi text-foreground">
+          {available ? "Agent Assist isn’t set up yet" : "Agent Assist isn’t included in your plan"}
+        </p>
+        <p className="text-paragraph-sm text-muted-foreground">
+          {available
+            ? "This call works normally, but no script or guidance can appear until an admin publishes content and assigns it to you."
+            : "Your current plan includes calling, but not live scripts or conversation guidance."}
+        </p>
+        {available ? (
+          <ol className="list-decimal space-y-1 pl-5 text-paragraph-sm text-foreground">
+            <li>Create a script, response card, or knowledge source</li>
+            <li>Publish it</li>
+            <li>Assign it to your team or to you</li>
+          </ol>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => window.opener?.focus()}
+          className="mt-1 self-start rounded-[4px] text-label-sm font-medium text-brand outline-none hover:text-brand-hover focus-visible:ring-2 focus-visible:ring-brand/24"
+        >
+          {available ? "Open Agent Assist setup" : "View plans and upgrade"}
+        </button>
+      </div>
+    </aside>
   );
 }
 

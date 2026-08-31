@@ -9,6 +9,7 @@ import {
   type JustCallAiPageKey,
 } from "./JustCallAiShell";
 import { PrototypeLauncher } from "./PrototypeLauncher";
+import { CrmInCallPrototype } from "./CrmInCallPrototype";
 import { type AgentAssistScope } from "./agentAssistScope";
 import {
   readDialerWindowParams,
@@ -28,7 +29,8 @@ type AppView =
   | "in-call"
   | "v1-setup"
   | "v1-setup-empty"
-  | "v1-in-call";
+  | "v1-in-call"
+  | "v1-in-call-crm";
 type AppArea = "dashboard" | "justcall-ai";
 
 /**
@@ -139,7 +141,11 @@ function InCallFlow({ scope = "v2" }: { scope?: AgentAssistScope }) {
  * close cross never renders: there is no page behind it for a cross to reveal,
  * and a button whose only effect is an empty tab is worse than no button.
  */
-function DialerWindow({ scope, assistConfigured }: DialerWindowParams) {
+function DialerWindow({
+  scope,
+  assistConfigured,
+  assistAvailable,
+}: DialerWindowParams) {
   const busyReasons = useSharedBusyReasons();
 
   // The tab is its own window now, so its title is the only label the agent
@@ -152,6 +158,7 @@ function DialerWindow({ scope, assistConfigured }: DialerWindowParams) {
     <DialerPanel
       scope={scope}
       assistConfigured={assistConfigured}
+      assistAvailable={assistAvailable}
       busyReasons={busyReasons}
     />
   );
@@ -174,6 +181,7 @@ export default function App() {
         onStartV1EmptySetup={() => setView("v1-setup-empty")}
         onStartV1Setup={() => setView("v1-setup")}
         onStartV1InCall={() => setView("v1-in-call")}
+        onStartV1CrmInCall={() => setView("v1-in-call-crm")}
         onStartEmptySetup={() => setView("setup-empty")}
         onStartSetup={() => setView("setup")}
         onStartInCall={() => setView("in-call")}
@@ -183,6 +191,10 @@ export default function App() {
 
   if (view === "in-call" || view === "v1-in-call") {
     return <InCallFlow scope={view === "v1-in-call" ? "v1" : "v2"} />;
+  }
+
+  if (view === "v1-in-call-crm") {
+    return <CrmInCallPrototype />;
   }
 
   // Same flow, two axes: the seeded views walk the demo library and the empty

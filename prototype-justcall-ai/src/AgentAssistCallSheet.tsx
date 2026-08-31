@@ -29,6 +29,7 @@ import {
   callActionProgressLabel,
   POST_CALL_SECTION_TITLE,
   resolvePostCallActionItems,
+  resolveScenarioText,
   simulationAt,
   type CallActionItem,
   type CallActionKind,
@@ -1272,7 +1273,7 @@ function FullScriptList({
           >
             <ScriptStepRow
               title={step.title}
-              wording={step.wording}
+              wording={resolveScenarioText(scenario, step.wording)}
               phase={phase}
               glow={glowing.has(index)}
               reduced={reduced}

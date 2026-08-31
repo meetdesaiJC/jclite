@@ -1,3 +1,11 @@
+import {
+  DEFAULT_FIELD_FALLBACKS,
+  unknownFieldNames,
+  usedFields,
+  type ContactFieldId,
+  type FieldFallbacks,
+} from "./contactFields";
+
 export type ShowWhenType = "always" | "relevant" | "after" | "condition";
 
 export interface ShowWhen {
@@ -50,6 +58,12 @@ export interface ScriptPlaybook {
   assist: AssistBehavior;
   assignedMembers: string[];
   assignedGroups: string[];
+  /**
+   * What each contact field says when the record is empty. Script-wide: a
+   * script that greets by first name greets the same way on every step, so
+   * asking per step would be one decision copied five times.
+   */
+  fieldFallbacks: FieldFallbacks;
 }
 
 export const SCRIPT_TEAM_MEMBERS: { value: string; label: string }[] = [
@@ -148,10 +162,14 @@ function stage(title: string, steps: PlaybookStep[]): PlaybookStage {
 }
 
 function playbook(
-  partial: Omit<ScriptPlaybook, "id" | "assist" | "assignedMembers" | "assignedGroups"> & {
+  partial: Omit<
+    ScriptPlaybook,
+    "id" | "assist" | "assignedMembers" | "assignedGroups" | "fieldFallbacks"
+  > & {
     assist?: AssistBehavior;
     assignedMembers?: string[];
     assignedGroups?: string[];
+    fieldFallbacks?: FieldFallbacks;
   }
 ): ScriptPlaybook {
   return {
@@ -159,6 +177,7 @@ function playbook(
     assist: DEFAULT_ASSIST,
     assignedMembers: [],
     assignedGroups: [],
+    fieldFallbacks: { ...DEFAULT_FIELD_FALLBACKS },
     ...partial,
   };
 }
@@ -174,7 +193,8 @@ const TEMPLATES: Record<ScriptTemplateId, () => ScriptPlaybook> = {
         stage("Understand the issue", [
           step("Confirm which account they're trying to access", {
             required: true,
-            suggestedWording: "Which email or phone number is on the account you're trying to open?",
+            suggestedWording:
+              "Thanks for calling, {{first_name}} — which email or phone number is on the account you're trying to open?",
             guidance: "Match the identifier to the CRM record before troubleshooting.",
           }),
           step("Ask what happens when they attempt to log in", {
@@ -191,7 +211,7 @@ const TEMPLATES: Record<ScriptTemplateId, () => ScriptPlaybook> = {
           step("Confirm email address", {
             required: true,
             suggestedWording:
-              "Before I access the account, I'll quickly verify a couple of details with you. Can I confirm the email address on file?",
+              "Before I access the account, I'll quickly verify a couple of details with you. Is {{email}} still the right address?",
             guidance: "Verify email address and the last four digits of the registered phone number.",
           }),
           step("Complete identity verification", {
@@ -360,7 +380,7 @@ const TEMPLATES: Record<ScriptTemplateId, () => ScriptPlaybook> = {
           step("Set the purpose of the call", {
             required: true,
             suggestedWording:
-              "I'd love to spend this time understanding how you're handling calls today, then see if it's worth a closer look.",
+              "Hi {{first_name}} — I'd love to spend this time understanding how you're handling calls at {{company}} today, then see if it's worth a closer look.",
           }),
           step("Confirm time and attendees", {
             suggestedWording:
@@ -370,7 +390,7 @@ const TEMPLATES: Record<ScriptTemplateId, () => ScriptPlaybook> = {
         stage("Current state", [
           step("Ask how they handle this today", {
             required: true,
-            suggestedWording: "Walk me through how this works on your team today.",
+            suggestedWording: "Walk me through how this works at {{company}} today.",
           }),
           step("Uncover the pain behind the process", {
             required: true,
@@ -759,6 +779,32 @@ export function countSteps(playbook: ScriptPlaybook): number {
   return flattenSteps(playbook).length;
 }
 
+/** Every contact field this script uses, across all steps, in reading order. */
+export function playbookUsedFields(playbook: ScriptPlaybook): ContactFieldId[] {
+  const seen: ContactFieldId[] = [];
+  for (const stepItem of flattenSteps(playbook)) {
+    for (const id of usedFields(stepItem.suggestedWording)) {
+      if (!seen.includes(id)) seen.push(id);
+    }
+  }
+  return seen;
+}
+
+/**
+ * Tokens the admin typed that name nothing. Publishing over one is allowed —
+ * it resolves to nothing on the call rather than to braces — but the builder
+ * says so first, because a silently vanishing word is worse than a caught typo.
+ */
+export function playbookUnknownFields(playbook: ScriptPlaybook): string[] {
+  const seen: string[] = [];
+  for (const stepItem of flattenSteps(playbook)) {
+    for (const name of unknownFieldNames(stepItem.suggestedWording)) {
+      if (!seen.includes(name)) seen.push(name);
+    }
+  }
+  return seen;
+}
+
 export function clonePlaybook(source: ScriptPlaybook): ScriptPlaybook {
   return {
     ...source,
@@ -766,6 +812,7 @@ export function clonePlaybook(source: ScriptPlaybook): ScriptPlaybook {
     assist: { ...source.assist },
     assignedMembers: [...source.assignedMembers],
     assignedGroups: [...source.assignedGroups],
+    fieldFallbacks: { ...source.fieldFallbacks },
     stages: source.stages.map((stageItem) => ({
       ...stageItem,
       id: newId("stage"),

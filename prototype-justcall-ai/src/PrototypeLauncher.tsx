@@ -7,6 +7,7 @@ type PrototypeLauncherProps = {
   onStartV1EmptySetup: () => void;
   onStartV1Setup: () => void;
   onStartV1InCall: () => void;
+  onStartV1CrmInCall: () => void;
   /* V2 — the fuller experience the existing prototypes already cover. */
   onStartEmptySetup: () => void;
   onStartSetup: () => void;
@@ -110,6 +111,7 @@ export function PrototypeLauncher({
   onStartV1EmptySetup,
   onStartV1Setup,
   onStartV1InCall,
+  onStartV1CrmInCall,
   onStartEmptySetup,
   onStartSetup,
   onStartInCall,
@@ -149,6 +151,11 @@ export function PrototypeLauncher({
                 index="03"
                 title="Agent Experience"
                 onClick={onStartV1InCall}
+              />
+              <PrototypeCard
+                index="04"
+                title="Inside CRM"
+                onClick={onStartV1CrmInCall}
               />
             </PrototypeGroup>
           </ScopePanel>
