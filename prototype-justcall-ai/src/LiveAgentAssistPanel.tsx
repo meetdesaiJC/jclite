@@ -1409,8 +1409,8 @@ export function LiveAgentAssistPanel({
             inputMode="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search response cards and knowledge"
-            aria-label="Search response cards and knowledge"
+            placeholder="Search"
+            aria-label="Search"
             className="min-w-0 flex-1 bg-transparent text-paragraph-sm text-foreground outline-none placeholder:text-disabled-fg"
           />
           {query ? (
