@@ -167,6 +167,19 @@ export function IconCallUsers(props: CallIconProps) {
 }
 
 /**
+ * Pin — the drawing-pin seen from the side, head to the upper right. Two
+ * strokes: the head-and-shaft, and the crossbar that keeps it from reading as
+ * a balloon at 16.
+ */
+export function IconCallPin(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <path d="M9 15l-5.5 5.5M14.5 3.5l6 6M16.5 5.5l-7 2-3 3 5.5 5.5 3-3 2-7" />
+    </CallIcon>
+  );
+}
+
+/**
  * Recording, running. Filled on purpose — every other mark in this set is a
  * stroke, so the one control that means "this is capturing right now" is the
  * one the eye finds first.
@@ -257,6 +270,19 @@ export function IconCallDrop(props: CallIconProps) {
       <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
       <path d="M3 21v-2a4 4 0 0 1 4-4h4" />
       <path d="M16 19h6" />
+    </CallIcon>
+  );
+}
+
+/**
+ * Pin, driven home — the same geometry filled, so a pinned card's control
+ * reads as "already done" without changing shape or size.
+ */
+export function IconCallPinFilled(props: CallIconProps) {
+  return (
+    <CallIcon {...props} fill="currentColor">
+      <path d="M9 15l-5.5 5.5" fill="none" />
+      <path d="M14.5 3.5l6 6M16.5 5.5l-7 2-3 3 5.5 5.5 3-3 2-7" />
     </CallIcon>
   );
 }

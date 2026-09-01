@@ -477,7 +477,9 @@ button.call-bar-control {
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
-button.call-bar-control:hover {
+/* `:not(:disabled)` because a disabled button still matches `:hover` — a
+   control the transfer has locked would otherwise light up under the cursor. */
+button.call-bar-control:hover:not(:disabled) {
   background-color: rgb(255 255 255 / 0.18);
 }
 
