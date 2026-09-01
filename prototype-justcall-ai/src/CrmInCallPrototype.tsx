@@ -3,6 +3,7 @@ import { Avatar } from "@/components/Avatar";
 import { IconClose, IconSearch, IconVoice, IconVoicemailDrop } from "@/components/Icon";
 import { Tabs } from "@/components/Tabs";
 import { DURATION } from "@/lib/motion";
+import { useDragPosition } from "@/lib/useDragPosition";
 import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
 import { AgentAssistCallSheet } from "./AgentAssistCallSheet";
@@ -55,6 +56,19 @@ type AssistTab = "guidance" | "script";
 type CallPanel = CallSurface | "notes";
 
 const scenario = CALL_SCENARIOS[0]!;
+
+/**
+ * The widget's box. Width is the design's; the height is capped rather than
+ * stretched to the viewport, because a panel pinned top and bottom has nowhere
+ * to go vertically — and a panel the agent cannot move down is the complaint
+ * this height answers.
+ */
+const PANEL_WIDTH = 430;
+const PANEL_MAX_HEIGHT = 760;
+const PANEL_MARGIN = 16;
+
+/** Where the agent left it last time. */
+const PANEL_POSITION_KEY = "justcall.crm-panel.position";
 
 function HubSpotMark({ className }: { className?: string }) {
   return (
@@ -137,6 +151,30 @@ export function CrmInCallPrototype() {
 
   /** Which control owns the region over the tabs. One at a time, like the bar. */
   const [panel, setPanel] = useState<CallPanel | null>(null);
+
+  /* The box has to know the room it is in, so it can be capped and clamped. */
+  const [viewport, setViewport] = useState(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
+  useEffect(() => {
+    const onResize = () =>
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const panelSize = {
+    width: Math.min(PANEL_WIDTH, viewport.width - PANEL_MARGIN * 2),
+    height: Math.min(PANEL_MAX_HEIGHT, viewport.height - PANEL_MARGIN * 2),
+  };
+
+  const drag = useDragPosition({
+    size: panelSize,
+    initial: "top-right",
+    margin: PANEL_MARGIN,
+    storageKey: PANEL_POSITION_KEY,
+  });
 
   const [muted, setMuted] = useState(false);
   const [onHold, setOnHold] = useState(false);
@@ -236,10 +274,35 @@ export function CrmInCallPrototype() {
   return (
     <div className="relative h-screen min-h-[640px] overflow-hidden bg-secondary-bg">
       <HubSpotPlaceholder />
-      <aside aria-label="JustCall Agent Assist inside HubSpot" className="absolute inset-y-4 right-4 z-10 flex w-[430px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-xl border border-line bg-white shadow-400">
-        {/* The real JustCall mark replaces this square once the asset lands —
-            initials are a stand-in, not the design. */}
-        <header className="flex h-12 shrink-0 items-center justify-between border-b border-line px-4">
+      {/* Positioned by `translate` off the top-left rather than by `inset`, so
+          a drag never touches layout — see `useDragPosition`. The lift while
+          dragging is the only feedback that the box has come off its resting
+          place; travel itself is the cursor's job, so it carries no transition
+          mid-gesture and a short one for the keyboard's steps. */}
+      <aside
+        ref={drag.ref}
+        aria-label="JustCall Agent Assist inside HubSpot"
+        style={{
+          width: panelSize.width,
+          height: panelSize.height,
+          translate: `${drag.position.x}px ${drag.position.y}px`,
+        }}
+        className={cn(
+          "absolute top-0 left-0 z-10 flex flex-col overflow-hidden rounded-xl border border-line bg-white",
+          drag.dragging
+            ? "shadow-500 transition-none"
+            : "shadow-400 transition-[translate] duration-fast ease-standard motion-reduce:transition-none"
+        )}
+      >
+        {/* The title bar is the grip. The real JustCall mark replaces this
+            square once the asset lands — initials are a stand-in. */}
+        <header
+          {...drag.handleProps}
+          className={cn(
+            "flex h-12 shrink-0 touch-none items-center justify-between border-b border-line px-4 outline-none select-none focus-visible:ring-2 focus-visible:ring-brand/24",
+            drag.dragging ? "cursor-grabbing" : "cursor-grab"
+          )}
+        >
           <div className="flex items-center gap-2">
             <span className="flex size-6 items-center justify-center rounded-[6px] bg-brand text-[11px] font-bold text-white">JC</span>
             <span className="text-label-md-semi text-foreground">JustCall</span>
