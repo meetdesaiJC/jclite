@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/components/Avatar";
 import { IconClose, IconSearch, IconVoice, IconVoicemailDrop } from "@/components/Icon";
 import { Tabs } from "@/components/Tabs";
@@ -8,21 +8,22 @@ import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
 import { AgentAssistCallSheet } from "./AgentAssistCallSheet";
 import { BarControl } from "./CallBarControl";
+import { voicemailLibrary } from "./callDeviceData";
 import {
-  DTMF_READOUT_MAX,
-  KeypadSurface,
-  TRANSFER_CONNECT_MS,
-  TransferSurface,
-  VOICEMAIL_DROP_MS,
-  VoicemailSurface,
-  callStatusLabel,
-  type CallSurface,
-  type CallTransfer,
-  type TransferMode,
-  type VoicemailDrop,
-} from "./CallControlSurfaces";
+  KEYPAD_COPY,
+  KeypadBody,
+  TransferBody,
+  VoicemailBody,
+  transferCopy,
+  useKeypad,
+  useTransferFlow,
+  useVoicemailDrop,
+  voicemailCopy,
+  type KeypadFlow,
+  type TransferFlow,
+  type VoicemailFlow,
+} from "./CallLineControls";
 import { CALL_SCENARIOS } from "./callSimulation";
-import { TRANSFER_TARGETS, type TransferTarget } from "./callTransferData";
 import { LiveAgentAssistPanel } from "./LiveAgentAssistPanel";
 import { NotesEditor, type NotesEditorValue } from "./NotesEditor";
 import {
@@ -49,10 +50,10 @@ import {
 type AssistTab = "guidance" | "script";
 
 /**
- * What a call control can open over the tabs. `CallSurface` is the dialer's
- * own set — keypad, transfer, voicemail drop — and Notes joins it here for the
- * reason above.
+ * What a call control can open over the tabs — the dialer's own three, and
+ * Notes, which joins them for the reason above.
  */
+type CallSurface = "keypad" | "transfer" | "voicemail";
 type CallPanel = CallSurface | "notes";
 
 const scenario = CALL_SCENARIOS[0]!;
@@ -178,12 +179,48 @@ export function CrmInCallPrototype() {
 
   const [muted, setMuted] = useState(false);
   const [onHold, setOnHold] = useState(false);
-  const [tones, setTones] = useState("");
-  const [transfer, setTransfer] = useState<CallTransfer | null>(null);
-  const [voicemail, setVoicemail] = useState<VoicemailDrop | null>(null);
   const [outcome, setOutcome] = useState<CallOutcome | null>(null);
 
   const live = !outcome;
+
+  /**
+   * Who the call went to, caught as the hand-off begins. The flow reports
+   * completion without naming the target and has moved its stage on by then,
+   * so the name has to be taken on the way past for the outcome line to say
+   * anything more useful than "a colleague".
+   */
+  const handedTo = useRef<string | null>(null);
+
+  /**
+   * The three flows are the dialer's own, out of `CallLineControls`.
+   *
+   * This is what mirroring the live bar actually costs: running its logic and
+   * saying its words, not standing up a second implementation that agrees with
+   * it on the day it is written. The panel had its own transfer state and its
+   * own copy before, and the two rows had already drifted — the dialer asked
+   * "Transfer to" over My Team and Contacts while this said "Search people or
+   * teams".
+   */
+  const keypad = useKeypad();
+  const transfer = useTransferFlow({
+    customerName: scenario.contactName,
+    elapsedMs,
+    customerHeld: onHold,
+    onCustomerHoldChange: setOnHold,
+    onCallHandedOff: () =>
+      setOutcome({
+        label: "Call transferred",
+        detail: `Handed to ${handedTo.current ?? "a colleague"}`,
+      }),
+  });
+  const voicemail = useVoicemailDrop({
+    greetings: voicemailLibrary(),
+    onDropped: () =>
+      setOutcome({
+        label: "Voicemail dropped",
+        detail: "The greeting finished playing",
+      }),
+  });
 
   useEffect(() => {
     if (!live) return;
@@ -197,34 +234,17 @@ export function CrmInCallPrototype() {
 
   /**
    * The line is on its way somewhere else. Nothing else may touch it — a mute
-   * toggled while a cold transfer is connecting applies to a call the agent no
-   * longer has.
+   * toggled while a blind transfer is completing applies to a call the agent
+   * no longer has.
    */
-  const busy = transfer?.stage === "connecting" || Boolean(voicemail);
+  const busy = transfer.stage.kind === "handing-off" || voicemail.running;
 
-  /* A cold transfer stands for a beat so the agent can read where it went. */
+  /* Catch the target while the stage still carries it — see `handedTo`. */
   useEffect(() => {
-    if (transfer?.stage !== "connecting") return;
-    const target = TRANSFER_TARGETS.find((item) => item.id === transfer.targetId);
-    const timer = window.setTimeout(() => {
-      setTransfer(null);
-      setOutcome({
-        label: "Call transferred",
-        detail: `Handed to ${target?.shortName ?? "a colleague"}`,
-      });
-    }, TRANSFER_CONNECT_MS);
-    return () => window.clearTimeout(timer);
-  }, [transfer]);
-
-  /* The greeting plays out, then the line closes. */
-  useEffect(() => {
-    if (!voicemail) return;
-    const timer = window.setTimeout(() => {
-      setVoicemail(null);
-      setOutcome({ label: "Voicemail dropped", detail: "The greeting finished playing" });
-    }, VOICEMAIL_DROP_MS);
-    return () => window.clearTimeout(timer);
-  }, [voicemail]);
+    if (transfer.stage.kind === "handing-off") {
+      handedTo.current = transfer.stage.target.name;
+    }
+  }, [transfer.stage]);
 
   /* A call that has ended has no panel to keep open. */
   useEffect(() => {
@@ -242,33 +262,8 @@ export function CrmInCallPrototype() {
 
   const closePanel = () => setPanel(null);
 
-  const startTransfer = (target: TransferTarget, mode: TransferMode) => {
-    const heldBefore = onHold;
-    if (mode === "warm") {
-      // The customer is parked while the agent and the target talk, and the
-      // panel stays open — it *is* the consult now.
-      setOnHold(true);
-      setTransfer({ targetId: target.id, mode, stage: "consulting", heldBefore });
-      return;
-    }
-    setTransfer({ targetId: target.id, mode, stage: "connecting", heldBefore });
-    setPanel(null);
-  };
-
-  const completeTransfer = () =>
-    setTransfer((current) =>
-      current ? { ...current, stage: "connecting" } : null
-    );
-
-  /** Backing out of a consult puts the customer back exactly as it found them. */
-  const cancelTransfer = () =>
-    setTransfer((current) => {
-      if (current) setOnHold(current.heldBefore);
-      return null;
-    });
-
   const statusLabel = live
-    ? callStatusLabel({ transfer, voicemail }, onHold)
+    ? lineStatusLabel(transfer, voicemail, onHold)
     : outcome!.detail;
 
   return (
@@ -361,7 +356,7 @@ export function CrmInCallPrototype() {
                   label="Hold"
                   tone="interrupt"
                   pressed={onHold}
-                  disabled={busy || transfer?.stage === "consulting"}
+                  disabled={busy || transfer.stage.kind !== "picking"}
                   onClick={() => setOnHold((value) => !value)}
                 >
                   <IconCallHold size={20} />
@@ -377,7 +372,7 @@ export function CrmInCallPrototype() {
                 </BarControl>
                 <BarControl
                   label="Transfer"
-                  pressed={panel === "transfer" || Boolean(transfer)}
+                  pressed={panel === "transfer" || transfer.active}
                   tooltipDisabled={panel === "transfer"}
                   disabled={busy}
                   onClick={() => togglePanel("transfer")}
@@ -386,7 +381,7 @@ export function CrmInCallPrototype() {
                 </BarControl>
                 <BarControl
                   label="Voicemail drop"
-                  pressed={panel === "voicemail" || Boolean(voicemail)}
+                  pressed={panel === "voicemail" || voicemail.running}
                   tooltipDisabled={panel === "voicemail"}
                   disabled={busy}
                   onClick={() => togglePanel("voicemail")}
@@ -440,25 +435,47 @@ export function CrmInCallPrototype() {
             panel={panel}
             notes={notes}
             onNotesChange={setNotes}
-            tones={tones}
+            keypad={keypad}
             transfer={transfer}
+            voicemail={voicemail}
             onClose={closePanel}
-            onTone={(digit) =>
-              setTones((value) => `${value}${digit}`.slice(-DTMF_READOUT_MAX))
-            }
-            onTonesClear={() => setTones("")}
-            onTransferStart={startTransfer}
-            onTransferComplete={completeTransfer}
-            onTransferCancel={cancelTransfer}
-            onVoicemailDrop={(greetingId) => {
-              setVoicemail({ greetingId });
-              setPanel(null);
-            }}
           />
         </div>
       </aside>
     </div>
   );
+}
+
+/**
+ * What the line is doing, under the caller's name.
+ *
+ * One line, and the one the agent needs most: a transfer or a drop is about to
+ * take the call away, which outranks the hold it put the customer on to get
+ * there. Null when there is nothing to say and the clock should stand alone.
+ *
+ * Local rather than imported because it reads the dialer's flows, which report
+ * a richer set of stages than a single bar caption should try to narrate — a
+ * consult and a merged call are both "3 participants" to the panel, and only
+ * one of them is worth saying here.
+ */
+function firstName(name: string) {
+  return name.split(" ")[0] ?? name;
+}
+
+function lineStatusLabel(
+  transfer: TransferFlow,
+  voicemail: VoicemailFlow,
+  onHold: boolean
+): string | null {
+  if (voicemail.running) return "Dropping voicemail";
+  const stage = transfer.stage;
+  // First name only: the bar's line shares its row with the clock, and the
+  // full name is what pushes the two apart.
+  if (stage.kind === "handing-off") return `Transferring to ${firstName(stage.target.name)}`;
+  if (transfer.merged) return "3-way call";
+  if (stage.kind !== "picking") return `Consulting ${firstName(stage.target.name)}`;
+  if (onHold) return "On hold";
+  return null;
 }
 
 /** What each surface is called, for the dialog wrapper's accessible name. */
@@ -481,28 +498,18 @@ function CallPanelLayer({
   panel,
   notes,
   onNotesChange,
-  tones,
+  keypad,
   transfer,
+  voicemail,
   onClose,
-  onTone,
-  onTonesClear,
-  onTransferStart,
-  onTransferComplete,
-  onTransferCancel,
-  onVoicemailDrop,
 }: {
   panel: CallPanel | null;
   notes: NotesEditorValue;
   onNotesChange: (value: NotesEditorValue) => void;
-  tones: string;
-  transfer: CallTransfer | null;
+  keypad: KeypadFlow;
+  transfer: TransferFlow;
+  voicemail: VoicemailFlow;
   onClose: () => void;
-  onTone: (digit: string) => void;
-  onTonesClear: () => void;
-  onTransferStart: (target: TransferTarget, mode: TransferMode) => void;
-  onTransferComplete: () => void;
-  onTransferCancel: () => void;
-  onVoicemailDrop: (greetingId: string) => void;
 }) {
   const { mounted, state } = usePresence(Boolean(panel), DURATION.base);
 
@@ -526,73 +533,112 @@ function CallPanelLayer({
       className="phone-sheet absolute inset-0 z-20 flex flex-col bg-background p-2"
     >
       {shown === "keypad" ? (
-        <KeypadSurface tones={tones} onTone={onTone} onClear={onTonesClear} onClose={onClose} />
+        <SurfaceCard
+          icon={<IconCallKeypad size={16} />}
+          title={KEYPAD_COPY.title}
+          closeLabel="Close keypad"
+          onClose={onClose}
+        >
+          {/* `fill` because this card is a whole panel tall, like the aside
+              column the dialer puts the same body in. */}
+          <KeypadBody keypad={keypad} fill active={state === "open"} />
+        </SurfaceCard>
       ) : null}
       {shown === "transfer" ? (
-        <TransferSurface
-          active
-          transfer={transfer}
-          onStart={onTransferStart}
-          onComplete={onTransferComplete}
-          onCancel={onTransferCancel}
+        <SurfaceCard
+          icon={<IconCallTransfer size={16} />}
+          {...transferCopy(transfer)}
+          closeLabel="Close transfer"
           onClose={onClose}
-        />
+        >
+          <TransferBody flow={transfer} />
+        </SurfaceCard>
       ) : null}
       {shown === "voicemail" ? (
-        <VoicemailSurface onDrop={onVoicemailDrop} onClose={onClose} />
+        <SurfaceCard
+          icon={<IconVoicemailDrop size={16} />}
+          {...voicemailCopy(voicemail)}
+          closeLabel="Close voicemail drop"
+          onClose={onClose}
+        >
+          <VoicemailBody flow={voicemail} />
+        </SurfaceCard>
       ) : null}
       {shown === "notes" ? (
-        <NotesPanel notes={notes} onNotesChange={onNotesChange} onClose={onClose} />
+        <SurfaceCard
+          icon={<IconCallNotes size={16} />}
+          title="Call notes"
+          description="Saved to this HubSpot contact."
+          closeLabel="Close call notes"
+          onClose={onClose}
+        >
+          <div className="flex min-h-0 flex-1 flex-col p-3">
+            <NotesEditor
+              value={notes}
+              onChange={onNotesChange}
+              placeholder="Add notes from this call…"
+              ariaLabel="Call notes"
+              wrapperClassName="min-h-0 flex-1"
+              className="h-full min-h-[200px]"
+            />
+          </div>
+        </SurfaceCard>
       ) : null}
     </div>
   );
 }
 
 /**
- * Notes, wearing the same card as the three surfaces beside it. Written here
- * rather than in `CallControlSurfaces` because the destination is this CRM's
- * contact record — the workspace's Notes panel saves somewhere else.
+ * The card all four surfaces wear: header, optional subtext, and the ✕ that is
+ * the other way out when the agent's attention is on the panel rather than on
+ * the row of controls above it.
+ *
+ * The three call surfaces take their titles from `CallLineControls`' own copy
+ * helpers, so a stage the dialer renames is renamed here in the same commit
+ * rather than the next time somebody notices.
+ *
+ * Notes is written here rather than beside them because its destination is
+ * this CRM's contact record — the workspace's Notes panel saves somewhere else.
  */
-function NotesPanel({
-  notes,
-  onNotesChange,
+function SurfaceCard({
+  icon,
+  title,
+  description,
+  closeLabel,
   onClose,
+  children,
 }: {
-  notes: NotesEditorValue;
-  onNotesChange: (value: NotesEditorValue) => void;
+  icon: ReactNode;
+  title: string;
+  description?: string;
+  closeLabel: string;
   onClose: () => void;
+  children: ReactNode;
 }) {
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-[16px] border border-line bg-white">
       <header className="flex h-11 shrink-0 items-center justify-between gap-1.5 border-b border-line px-4">
         <div className="flex min-w-0 items-center gap-1.5">
           <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
-            <IconCallNotes size={16} />
+            {icon}
           </span>
-          <p className="truncate text-label-md-semi text-foreground">Call notes</p>
+          <p className="truncate text-label-md-semi text-foreground">{title}</p>
         </div>
         <button
           type="button"
-          aria-label="Close call notes"
+          aria-label={closeLabel}
           onClick={onClose}
           className="flex size-6 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground outline-none transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
         >
           <IconClose size={16} />
         </button>
       </header>
-      <p className="shrink-0 border-b border-line px-4 py-2.5 text-paragraph-sm text-muted-foreground">
-        Saved to this HubSpot contact.
-      </p>
-      <div className="flex min-h-0 flex-1 flex-col p-3">
-        <NotesEditor
-          value={notes}
-          onChange={onNotesChange}
-          placeholder="Add notes from this call…"
-          ariaLabel="Call notes"
-          wrapperClassName="min-h-0 flex-1"
-          className="h-full min-h-[200px]"
-        />
-      </div>
+      {description ? (
+        <p className="shrink-0 border-b border-line px-4 py-2.5 text-paragraph-sm text-muted-foreground">
+          {description}
+        </p>
+      ) : null}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
     </div>
   );
 }
