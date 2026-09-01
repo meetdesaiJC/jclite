@@ -9,7 +9,9 @@ import {
 import {
   IconAlertTriangleFilled,
   IconChevronDown,
+  IconClose,
   IconInfoCircle,
+  IconSearch,
 } from "@/components/Icon";
 import { WaveformLoader } from "@/components/WaveformLoader";
 import { cn } from "@/lib/utils";
@@ -21,6 +23,7 @@ import {
 import {
   SEED_KNOWLEDGE_SOURCES,
   knowledgeFacts,
+  retrieveKnowledge,
   type KnowledgeSourceRecord,
 } from "./knowledgeData";
 import {
@@ -53,6 +56,7 @@ import {
   simulationAt,
   type CallScenario,
   type CoachingCue,
+  type GuidanceSuggestion,
   type KnowledgeSurface,
 } from "./callSimulation";
 import {
@@ -66,6 +70,8 @@ import {
 import {
   CriticalGuidanceAlert,
   InCallGuidanceSlot,
+  LiveGuidanceCard,
+  PinButton,
 } from "./LiveGuidance";
 import {
   CARD_ENTER_MS,
@@ -73,12 +79,6 @@ import {
   type GuidanceStreamCard,
 } from "./useGuidanceStream";
 import { isAtFeedGrowthEdge, useGuidanceFeed } from "./useGuidanceFeed";
-import {
-  CallSearchBar,
-  CallSearchResults,
-  PinnedStack,
-  useCallSearch,
-} from "./CallSearchPanel";
 
 /**
  * In-call Agent Assist — one panel for everything the agent gets in real time.
@@ -338,14 +338,22 @@ function KnowledgeCard({
   expanded,
   arriving,
   reduced,
+  pinned = false,
+  pinDisabled = false,
+  onPin,
   onToggle,
   cardRef,
+  className,
 }: {
   surface: KnowledgeSurface;
   expanded: boolean;
   arriving: boolean;
   reduced: boolean;
+  pinned?: boolean;
+  pinDisabled?: boolean;
+  onPin?: () => void;
   onToggle: () => void;
+  className?: string;
   /**
    * Registered with the feed's reading state, same as a guidance card: the
    * agent has one column and one unread count, so knowledge has to be visible
@@ -365,36 +373,44 @@ function KnowledgeCard({
         // minimum size, so without it the card collapses to its borders
         // once the panel column runs out of room.
         "shrink-0 overflow-hidden rounded-lg border border-info-border bg-white",
-        !reduced && arriving && "assist-card-enter"
+        !expanded && "border-line",
+        !reduced && arriving && "assist-card-enter",
+        className
       )}
     >
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={onToggle}
+      <div
         className={cn(
-          "flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24",
+          "flex w-full items-center gap-1 pr-3",
           expanded && "bg-info-secondary"
         )}
       >
-        <IconKnowledge className="size-4 shrink-0 text-brand" />
-        <span className="min-w-0 flex-1 truncate text-label-md font-medium text-foreground">
-          {surface.entry.title}
-        </span>
-        <span
-          className="-mr-1 flex size-6 shrink-0 items-center justify-center text-muted-foreground"
-          aria-hidden="true"
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24"
         >
-          {/* Turns rather than swaps — see GuidanceAiHeader. */}
-          <IconChevronDown
-            size={16}
-            className={cn(
-              "transition-[rotate] duration-moderate ease-standard motion-reduce:transition-none",
-              expanded && "rotate-180"
-            )}
-          />
-        </span>
-      </button>
+          <IconKnowledge className="size-4 shrink-0 text-brand" />
+          <span className="min-w-0 flex-1 truncate text-label-md font-medium text-foreground">
+            {surface.entry.title}
+          </span>
+          <span
+            className="flex size-6 shrink-0 items-center justify-center text-muted-foreground"
+            aria-hidden="true"
+          >
+            <IconChevronDown
+              size={16}
+              className={cn(
+                "transition-[rotate] duration-moderate ease-standard motion-reduce:transition-none",
+                expanded && "rotate-180"
+              )}
+            />
+          </span>
+        </button>
+        {onPin ? (
+          <PinButton pinned={pinned} disabled={pinDisabled} onClick={onPin} />
+        ) : null}
+      </div>
 
       <div
         className={cn(
@@ -838,6 +854,12 @@ function useStableStreamOrder<T extends StreamRow>(rows: T[]) {
   return order.map((id) => byId.get(id)!).filter(Boolean);
 }
 
+type PinnedAssistCard =
+  | { key: string; kind: "guidance"; suggestion: GuidanceSuggestion }
+  | { key: string; kind: "knowledge"; surface: KnowledgeSurface };
+
+const MAX_PINNED_CARDS = 3;
+
 export interface LiveAgentAssistPanelProps {
   elapsedMs: number;
   /**
@@ -889,6 +911,10 @@ export function LiveAgentAssistPanel({
 
   const [viewingResource, setViewingResource] = useState<GuidanceResource | null>(null);
   const [collapsedKnowledge, setCollapsedKnowledge] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
+  const [pinnedCards, setPinnedCards] = useState<PinnedAssistCard[]>([]);
+  const [collapsedPinned, setCollapsedPinned] = useState<Set<string>>(new Set());
+  const [collapsedSearch, setCollapsedSearch] = useState<Set<string>>(new Set());
   const [knownIds, setKnownIds] = useState<Set<string>>(new Set());
   /**
    * Knowledge cards mid-entrance. Opt-in, like the guidance stream's own set:
@@ -926,15 +952,6 @@ export function LiveAgentAssistPanel({
     feedGrowth: FEED_GROWTH,
   });
   const coaching = useCoachingStack(snapshot.coaching, scenario.id, reduced);
-  /**
-   * The agent's own lookups. Reads the same published library the stream does,
-   * so what search can find and what guidance can surface never disagree.
-   */
-  const search = useCallSearch({
-    cards: guidanceItems,
-    sources: knowledgeSources,
-    resetKey: scenario.id,
-  });
 
   useEffect(() => {
     setViewingResource(null);
@@ -943,7 +960,64 @@ export function LiveAgentAssistPanel({
     setKnownIds(new Set());
     setEnteringKnowledgeIds(new Set());
     setCollapsedKnowledge(new Set());
+    setQuery("");
+    setPinnedCards([]);
+    setCollapsedPinned(new Set());
+    setCollapsedSearch(new Set());
   }, [scenario.id]);
+
+  const pinnedKeys = new Set(pinnedCards.map((card) => card.key));
+  const pinCard = (card: PinnedAssistCard) => {
+    setPinnedCards((current) => {
+      if (current.some((item) => item.key === card.key)) {
+        return current.filter((item) => item.key !== card.key);
+      }
+      if (current.length >= MAX_PINNED_CARDS) {
+        // Keep pinning a one-click action: the oldest response makes room for
+        // the new one once the three-card limit is reached.
+        return [...current.slice(1), card];
+      }
+      return [...current, card];
+    });
+  };
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const searchedGuidance: GuidanceSuggestion[] = normalizedQuery
+    ? guidanceItems
+        .filter((item) => item.status === "live")
+        .filter((item) =>
+          [
+            item.name,
+            item.trigger,
+            item.suggestedResponse,
+            ...item.examplePhrases,
+            ...item.talkingPoints,
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalizedQuery)
+        )
+        .slice(0, 5)
+        .map((item) => ({
+          id: `search-guidance-${item.id}`,
+          atMs: elapsedMs,
+          quote: query,
+          item,
+          priority: "normal" as const,
+          stance: "recommended" as const,
+        }))
+    : [];
+  const searchedKnowledge: KnowledgeSurface[] = normalizedQuery
+    ? retrieveKnowledge(query, knowledgeSources, 5).map((hit) => ({
+        id: `search-knowledge-${hit.entry.id}`,
+        atMs: elapsedMs,
+        entry: hit.entry,
+        sourceName: hit.source.name,
+        sourceOrigin: hit.source.origin,
+        confidence: hit.confidence,
+        query,
+      }))
+    : [];
 
   // Knowledge answers a question that was just asked, so it lands open and
   // stays open — the agent closes it when they're done with it, and an answer
@@ -1160,8 +1234,16 @@ export function LiveAgentAssistPanel({
       arriving={stream.arrivingIds.has(entry.suggestion.id)}
       arrivalIndex={stream.arrivingIds.get(entry.suggestion.id) ?? 0}
       newLabel={stream.newLabelIds.has(entry.suggestion.id)}
+      pinned={pinnedKeys.has(`guidance:${entry.suggestion.item.id}`)}
       attention={stream.attentionIds.has(entry.suggestion.id)}
       onToggle={() => stream.toggleCard(entry.suggestion.id)}
+      onPin={() =>
+        pinCard({
+          key: `guidance:${entry.suggestion.item.id}`,
+          kind: "guidance",
+          suggestion: entry.suggestion,
+        })
+      }
       onViewResource={setViewingResource}
       onEngage={stream.engage}
       onDisengage={stream.disengage}
@@ -1272,6 +1354,14 @@ export function LiveAgentAssistPanel({
       expanded={!collapsedKnowledge.has(surface.id)}
       arriving={enteringKnowledgeIds.has(surface.id)}
       reduced={reduced}
+      pinned={pinnedKeys.has(`knowledge:${surface.entry.id}`)}
+      onPin={() =>
+        pinCard({
+          key: `knowledge:${surface.entry.id}`,
+          kind: "knowledge",
+          surface,
+        })
+      }
       onToggle={() =>
         setCollapsedKnowledge((current) => {
           const next = new Set(current);
@@ -1309,49 +1399,32 @@ export function LiveAgentAssistPanel({
           <GuidanceSparklesIcon className="size-4 shrink-0" />
         </span>
         <p className="text-label-md-semi text-foreground">Conversation guidance</p>
-        {/* Unread cards, both kinds, counted together. It is a control rather
-            than a label: the count is only useful if it also takes the agent
-            to the card it is counting (§7). The arrow appears when the unread
-            cards are further down the column, so the agent knows which way to
-            look before they click.
-
-            Hidden while searching, because the stream it counts is unmounted
-            behind the results — the count would still be right and the click
-            would silently go nowhere, and a control that does nothing is worse
-            than one that isn't there. The seen/unseen state survives, so it
-            comes back reading the same once the search is cleared. */}
-        {feed.unseenCount > 0 && !search.searching ? (
-          <button
-            type="button"
-            aria-live="polite"
-            aria-label={`${feed.unseenCount} unread ${
-              feed.unseenCount === 1 ? "card" : "cards"
-            } — go to the first`}
-            onClick={feed.revealFirstUnseen}
-            className={cn(
-              "flex cursor-pointer items-center gap-0.5 rounded-[4px] px-0.5 text-label-md text-muted-foreground tabular-nums",
-              "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
-              !reduced && "assist-badge-in"
-            )}
-          >
-            <span aria-hidden="true">·</span>
-            {feed.unseenDirection ? (
-              <IconChevronDown
-                size={16}
-                className={cn(
-                  "size-4 shrink-0",
-                  feed.unseenDirection === "up" && "rotate-180"
-                )}
-              />
-            ) : null}
-            {feed.unseenCount} new
-          </button>
-        ) : null}
       </header>
 
-      {/* Always present, never modal: the agent should be able to start typing
-          without first deciding to "open search". */}
-      <CallSearchBar model={search} reduced={reduced} />
+      <div className="shrink-0 border-b border-line px-4 py-2.5">
+        <div className="flex items-center gap-2 rounded-md border border-line bg-white px-3 py-2 transition-colors focus-within:border-brand">
+          <IconSearch size={16} className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            type="text"
+            inputMode="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search response cards and knowledge"
+            aria-label="Search response cards and knowledge"
+            className="min-w-0 flex-1 bg-transparent text-paragraph-sm text-foreground outline-none placeholder:text-disabled-fg"
+          />
+          {query ? (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setQuery("")}
+              className="flex size-5 shrink-0 items-center justify-center rounded-[4px] text-muted-foreground outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+            >
+              <IconClose size={16} />
+            </button>
+          ) : null}
+        </div>
+      </div>
 
       <div
         ref={feedRef}
@@ -1361,29 +1434,77 @@ export function LiveAgentAssistPanel({
         )}
         {...stream.scrollHandlers}
       >
-        {/* Above everything, searching or not — a pin is the agent saying
-            "keep this in front of me", and a search two seconds later must
-            not push it off screen. */}
-        <PinnedStack
-          model={search}
-          reduced={reduced}
-          onViewResource={setViewingResource}
-        />
+        {pinnedCards.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            <p className="px-0.5 text-label-sm font-medium text-muted-foreground">
+              Pinned responses · {pinnedCards.length} of {MAX_PINNED_CARDS}
+            </p>
+            {pinnedCards.map((card) => {
+              const expanded = normalizedQuery
+                ? false
+                : !collapsedPinned.has(card.key);
+              const toggle = () =>
+                setCollapsedPinned((current) => {
+                  const next = new Set(current);
+                  if (next.has(card.key)) next.delete(card.key);
+                  else next.add(card.key);
+                  return next;
+                });
+              return card.kind === "guidance" ? (
+                <LiveGuidanceCard
+                  key={card.key}
+                  item={card.suggestion}
+                  reduced={reduced}
+                  expanded={expanded}
+                  pinned
+                  onToggle={toggle}
+                  onPin={() => pinCard(card)}
+                  onViewResource={setViewingResource}
+                  className={!expanded ? "border-line bg-secondary-bg/20" : undefined}
+                />
+              ) : (
+                <KnowledgeCard
+                  key={card.key}
+                  surface={card.surface}
+                  expanded={expanded}
+                  arriving={false}
+                  reduced={reduced}
+                  pinned
+                  onToggle={toggle}
+                  onPin={() => pinCard(card)}
+                  className={!expanded ? "border-line bg-secondary-bg/20" : undefined}
+                />
+              );
+            })}
+          </div>
+        ) : null}
 
-        {search.searching ? (
-          <CallSearchResults
-            model={search}
-            reduced={reduced}
-            onViewResource={setViewingResource}
-          />
-        ) : (
-          <>
-        <GuidanceListeningState
-          show={nothingYet && search.pinned.length === 0}
-          preparing={preparing}
-        />
+        {!normalizedQuery ? (
+          <div className="flex items-center gap-1 px-0.5 pt-1">
+            <p className="text-label-sm font-medium text-muted-foreground">
+              Live suggestions
+            </p>
+            {feed.unseenCount > 0 ? (
+              <button
+                type="button"
+                aria-live="polite"
+                aria-label={`${feed.unseenCount} unread ${
+                  feed.unseenCount === 1 ? "suggestion" : "suggestions"
+                } — go to the first`}
+                onClick={feed.revealFirstUnseen}
+                className="rounded-[4px] px-0.5 text-label-xs font-medium text-brand tabular-nums outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/24"
+              >
+                · {feed.unseenCount} new
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
-        {stream.criticalAlert ? (
+        {!normalizedQuery ? (
+          <GuidanceListeningState show={nothingYet} preparing={preparing} />
+        ) : null}
+
+        {!normalizedQuery && stream.criticalAlert ? (
           <CriticalGuidanceAlert
             name={stream.criticalAlert.suggestion.item.name}
             reduced={reduced}
@@ -1391,7 +1512,77 @@ export function LiveAgentAssistPanel({
           />
         ) : null}
 
-        {ordered.map((item) =>
+        {normalizedQuery ? (
+          searchedGuidance.length + searchedKnowledge.length === 0 ? (
+            <div className="flex flex-col items-center gap-1 px-6 py-8 text-center">
+              <p className="text-label-md font-medium text-foreground">No guidance found</p>
+              <p className="text-paragraph-sm text-muted-foreground">
+                Try a product, policy, integration, or customer objection.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="px-0.5 text-paragraph-sm text-muted-foreground">
+                {searchedGuidance.length + searchedKnowledge.length} results
+              </p>
+              {searchedGuidance.map((suggestion) => {
+                const key = `guidance:${suggestion.item.id}`;
+                if (pinnedKeys.has(key)) return null;
+                const expanded = !collapsedSearch.has(key);
+                return (
+                  <LiveGuidanceCard
+                    key={key}
+                    item={suggestion}
+                    reduced={reduced}
+                    expanded={expanded}
+                    onToggle={() =>
+                      setCollapsedSearch((current) => {
+                        const next = new Set(current);
+                        if (next.has(key)) next.delete(key);
+                        else next.add(key);
+                        return next;
+                      })
+                    }
+                    onPin={() =>
+                      pinCard({ key, kind: "guidance", suggestion })
+                    }
+                    onViewResource={setViewingResource}
+                  />
+                );
+              })}
+              {searchedKnowledge.map((surface) => {
+                const key = `knowledge:${surface.entry.id}`;
+                if (pinnedKeys.has(key)) return null;
+                const expanded = !collapsedSearch.has(key);
+                return (
+                  <KnowledgeCard
+                    key={key}
+                    surface={surface}
+                    expanded={expanded}
+                    arriving={false}
+                    reduced={reduced}
+                    onToggle={() =>
+                      setCollapsedSearch((current) => {
+                        const next = new Set(current);
+                        if (next.has(key)) next.delete(key);
+                        else next.add(key);
+                        return next;
+                      })
+                    }
+                    onPin={() => pinCard({ key, kind: "knowledge", surface })}
+                  />
+                );
+              })}
+            </>
+          )
+        ) : ordered.map((item) =>
+          pinnedKeys.has(
+            item.kind === "guidance"
+              ? `guidance:${item.entry.suggestion.item.id}`
+              : item.kind === "knowledge"
+                ? `knowledge:${item.surface.entry.id}`
+                : ""
+          ) ? null :
           item.kind === "coaching" ? (
             <CoachingCard
               key={item.id}
@@ -1407,8 +1598,6 @@ export function LiveAgentAssistPanel({
           ) : (
             renderKnowledge(item.surface)
           )
-        )}
-          </>
         )}
       </div>
 

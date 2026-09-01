@@ -9,9 +9,7 @@
  * so every path out of `resolveFieldText` ends in real words or in nothing at
  * all — never in braces.
  *
- * The fields every CRM has and every opening line uses, plus the CRM platform
- * name discovery scripts ask about. A longer list would be a merge-tag system,
- * and this is a script.
+ * The common contact fields plus the CRM platform used by discovery scripts.
  */
 
 export type ContactFieldId =

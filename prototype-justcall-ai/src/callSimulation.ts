@@ -261,13 +261,9 @@ export interface CallScenario {
    */
   contactNumber: string;
   contactMeta: string;
-  /**
-   * What the CRM holds for this contact. Fields in the script resolve against
-   * it, and a field it does not have falls back — which is the whole reason
-   * one scenario deliberately knows less than the others.
-   */
+  /** CRM values used to personalise authored script fields on this call. */
   contact?: ContactRecord;
-  /** The script's own fallbacks, as the admin published them. */
+  /** Admin-authored words used whenever a requested CRM value is empty. */
   fieldFallbacks?: FieldFallbacks;
   /** The CRM record actions on this call write to. */
   crmRecordLabel?: string;
@@ -293,6 +289,19 @@ export interface SimulationSnapshot {
   actions: ActionSurface[];
 }
 
+/** Script wording as the agent sees it—resolved values or safe fallbacks only. */
+export function resolveScenarioText(
+  scenario: CallScenario,
+  text: string | undefined
+): string | undefined {
+  if (!text) return text;
+  return resolveFieldText(
+    text,
+    scenario.contact ?? {},
+    scenario.fieldFallbacks ?? DEFAULT_FIELD_FALLBACKS
+  );
+}
+
 const ACTION_OUTCOMES: Record<CallActionKind, string> = {
   schedule: "Scheduled",
   message: "Sent",
@@ -314,23 +323,6 @@ const ACTION_PROGRESS: Record<CallActionKind, string> = {
 export function callActionOutcome(kind?: CallActionKind, fallback = "Updated"): string {
   if (!kind) return fallback;
   return ACTION_OUTCOMES[kind];
-}
-
-/**
- * Script text as the agent reads it on this call. Every surface that shows an
- * authored line has to go through here — the one thing a live call may never
- * display is a raw `{{token}}`.
- */
-export function resolveScenarioText(
-  scenario: CallScenario,
-  text: string | undefined
-): string | undefined {
-  if (!text) return text;
-  return resolveFieldText(
-    text,
-    scenario.contact ?? {},
-    scenario.fieldFallbacks ?? DEFAULT_FIELD_FALLBACKS
-  );
 }
 
 export function callActionProgressLabel(kind?: CallActionKind): string {
@@ -506,13 +498,12 @@ const AUTHORED_SCENARIOS: CallScenario[] = [
     contactName: "Elena Vasquez",
     contactNumber: "14155550142",
     contactMeta: "Outbound · Sales",
-    // Everything the script asks for is on the record, so no fallback fires.
     contact: {
       first_name: "Elena",
       last_name: "Vasquez",
       company: "Acme Corp",
       email: "elena@acmecorp.com",
-      phone: "+1 415 555 0132",
+      phone: "+1 415 555 0142",
     },
     // Story follows the script: Aircall → after-hours pain → cost of
     // missed leads → Salesforce for the ops lead → price → book session.
@@ -528,7 +519,7 @@ const AUTHORED_SCENARIOS: CallScenario[] = [
       ),
       step(
         "Ask how they handle this today",
-        "Walk me through how this works at {{company}} today.",
+        "I understand your team currently uses {{crm_name}}. How are calls being managed there today?",
         true,
         ["g-status-quo", "g-aircall"]
       ),
@@ -981,14 +972,13 @@ Best,`,
     contactName: "Priya Sharma",
     contactNumber: "14155550177",
     contactMeta: "Inbound · Support",
-    /**
-     * The realistic inbound case: a name and the number they rang from, and
-     * nothing else. The script still reads as a sentence because the admin
-     * wrote what to say instead — this is the scenario the fallbacks exist for.
-     */
     contact: {
       first_name: "Priya",
-      phone: "+1 415 555 0148",
+      phone: "+1 415 555 0177",
+    },
+    fieldFallbacks: {
+      ...DEFAULT_FIELD_FALLBACKS,
+      email: "the email on file",
     },
     steps: [
       step(
@@ -997,7 +987,7 @@ Best,`,
       ),
       step(
         "Confirm which account they're accessing",
-        "Is {{email}} still the right address on the account, or should I look up another one?"
+        "Is {{email}} still the right address for the account you're trying to open?"
       ),
       step(
         "Diagnose account access issue",
@@ -1164,12 +1154,6 @@ Best,`,
     contactName: "Marcus Chen",
     contactNumber: "14155550163",
     contactMeta: "Inbound · Billing",
-    contact: {
-      first_name: "Marcus",
-      last_name: "Chen",
-      email: "marcus.chen@northwind.io",
-      phone: "+1 628 555 0117",
-    },
     steps: [
       step(
         "Greet the customer",
@@ -1177,7 +1161,7 @@ Best,`,
       ),
       step(
         "Confirm the account on the invoice",
-        "I can look that up, {{first_name}} — is {{email}} the address on the billing account?"
+        "I can look that up — can I confirm the email on the billing account?"
       ),
       step(
         "Identify the charge in question",
