@@ -121,6 +121,8 @@ export type FieldSegment =
   | {
       kind: "field";
       field: ContactFieldMeta;
+      /** The token exactly as authored — what the editor mirrors as a chip. */
+      raw: string;
       /** What this resolves to — may be "" when the fallback is blank. */
       value: string;
       /** True when the value came from the record rather than the fallback. */
@@ -162,6 +164,7 @@ export function segmentFieldText(
       segments.push({
         kind: "field",
         field,
+        raw: match[0],
         value: recorded || fallback,
         filled: recorded.length > 0,
       });
