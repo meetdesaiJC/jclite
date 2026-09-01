@@ -1273,9 +1273,6 @@ function FullScriptList({
           >
             <ScriptStepRow
               title={step.title}
-              // Fields resolve here rather than in the data, so the same
-              // authored script reads differently per contact — and so a token
-              // can never reach the agent mid-sentence.
               wording={resolveScenarioText(scenario, step.wording)}
               phase={phase}
               glow={glowing.has(index)}
