@@ -91,7 +91,10 @@ export function LiveGuidanceCard({
   status,
   relevantAgain = false,
   newLabel = false,
+  pinned = false,
+  pinDisabled = false,
   onToggle,
+  onPin,
   onViewResource,
   actionSlot,
   className,
@@ -105,7 +108,10 @@ export function LiveGuidanceCard({
   status?: GuidanceCardStatus;
   relevantAgain?: boolean;
   newLabel?: boolean;
+  pinned?: boolean;
+  pinDisabled?: boolean;
   onToggle?: () => void;
+  onPin?: () => void;
   onViewResource: (resource: GuidanceResource) => void;
   /**
    * Recommended actions sit at the bottom of the guidance they belong to (§27),
@@ -137,6 +143,11 @@ export function LiveGuidanceCard({
         title={item.item.name}
         expanded={expanded}
         onToggle={onToggle}
+        action={
+          onPin ? (
+            <PinButton pinned={pinned} disabled={pinDisabled} onClick={onPin} />
+          ) : undefined
+        }
         badge={
           <GuidanceStateBadge
             status={status}
@@ -201,7 +212,10 @@ export function InCallGuidanceSlot({
   status,
   relevantAgain,
   newLabel,
+  pinned,
+  pinDisabled,
   onToggle,
+  onPin,
   onViewResource,
   onEngage,
   onDisengage,
@@ -223,7 +237,10 @@ export function InCallGuidanceSlot({
   status?: GuidanceCardStatus;
   relevantAgain?: boolean;
   newLabel?: boolean;
+  pinned?: boolean;
+  pinDisabled?: boolean;
   onToggle: () => void;
+  onPin?: () => void;
   onViewResource: (resource: GuidanceResource) => void;
   onEngage: () => void;
   onDisengage?: () => void;
@@ -263,12 +280,58 @@ export function InCallGuidanceSlot({
           status={status}
           relevantAgain={relevantAgain}
           newLabel={newLabel}
+          pinned={pinned}
+          pinDisabled={pinDisabled}
           onToggle={onToggle}
+          onPin={onPin}
           onViewResource={onViewResource}
           actionSlot={actionSlot}
         />
       </div>
     </div>
+  );
+}
+
+export function PinButton({
+  pinned,
+  disabled,
+  onClick,
+}: {
+  pinned: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pinned}
+      aria-label={pinned ? "Unpin card" : "Pin card"}
+      title={disabled ? "You can pin up to 3 cards" : pinned ? "Unpin card" : "Pin card"}
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        "flex size-6 shrink-0 items-center justify-center rounded-[4px] outline-none transition-colors",
+        pinned
+          ? "bg-brand text-white hover:bg-brand-hover"
+          : "text-muted-foreground hover:bg-surface-hover hover:text-foreground",
+        disabled &&
+          "cursor-not-allowed text-disabled-fg hover:bg-transparent hover:text-disabled-fg",
+        "focus-visible:ring-2 focus-visible:ring-brand/24"
+      )}
+    >
+      <svg viewBox="0 0 16 16" fill="none" className="size-4" aria-hidden="true">
+        <path
+          d="M5.1 2.5h5.8l-1.1 3 1.7 1.7v1H8.7V13L8 14l-.7-1V8.2H4.5v-1l1.7-1.7-1.1-3Z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
   );
 }
 
@@ -482,4 +545,3 @@ export function HandledNotice({
     </div>
   );
 }
-

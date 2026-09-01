@@ -310,3 +310,29 @@ export const TriggerStates: Story = {
     ),
   ],
 };
+
+/**
+ * The menu is absolutely positioned, so a scrolling panel clips it rather than
+ * letting it hang out — which is how a field near the bottom of a phone-sized
+ * settings page ended up with its menu drawn under the bottom nav.
+ *
+ * Open the last field: the menu flips above its trigger. Open the first: it
+ * still hangs below. Scroll the panel so a trigger sits mid-list and the menu
+ * keeps to the room it has, scrolling its own list instead.
+ */
+export const InAScrollContainer: Story = {
+  args: { options: TEAM },
+  render: () => (
+    <div className="flex h-[320px] w-[320px] flex-col overflow-hidden rounded-[16px] border border-line bg-white">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        {["First", "Second", "Third", "Fourth", "Last"].map((name) => (
+          <Dropdown key={name} label={`${name} field`} options={TEAM} />
+        ))}
+      </div>
+      <div className="flex h-12 shrink-0 items-center justify-center bg-brand text-label-sm text-white">
+        Bottom nav
+      </div>
+    </div>
+  ),
+  decorators: [(Story) => <Story />],
+};

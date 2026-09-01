@@ -44,6 +44,14 @@
   --text-label-md-semi--line-height: 1.25rem;
   --text-label-md-semi--font-weight: 600;
 
+  /* Bold (700) — the one step above SemiBold. For a form label that has to
+     out-weigh the value under it: at 14px on a dense settings panel, 600
+     against a 400 value is a difference you have to look for. Same size and
+     line-height as `label-md-semi`, so swapping between them never reflows. */
+  --text-label-md-bold: 0.875rem; /* 14 / 20 — Bold */
+  --text-label-md-bold--line-height: 1.25rem;
+  --text-label-md-bold--font-weight: 700;
+
   --text-label-sm: 0.75rem; /* 12 / 16 — Medium */
   --text-label-sm--line-height: 1rem;
   --text-label-sm--font-weight: 500;

@@ -17,7 +17,6 @@ import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
 import { FeedbackThumbs, type FeedbackVote } from "@/components/FeedbackThumbs";
 import { InputField } from "@/components/InputField";
-import { AvatarIndicator } from "@/components/Avatar";
 import {
   IconCallDisposition,
   IconCallLogs,
@@ -49,6 +48,26 @@ import {
 } from "./NotesEditor";
 import { LiveAgentAssistPanel } from "./LiveAgentAssistPanel";
 import { type AgentAssistScope } from "./agentAssistScope";
+import {
+  AvailabilityControl,
+  AvailabilityStatusPill,
+  CallQualityModal,
+  NetworkStatusControl,
+  PhoneNetworkCheck,
+  useCallQualityModal,
+} from "./CallStatusControls";
+import { DialerSettingsPage } from "./DialerSettingsPage";
+import { useAudioDevices, type AudioDeviceSelection } from "./audioSettings";
+import {
+  networkReadingAt,
+  setVoicemailLibrary,
+  voicemailLibrary,
+  SEED_BUSY_REASONS,
+  type AvailabilityId,
+  type BusyReason,
+  type BusyReasonId,
+  type VoicemailGreeting,
+} from "./callDeviceData";
 import {
   LiveAssistControl,
   LiveAssistPanel,
@@ -549,6 +568,7 @@ function ShellSwap({
 export interface DialerPanelProps {
   /** V1 has no Live Assist, coaching cues or suggested actions. */
   scope?: AgentAssistScope;
+  busyReasons?: BusyReason[];
   className?: string;
   onCall?: (number: string) => void;
   onClose?: () => void;
@@ -559,11 +579,41 @@ export function DialerPanel({
   onCall,
   onClose,
   scope = "v2",
+  busyReasons = SEED_BUSY_REASONS,
 }: DialerPanelProps) {
   const inputId = useId();
   const [number, setNumber] = useState("");
   const [tab, setTab] = useState<DialerTab>("dialer");
+  // Availability outlasts any one call — it is the agent's own state, not the
+  // call's, so it lives above the idle → ringing → live morph.
+  const [availability, setAvailability] = useState<AvailabilityId>("available");
+  const [busyReason, setBusyReason] = useState<BusyReasonId | null>(null);
+  const changeAvailability = (
+    next: AvailabilityId,
+    reason: BusyReasonId | null
+  ) => {
+    setAvailability(next);
+    setBusyReason(next === "busy" ? reason : null);
+  };
+  // Devices outlast calls too — an agent picks a headset once a morning.
+  const devices = useAudioDevices();
+  // So does the drop library: uploaded once in Settings, offered on every call
+  // after. It lives up here because Settings writes it and the call bar reads
+  // it, and those are two different branches of this tree.
+  const [drops, setDrops] = useState<VoicemailGreeting[]>(voicemailLibrary);
+  const addDrop = (drop: VoicemailGreeting) =>
+    setDrops((library) => [...library, drop]);
+  const removeDrop = (id: string) =>
+    setDrops((library) => library.filter((drop) => drop.id !== id));
+  // Back to the account, so closing the dialer doesn't throw the upload away.
+  useEffect(() => {
+    setVoicemailLibrary(drops);
+  }, [drops]);
   const [phase, setPhase] = useState<CallPhase>("idle");
+  // On a call the notch reports the phone, not the agent: telling the queue
+  // they are Available while they are talking would be untrue.
+  const effectiveAvailability: AvailabilityId =
+    phase === "idle" ? availability : "busy";
   const [elapsedMs, setElapsedMs] = useState(0);
   const [muted, setMuted] = useState(false);
   const [onHold, setOnHold] = useState(false);
@@ -995,6 +1045,14 @@ export function DialerPanel({
             inputId={`${inputId}-arriving`}
             number={number}
             tab={tab}
+            availability={availability}
+            busyReason={busyReason}
+            busyReasons={busyReasons}
+            onAvailabilityChange={changeAvailability}
+            devices={devices}
+            drops={drops}
+            onAddDrop={addDrop}
+            onRemoveDrop={removeDrop}
             onNumberChange={setNumber}
             onTabChange={setTab}
             onDigit={appendDigit}
@@ -1026,6 +1084,7 @@ export function DialerPanel({
               muted={muted}
               onHold={onHold}
               recordingPaused={recordingPaused}
+              availability={effectiveAvailability}
               tab={tab}
               scenario={scenario}
               onScenarioChange={(id) => {
@@ -1050,6 +1109,14 @@ export function DialerPanel({
                 inputId={inputId}
                 number={number}
                 tab={tab}
+                availability={availability}
+                busyReason={busyReason}
+                busyReasons={busyReasons}
+                onAvailabilityChange={changeAvailability}
+                devices={devices}
+                drops={drops}
+                onAddDrop={addDrop}
+                onRemoveDrop={removeDrop}
                 onNumberChange={setNumber}
                 onTabChange={setTab}
                 onDigit={appendDigit}
@@ -1068,6 +1135,14 @@ function IdleDialer({
   inputId,
   number,
   tab,
+  availability,
+  busyReason,
+  busyReasons,
+  onAvailabilityChange,
+  devices,
+  drops,
+  onAddDrop,
+  onRemoveDrop,
   className,
   onNumberChange,
   onTabChange,
@@ -1077,6 +1152,17 @@ function IdleDialer({
   inputId: string;
   number: string;
   tab: DialerTab;
+  availability: AvailabilityId;
+  busyReason: BusyReasonId | null;
+  busyReasons: BusyReason[];
+  onAvailabilityChange: (
+    next: AvailabilityId,
+    reason: BusyReasonId | null
+  ) => void;
+  devices: AudioDeviceSelection;
+  drops: VoicemailGreeting[];
+  onAddDrop: (drop: VoicemailGreeting) => void;
+  onRemoveDrop: (id: string) => void;
   className?: string;
   onNumberChange: (value: string) => void;
   onTabChange: (tab: DialerTab) => void;
@@ -1116,19 +1202,49 @@ function IdleDialer({
         className
       )}
     >
-      <div className="flex w-full items-center justify-center">
-        <div className="flex h-5 w-24 items-center justify-center gap-1.5 rounded-b-lg bg-badge-beta px-2">
-          <AvatarIndicator
-            status="available"
-            size="xs"
-            className="static size-2 shrink-0 border-0"
-          />
-          <span className="text-[10px] leading-3 font-normal whitespace-nowrap text-white">
-            Available
-          </span>
-        </div>
+      {/* On Settings the top of the card becomes a page header: the notch keeps
+          its place in it, and the title and Logout sit under it. Everywhere
+          else the notch is the only thing up here, on white. */}
+      <div
+        className={cn(
+          "flex w-full flex-col items-center",
+          tab === "settings" && "bg-brand"
+        )}
+      >
+        {/* Idle, the status is the agent's own — so unlike the in-call notch
+            this one sets it outright rather than queueing it. */}
+        <AvailabilityControl
+          status={availability}
+          reason={busyReason}
+          reasons={busyReasons}
+          onStatusChange={onAvailabilityChange}
+        />
+        {tab === "settings" ? (
+          <div className="relative flex h-11 w-full items-center justify-center px-3">
+            <h2 className="text-[16px] leading-6 font-medium text-white">
+              Settings
+            </h2>
+            {/* Signing out is the one thing on this page that ends the session
+                rather than changing it, so it sits in the chrome rather than in
+                the list — where it would read as a sixth setting. */}
+            <button
+              type="button"
+              className="absolute right-3 flex h-7 items-center rounded-full bg-white px-3 text-label-sm text-gray-700 outline-none transition-colors duration-base hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-white/50"
+            >
+              Logout
+            </button>
+          </div>
+        ) : null}
       </div>
 
+      {tab === "settings" ? (
+        <DialerSettingsPage
+          devices={devices}
+          drops={drops}
+          onAddDrop={onAddDrop}
+          onRemoveDrop={onRemoveDrop}
+        />
+      ) : (
       <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-between gap-4 p-4">
         <InputField
           id={inputId}
@@ -1206,6 +1322,7 @@ function IdleDialer({
           </button>
         </div>
       </div>
+      )}
 
       <DialerNav tab={tab} onTabChange={onTabChange} />
     </div>
@@ -1225,6 +1342,7 @@ function InCallShell({
   muted,
   onHold,
   recordingPaused,
+  availability,
   tab,
   scenario,
   onScenarioChange,
@@ -1249,6 +1367,7 @@ function InCallShell({
   muted: boolean;
   onHold: boolean;
   recordingPaused: boolean;
+  availability: AvailabilityId;
   tab: DialerTab;
   scenario: CallScenario;
   onScenarioChange: (id: string) => void;
@@ -1324,6 +1443,7 @@ function InCallShell({
             muted={muted}
             onHold={onHold}
             recordingPaused={recordingPaused}
+            availability={availability}
             tab={tab}
             scenario={scenario}
             assistCollapsing={assistCollapsing}
@@ -1371,6 +1491,7 @@ function CallMorphStage({
   muted,
   onHold,
   recordingPaused,
+  availability,
   tab,
   scenario,
   assistCollapsing,
@@ -1397,6 +1518,7 @@ function CallMorphStage({
   muted: boolean;
   onHold: boolean;
   recordingPaused: boolean;
+  availability: AvailabilityId;
   tab: DialerTab;
   scenario: CallScenario;
   assistCollapsing: boolean;
@@ -1491,6 +1613,7 @@ function CallMorphStage({
               contactName={contactName}
               contactMeta={contactMeta}
               localTime={localTime}
+              availability={availability}
               tab={tab}
               onTabChange={() => {}}
               onHangup={() => {}}
@@ -1511,6 +1634,7 @@ function CallMorphStage({
           muted={muted}
           onHold={onHold}
           recordingPaused={recordingPaused}
+          availability={availability}
           scenario={scenario}
           assistCollapsing={assistCollapsing}
           notes={notes}
@@ -1532,6 +1656,7 @@ function CallMorphStage({
           contactName={contactName}
           contactMeta={contactMeta}
           localTime={localTime}
+          availability={availability}
           tab={tab}
           muted={muted}
           onHold={onHold}
@@ -1645,6 +1770,7 @@ function LiveCallStage({
   muted,
   onHold,
   recordingPaused,
+  availability,
   scenario,
   assistCollapsing,
   notes,
@@ -1666,6 +1792,7 @@ function LiveCallStage({
   muted: boolean;
   onHold: boolean;
   recordingPaused: boolean;
+  availability: AvailabilityId;
   scenario: CallScenario;
   assistCollapsing: boolean;
   notes: NotesEditorValue;
@@ -1963,6 +2090,7 @@ function LiveCallStage({
         muted={muted}
         onHold={onHold}
         recordingPaused={recordingPaused}
+        availability={availability}
         notesOpen={asidePanel === "notes"}
         notesControlRef={notesControlRef}
         notesFound={discovery.pulsing}
@@ -2325,6 +2453,7 @@ function CallBar({
   muted,
   onHold,
   recordingPaused,
+  availability,
   notesOpen,
   notesControlRef,
   notesFound,
@@ -2349,6 +2478,7 @@ function CallBar({
   muted: boolean;
   onHold: boolean;
   recordingPaused: boolean;
+  availability: AvailabilityId;
   notesOpen?: boolean;
   notesControlRef?: RefObject<HTMLButtonElement | null>;
   /** The introduction has just landed here — light up, once. */
@@ -2468,7 +2598,19 @@ function CallBar({
             revealing && "call-bar-detail-in"
           )}
         >
-          <SignalBars />
+          <NetworkStatusControl reading={networkReadingAt(elapsedMs)} />
+        </span>
+
+        {/* The agent's own status, not the call's — it rides at `xl` only, so
+            the controls never compress to make room for it. */}
+        <span
+          style={{ "--detail-delay": `${BAR_DETAIL_DELAY_MS}ms` } as CSSProperties}
+          className={cn(
+            "hidden items-center xl:flex",
+            revealing && "call-bar-detail-in"
+          )}
+        >
+          <AvailabilityStatusPill status={availability} />
         </span>
       </div>
 
@@ -2694,6 +2836,7 @@ function RingingPhone({
   contactName,
   contactMeta,
   localTime,
+  availability,
   tab,
   muted,
   onHold,
@@ -2711,6 +2854,7 @@ function RingingPhone({
   contactName: string;
   contactMeta: string;
   localTime: string;
+  availability?: AvailabilityId;
   tab: DialerTab;
   /**
    * The line's state, and the controls that change it. Optional because the
@@ -2725,6 +2869,7 @@ function RingingPhone({
   onHoldToggle?: () => void;
   onHangup: () => void;
 }) {
+  const quality = useCallQualityModal();
   return (
     <div
       data-morph-card={ghost ? undefined : true}
@@ -2734,19 +2879,27 @@ function RingingPhone({
       )}
     >
       <div className="flex w-full items-center justify-center px-4">
-        <div className="flex h-5 w-[54px] items-center justify-center gap-1.5 rounded-b-lg bg-badge-beta px-2">
-          <span className="size-2 shrink-0 rounded-full bg-warning" aria-hidden="true" />
-          <span className="text-[10px] leading-3 font-normal whitespace-nowrap text-white">
-            Busy
-          </span>
-        </div>
+        {/* The status is the phone's, not the agent's, for as long as there is
+            a call on it — so the notch reports what the phone decided and has
+            nothing to open. */}
+        <AvailabilityControl status={availability ?? "busy"} locked />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col items-center gap-6 overflow-hidden p-4">
+        {/* Before pickup the useful thing is whether this is a decent hour to
+            be calling. Once the line is live it isn't — the agent is talking to
+            them — so the row turns over to what the connection is doing. */}
         <div className="flex h-8 w-full items-center justify-center">
-          <p className="text-center text-[12px] leading-4 text-white/70">
-            It’s {localTime} there
-          </p>
+          {connected ? (
+            <PhoneNetworkCheck
+              reading={networkReadingAt(elapsedMs ?? 0)}
+              onTroubleshoot={quality.show}
+            />
+          ) : (
+            <p className="text-center text-[12px] leading-4 text-white/70">
+              It’s {localTime} there
+            </p>
+          )}
         </div>
 
         <div className="flex w-full flex-col items-center gap-2">
@@ -2884,6 +3037,14 @@ function RingingPhone({
           </button>
         </div>
       </div>
+
+      {quality.mounted ? (
+        <CallQualityModal
+          state={quality.state}
+          reading={networkReadingAt(elapsedMs ?? 0)}
+          onClose={quality.close}
+        />
+      ) : null}
 
       <DialerNav tab={tab} onTabChange={onTabChange} />
     </div>
@@ -3332,17 +3493,6 @@ function NotesPaneIcon({ className }: { className?: string }) {
         strokeLinejoin="round"
       />
     </svg>
-  );
-}
-
-function SignalBars() {
-  return (
-    <span className="flex items-end gap-px" aria-hidden="true">
-      <span className="h-[5px] w-[3px] rounded-[2px] bg-success" />
-      <span className="h-2 w-[3px] rounded-[2px] bg-success" />
-      <span className="h-[11px] w-[3px] rounded-[2px] bg-success" />
-      <span className="h-3.5 w-[3px] rounded-[2px] bg-success" />
-    </span>
   );
 }
 

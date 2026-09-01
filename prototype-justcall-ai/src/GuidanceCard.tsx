@@ -203,6 +203,7 @@ export function GuidanceAiHeader({
   expanded,
   onToggle,
   badge,
+  action,
   className,
 }: {
   title: string;
@@ -210,6 +211,8 @@ export function GuidanceAiHeader({
   onToggle?: () => void;
   /** Card state at a glance — New, Relevant again, Earlier. */
   badge?: React.ReactNode;
+  /** Card action kept separate from the disclosure button. */
+  action?: React.ReactNode;
   className?: string;
 }) {
   const open = expanded !== false;
@@ -219,7 +222,7 @@ export function GuidanceAiHeader({
     className
   );
   const label = (
-    <span className="min-w-0 flex-1 truncate text-label-md font-medium text-brand">
+    <span className="min-w-0 flex-1 truncate text-label-md font-medium text-foreground">
       {title}
     </span>
   );
@@ -230,44 +233,41 @@ export function GuidanceAiHeader({
         <GuidanceSpeechBubbleIcon className="size-4 shrink-0 text-brand" />
         {label}
         {badge}
+        {action}
       </div>
     );
   }
 
   return (
-    <button
-      type="button"
-      aria-expanded={expanded}
-      aria-label={expanded ? `Collapse ${title}` : `Expand ${title}`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onToggle();
-      }}
-      className={cn(
-        row,
-        "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24"
-      )}
-    >
-      <GuidanceSpeechBubbleIcon className="size-4 shrink-0 text-brand" />
-      {label}
-      {badge}
-      <span
-        className="-mr-1 flex size-6 shrink-0 items-center justify-center text-muted-foreground"
-        aria-hidden="true"
+    <div className={cn(row, "pr-3")}>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-label={expanded ? `Collapse ${title}` : `Expand ${title}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggle();
+        }}
+        className="-my-1.5 -ml-4 flex min-w-0 flex-1 cursor-pointer items-center gap-1 px-4 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/24"
       >
-        {/* One glyph that turns rather than two that swap: the swap has no
-            in-between state to animate, so the control snapped while the body
-            it opens travelled. Tailwind v4 emits `rotate` as its own property,
-            so `transition-transform` would match nothing here (§4). */}
-        <IconChevronDown
-          size={16}
-          className={cn(
-            "transition-[rotate] duration-moderate ease-standard motion-reduce:transition-none",
-            expanded && "rotate-180"
-          )}
-        />
-      </span>
-    </button>
+        <GuidanceSpeechBubbleIcon className="size-4 shrink-0 text-brand" />
+        {label}
+        {badge}
+        <span
+          className="flex size-6 shrink-0 items-center justify-center text-muted-foreground"
+          aria-hidden="true"
+        >
+          <IconChevronDown
+            size={16}
+            className={cn(
+              "transition-[rotate] duration-moderate ease-standard motion-reduce:transition-none",
+              expanded && "rotate-180"
+            )}
+          />
+        </span>
+      </button>
+      {action}
+    </div>
   );
 }
 
@@ -400,10 +400,17 @@ export interface GuidanceCardProps {
   className?: string;
 }
 
-/** Shared response-card tone — solid brand blue, no gradient wash. */
+/**
+ * Shared response-card tone. The expanded border is the same pale
+ * `info-border` a knowledge card carries: a full-strength brand outline reads
+ * as a selected card rather than an open one, and the two card types sit in
+ * one column, so they have to be the same weight of blue.
+ */
 export const GUIDANCE_AI_THEME = {
-  card: "relative overflow-hidden rounded-lg border border-brand bg-white",
-  cardCollapsed: "relative overflow-hidden rounded-lg border border-line bg-white",
+  card:
+    "relative shrink-0 overflow-hidden rounded-lg border border-info-border bg-white",
+  cardCollapsed:
+    "relative shrink-0 overflow-hidden rounded-lg border border-line bg-white",
   rail: "absolute inset-y-0 left-0 w-[3px] bg-brand",
   badge: "bg-white/80 text-brand",
   tick: "bg-brand",

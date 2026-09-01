@@ -6,6 +6,8 @@ import {
   AvatarGroup,
   AvatarLabelGroup,
   Thumbnail,
+  avatarColorFromId,
+  initialsFromName,
   type AvatarColor,
   type AvatarSize,
   type AvatarStatus,
@@ -255,6 +257,46 @@ export const Thumbnails: Story = {
             />
           ))}
         </Row>
+      ))}
+    </div>
+  ),
+};
+
+/**
+ * `initialsFromName` + `avatarColorFromId` — what a list of people gets when
+ * nobody has uploaded a photo or picked a fill by hand.
+ *
+ * The colour is keyed on the *id*, so it survives a rename; the initials are
+ * keyed on the name, so they follow one. Seven people over five fills have to
+ * collide — what the hash buys is that the repeats are never neighbours.
+ */
+export const Derived: Story = {
+  parameters: { layout: "padded" },
+  render: () => (
+    <div className="flex max-w-sm flex-col">
+      {[
+        { id: "priya", name: "Priya Nair" },
+        { id: "diego", name: "Diego Ramos" },
+        { id: "henry", name: "Henry Beachy" },
+        { id: "saurabh", name: "Saurabh Bhardwaj" },
+        { id: "amara", name: "Amara Okafor" },
+        { id: "tom", name: "Tom Whitfield" },
+        { id: "mohit", name: "Mohit Singh" },
+      ].map((person) => (
+        <div
+          key={person.id}
+          className="flex items-center gap-3 border-b border-line py-2.5"
+        >
+          <Avatar
+            size="md"
+            initials={initialsFromName(person.name)}
+            color={avatarColorFromId(person.id)}
+          />
+          <span className="text-label-sm text-foreground">{person.name}</span>
+          <span className="ml-auto text-paragraph-sm text-muted-foreground">
+            {avatarColorFromId(person.id)}
+          </span>
+        </div>
       ))}
     </div>
   ),

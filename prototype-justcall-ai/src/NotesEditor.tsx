@@ -750,7 +750,7 @@ export const NotesEditor = forwardRef<
         suppressContentEditableWarning
         spellCheck
         className={cn(
-          "notes-editor min-h-0 w-full overflow-y-auto rounded-[4px] border border-solid border-line",
+          "notes-editor w-full rounded-[4px] border border-solid border-line",
           "bg-white px-3 py-2.5 text-paragraph-md text-foreground outline-none transition-colors",
           "hover:border-control-border focus:border-brand focus:hover:border-brand",
           // Vertical only: the column it sits in owns the width, and letting

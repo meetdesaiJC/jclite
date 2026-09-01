@@ -9,14 +9,16 @@
  * so every path out of `resolveFieldText` ends in real words or in nothing at
  * all — never in braces.
  *
- * Five fields, deliberately: the ones every CRM has and every opening line
- * uses. A longer list would be a merge-tag system, and this is a script.
+ * The fields every CRM has and every opening line uses, plus the CRM platform
+ * name discovery scripts ask about. A longer list would be a merge-tag system,
+ * and this is a script.
  */
 
 export type ContactFieldId =
   | "first_name"
   | "last_name"
   | "company"
+  | "crm_name"
   | "email"
   | "phone";
 
@@ -57,6 +59,13 @@ export const CONTACT_FIELDS: ContactFieldMeta[] = [
     token: "{{company}}",
     defaultFallback: "your team",
     sample: "Acme Corp",
+  },
+  {
+    id: "crm_name",
+    label: "CRM name",
+    token: "{{crm_name}}",
+    defaultFallback: "[CRM name not available]",
+    sample: "Salesforce",
   },
   {
     id: "email",

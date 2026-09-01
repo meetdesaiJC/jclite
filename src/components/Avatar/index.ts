@@ -24,3 +24,8 @@ export {
   thumbnailVariants,
   type ThumbnailProps,
 } from "./Thumbnail";
+export {
+  AVATAR_COLOR_CYCLE,
+  initialsFromName,
+  avatarColorFromId,
+} from "./initials";

@@ -1,5 +1,6 @@
 // Barrel export — handy if you ever consume this as a local package.
 // For copy-paste use you can ignore this and import components directly.
+export * from "./components/Accordion";
 export * from "./components/Alert";
 export * from "./components/Avatar";
 export * from "./components/Badge";
@@ -19,6 +20,7 @@ export * from "./components/Radio";
 export * from "./components/SegmentedTabs";
 export * from "./components/Sidenav";
 export * from "./components/Sidesheet";
+export * from "./components/Slider";
 export * from "./components/Table";
 export * from "./components/Tabs";
 export * from "./components/Tag";

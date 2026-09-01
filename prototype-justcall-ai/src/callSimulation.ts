@@ -47,6 +47,12 @@ import {
   type SuggestedAction,
 } from "./actionsData";
 import type { AgentAssistScope } from "./agentAssistScope";
+import {
+  DEFAULT_FIELD_FALLBACKS,
+  resolveFieldText,
+  type ContactRecord,
+  type FieldFallbacks,
+} from "./contactFields";
 
 /**
  * Demo pacing. The scenarios below are authored on a natural conversation
@@ -65,13 +71,6 @@ const POST_WRAP_COMPLETED_DELAY_AUTHORED_MS = 5000;
 export const POST_WRAP_COMPLETED_DELAY_MS = paced(
   POST_WRAP_COMPLETED_DELAY_AUTHORED_MS
 );
-
-import {
-  DEFAULT_FIELD_FALLBACKS,
-  resolveFieldText,
-  type ContactRecord,
-  type FieldFallbacks,
-} from "./contactFields";
 
 export interface ScriptStep {
   title: string;
@@ -255,6 +254,12 @@ export interface CallScenario {
   id: string;
   scriptName: string;
   contactName: string;
+  /**
+   * The number on the line, as digits. Rendered through
+   * `formatPhoneNumber` — a scenario should never carry a formatted string,
+   * or the bar and the recap end up disagreeing about the spacing.
+   */
+  contactNumber: string;
   contactMeta: string;
   /**
    * What the CRM holds for this contact. Fields in the script resolve against
@@ -499,6 +504,7 @@ const AUTHORED_SCENARIOS: CallScenario[] = [
     id: "discovery",
     scriptName: "Discovery call",
     contactName: "Elena Vasquez",
+    contactNumber: "14155550142",
     contactMeta: "Outbound · Sales",
     // Everything the script asks for is on the record, so no fallback fires.
     contact: {
@@ -973,6 +979,7 @@ Best,`,
     id: "account-issue",
     scriptName: "Account access support",
     contactName: "Priya Sharma",
+    contactNumber: "14155550177",
     contactMeta: "Inbound · Support",
     /**
      * The realistic inbound case: a name and the number they rang from, and
@@ -1155,6 +1162,7 @@ Best,`,
     id: "billing",
     scriptName: "Billing support",
     contactName: "Marcus Chen",
+    contactNumber: "14155550163",
     contactMeta: "Inbound · Billing",
     contact: {
       first_name: "Marcus",

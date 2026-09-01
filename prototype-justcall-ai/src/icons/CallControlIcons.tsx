@@ -125,6 +125,48 @@ export function IconCallTranscript(props: CallIconProps) {
 }
 
 /**
+ * Mute, engaged — the library's `IconVoice` mic with the line through it.
+ * A separate drawing rather than an overlaid slash: the diagonal has to cut
+ * the mic's own strokes to read at 20, and a pseudo-element on top of an
+ * `<svg>` cannot do that.
+ */
+export function IconCallMuted(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33" />
+      <path d="M9 9v3a3 3 0 0 0 5.12 2.12" />
+      <path d="M17 16.95A7 7 0 0 1 5 12v-2" />
+      <path d="M19 10v2a7 7 0 0 1-.11 1.23" />
+      <path d="M12 19v3" />
+      <path d="M3 3l18 18" />
+    </CallIcon>
+  );
+}
+
+/** Merge — two legs of a call folding into one. */
+export function IconCallMerge(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <path d="M4 4h2l5 6v10" />
+      <path d="M20 4h-2l-4 4.8" />
+      <path d="M8 17l3 3 3-3" />
+    </CallIcon>
+  );
+}
+
+/** Two people already on the line — the 3-way state. */
+export function IconCallUsers(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+      <path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+      <path d="M17 3.5a4 4 0 0 1 0 7.75" />
+      <path d="M19 15.2A4 4 0 0 1 22 19v2" />
+    </CallIcon>
+  );
+}
+
+/**
  * Pin — the drawing-pin seen from the side, head to the upper right. Two
  * strokes: the head-and-shaft, and the crossbar that keeps it from reading as
  * a balloon at 16.
@@ -133,6 +175,101 @@ export function IconCallPin(props: CallIconProps) {
   return (
     <CallIcon {...props}>
       <path d="M9 15l-5.5 5.5M14.5 3.5l6 6M16.5 5.5l-7 2-3 3 5.5 5.5 3-3 2-7" />
+    </CallIcon>
+  );
+}
+
+/**
+ * Recording, running. Filled on purpose — every other mark in this set is a
+ * stroke, so the one control that means "this is capturing right now" is the
+ * one the eye finds first.
+ */
+export function IconCallRecord(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <circle cx={12} cy={12} r={8.5} />
+      <circle cx={12} cy={12} r={4} fill="currentColor" stroke="none" />
+    </CallIcon>
+  );
+}
+
+/** Stop — the recording is finished, and for this call that is final. */
+export function IconCallStop(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <rect x={5.5} y={5.5} width={13} height={13} rx={2} />
+    </CallIcon>
+  );
+}
+
+/** Speaker — audio out, and the whole Audio settings group. */
+export function IconCallSpeaker(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" />
+      <path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" />
+      <path d="M18.5 6.5a7.5 7.5 0 0 1 0 11" />
+    </CallIcon>
+  );
+}
+
+/**
+ * Speaker, quiet. The low end of a volume scale, paired with `IconCallSpeaker`
+ * at the high end — the cone alone, with none of the arcs, so the two read as
+ * one control's two limits rather than as two different marks.
+ */
+export function IconCallSpeakerLow(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <path d="M11 5 6.5 9H3v6h3.5L11 19V5Z" />
+    </CallIcon>
+  );
+}
+
+/** Network — the reception arc, which is what the bar's signal bars stand for. */
+export function IconCallNetwork(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <path d="M2.5 8.5a13.5 13.5 0 0 1 19 0" />
+      <path d="M6 12a8.5 8.5 0 0 1 12 0" />
+      <path d="M9.5 15.5a3.5 3.5 0 0 1 5 0" />
+      <path d="M12 19.5h.01" />
+    </CallIcon>
+  );
+}
+
+/** Backspace — take back the last tone sent, not the whole string. */
+export function IconCallBackspace(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1Z" />
+      <path d="M17 9.5l-5 5M12 9.5l5 5" />
+    </CallIcon>
+  );
+}
+
+/** Run the checks again. */
+export function IconCallRetry(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <path d="M20 12a8 8 0 1 1-2.7-6" />
+      <path d="M20 4v4.5h-4.5" />
+    </CallIcon>
+  );
+}
+
+/**
+ * Drop one leg of the call — Transfer's figure with the plus turned into a
+ * minus. Deliberately the same drawing: the two are opposites on the same
+ * participant, and a hangup handset here would read as ending the whole call
+ * rather than removing one person from it.
+ */
+export function IconCallDrop(props: CallIconProps) {
+  return (
+    <CallIcon {...props}>
+      <path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+      <path d="M3 21v-2a4 4 0 0 1 4-4h4" />
+      <path d="M16 19h6" />
     </CallIcon>
   );
 }

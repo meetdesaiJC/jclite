@@ -1,4 +1,5 @@
 import { Modal } from "@/components/Modal";
+import { IconSparkles } from "@/components/Icon";
 import { cn } from "@/lib/utils";
 import {
   GUIDANCE_TEMPLATE_GROUPS,
@@ -7,13 +8,15 @@ import {
 } from "./guidanceData";
 
 /**
- * Two ways in, deliberately: a template or an empty form. AI drafting from a
- * Knowledge Base was cut — a response card is the thing the business wants
- * worded its way, so it is always authored rather than generated.
+ * Two ways in on every scope: a template or an empty form. V1 also offers AI
+ * drafting from a Knowledge Base — the admin still reviews every field before
+ * anything publishes. V2 keeps the authored-only path.
  */
 export type GuidanceStartChoice =
   | { type: "template"; templateId: GuidanceTemplateId }
-  | { type: "scratch" };
+  | { type: "scratch" }
+  /** AI drafts the whole thing from selected knowledge bases. */
+  | { type: "generate" };
 
 const choiceCardClass =
   "rounded-lg border border-line bg-white text-left transition-[border-color,background-color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-brand/40 hover:bg-brand-subtle/40 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24";
@@ -39,12 +42,15 @@ export interface GuidanceTemplatesModalProps {
   open: boolean;
   onClose: () => void;
   onSelect: (choice: GuidanceStartChoice) => void;
+  /** V1: show "Generate with AI" next to the manual option. */
+  allowGenerate?: boolean;
 }
 
 export function GuidanceTemplatesModal({
   open,
   onClose,
   onSelect,
+  allowGenerate = false,
 }: GuidanceTemplatesModalProps) {
   return (
     <Modal
@@ -52,7 +58,11 @@ export function GuidanceTemplatesModal({
       onClose={onClose}
       size="md"
       title="Create a response card"
-      description="Choose what you want to help agents handle during calls. Start with a template, or create your own."
+      description={
+        allowGenerate
+          ? "Choose what you want to help agents handle during calls. Start with a template, create your own, or let AI draft one from your Knowledge Base."
+          : "Choose what you want to help agents handle during calls. Start with a template, or create your own."
+      }
     >
       <div className="flex flex-col gap-5">
         {GUIDANCE_TEMPLATE_GROUPS.map((group) => (
@@ -90,9 +100,9 @@ export function GuidanceTemplatesModal({
           <span className="h-px flex-1 bg-line" />
         </div>
 
-        {/* One option left where there were two, so it takes the width of a
-            template card rather than half the row — a lone card stretched
-            across the modal reads as something missing beside it. */}
+        {/* Two cards share the row when Generate is on. A lone manual option
+            keeps the width of a template card — stretched across the modal it
+            reads as something missing beside it. */}
         <div className="grid grid-cols-2 items-stretch gap-2">
           <button
             type="button"
@@ -106,6 +116,21 @@ export function GuidanceTemplatesModal({
               Create manually
             </span>
           </button>
+
+          {allowGenerate ? (
+            <button
+              type="button"
+              onClick={() => onSelect({ type: "generate" })}
+              className={cn("flex h-full items-center gap-3 px-4 py-3", choiceCardClass)}
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-[6px] bg-brand-subtle text-brand">
+                <IconSparkles size={20} />
+              </span>
+              <span className="min-w-0 text-label-md-semi text-foreground">
+                Generate with AI
+              </span>
+            </button>
+          ) : null}
         </div>
       </div>
     </Modal>

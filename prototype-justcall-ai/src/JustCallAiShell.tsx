@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { type SidenavItem } from "@/components/Sidenav";
 import { type AgentAssistScope } from "./agentAssistScope";
+import { openDialerWindow, useShareBusyReasons } from "./dialerWindow";
 import { GlobalHeader } from "@/components/GlobalHeader";
 import { ProfileMenu } from "@/components/ProfileMenu";
 import { AgentAssistAdmin } from "./AgentAssistAdmin";
 import { DialerPanel } from "./DialerPanel";
 import { KnowledgePage } from "./KnowledgePage";
 import { IntegrationsPage } from "./IntegrationsPage";
+import { SettingsPage } from "./SettingsPage";
+import { SEED_BUSY_REASONS, type BusyReason } from "./callDeviceData";
 import {
   SEED_CONNECTED_SOURCES,
   SEED_KNOWLEDGE_SOURCES,
@@ -104,9 +107,25 @@ export function JustCallAiShell({
   const [connectedSources, setConnectedSources] = useState<
     KnowledgeIntegrationRef[]
   >(seeded ? SEED_CONNECTED_SOURCES : []);
+  // The admin authors these on Settings and the webphone reads them, so they
+  // live one level above both — the same reason the knowledge sources do. On a
+  // day-one account nobody has set any up yet, which is why going Unavailable
+  // in the dialer asks for nothing until Settings has something to offer.
+  const [busyReasons, setBusyReasons] = useState<BusyReason[]>(
+    seeded ? SEED_BUSY_REASONS : []
+  );
   useEffect(() => {
     setDialerOpen(false);
   }, [activeKey]);
+
+  // V1's webphone is its own tab, so this page keeps the admin screen the
+  // agent popped it from and the Dialer button stops being a toggle — nothing
+  // here can know whether that tab is still up. See `dialerWindow`.
+  const poppedOut = scope === "v1";
+  // The list still has to reach it. Publishing on every change keeps the
+  // Settings → going Unavailable connection the in-page dialer got for free
+  // from props, including into a webphone that is already open.
+  useShareBusyReasons(busyReasons, poppedOut);
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -121,6 +140,10 @@ export function JustCallAiShell({
         dialerOpen={dialerOpen}
         onDialerClick={() => {
           setProfileMenuOpen(false);
+          if (poppedOut) {
+            openDialerWindow({ scope, busyReasons });
+            return;
+          }
           setDialerOpen((open) => !open);
         }}
         profileMenuOpen={profileMenuOpen}
@@ -132,7 +155,10 @@ export function JustCallAiShell({
       />
 
       {dialerOpen ? (
-        <DialerPanel onClose={() => setDialerOpen(false)} />
+        <DialerPanel
+          busyReasons={busyReasons}
+          onClose={() => setDialerOpen(false)}
+        />
       ) : activeKey === "agent-assist" ? (
         <AgentAssistAdmin
           seeded={seeded}
@@ -152,6 +178,13 @@ export function JustCallAiShell({
           <IntegrationsPage
             connections={connectedSources}
             onConnectionsChange={setConnectedSources}
+          />
+        </div>
+      ) : activeKey === "settings" ? (
+        <div className="flex h-full min-h-0 flex-1 overflow-hidden bg-white">
+          <SettingsPage
+            reasons={busyReasons}
+            onReasonsChange={setBusyReasons}
           />
         </div>
       ) : (

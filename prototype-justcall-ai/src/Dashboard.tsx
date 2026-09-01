@@ -13,6 +13,7 @@ import { ProfileMenu } from "@/components/ProfileMenu";
 import { IconCalendarTime, IconMailShare } from "@/components/Icon";
 import { DialerPanel } from "./DialerPanel";
 import { type AgentAssistScope } from "./agentAssistScope";
+import { openDialerWindow } from "./dialerWindow";
 
 /**
  * Dashboard — landing content for the JustCall AI prototype.
@@ -254,14 +255,24 @@ export interface DashboardProps {
   profileName?: string;
   /** Passed straight to the dialer — see `agentAssistScope`. */
   scope?: AgentAssistScope;
+  /**
+   * Passed straight to the dialer: off walks the same call on an account with
+   * nothing authored in Agent Assist, so it never leaves the webphone.
+   */
+  assistConfigured?: boolean;
 }
 
 export function Dashboard({
   profileName = "Sarah Johnson",
   scope = "v2",
+  assistConfigured = true,
 }: DashboardProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);
+  // V1's webphone is its own tab, so the dashboard never gives up its content
+  // to it — and the Dialer button stops being a toggle, since this page has no
+  // way to know whether that tab is still up. See `dialerWindow`.
+  const poppedOut = scope === "v1";
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -276,6 +287,10 @@ export function Dashboard({
         dialerOpen={dialerOpen}
         onDialerClick={() => {
           setProfileMenuOpen(false);
+          if (poppedOut) {
+            openDialerWindow({ scope, assistConfigured });
+            return;
+          }
           setDialerOpen((open) => !open);
         }}
         profileMenuOpen={profileMenuOpen}
@@ -287,7 +302,11 @@ export function Dashboard({
       />
 
       {dialerOpen ? (
-        <DialerPanel scope={scope} onClose={() => setDialerOpen(false)} />
+        <DialerPanel
+          scope={scope}
+          assistConfigured={assistConfigured}
+          onClose={() => setDialerOpen(false)}
+        />
       ) : (
         <>
       <div className="flex items-center gap-8 border-b border-line px-6">
