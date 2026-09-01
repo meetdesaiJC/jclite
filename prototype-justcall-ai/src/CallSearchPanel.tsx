@@ -315,7 +315,19 @@ function HitCard({
         !reduced && "assist-card-enter"
       )}
     >
-      <div className="flex items-start gap-2 px-3 py-2">
+      {/* Pin leads, disclosure closes. The two used to sit together on the
+          right, where the pin read as the card's main action; leading with it
+          makes it the row's mark — the thing you set on the card — and leaves
+          the chevron as the last thing on the line, which is where a
+          disclosure is looked for. */}
+      <div className="group flex items-start gap-2 px-3 py-2">
+        <PinControl
+          pinned={pinned}
+          blocked={pinBlocked}
+          title={hit.title}
+          onClick={onTogglePin}
+        />
+
         <button
           type="button"
           aria-expanded={open}
@@ -339,13 +351,6 @@ function HitCard({
             {open ? <IconChevronUp size={16} /> : <IconChevronDown size={16} />}
           </span>
         </button>
-
-        <PinControl
-          pinned={pinned}
-          blocked={pinBlocked}
-          title={hit.title}
-          onClick={onTogglePin}
-        />
       </div>
 
       <div
@@ -384,11 +389,21 @@ function PinControl({
       disabled={blocked}
       onClick={onClick}
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-[4px] outline-none transition-colors",
+        // -mt-0.5 centres the 28px target on the 20px title line rather than
+        // on the block, so the icon reads as sitting *on* the title.
+        "-mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-[4px] outline-none",
+        // One property list, because two `transition-*` utilities would leave
+        // only the last one standing. Opacity and colour move together here.
+        "transition-[opacity,color,background-color]",
         "focus-visible:ring-2 focus-visible:ring-brand/24",
         pinned
           ? "text-brand hover:bg-brand-subtle"
           : "text-muted-foreground hover:bg-surface-hover hover:text-foreground",
+        // An unset pin is an offer, not a state — it stays out of the reading
+        // until the agent is on the card. A set one is the state, so it never
+        // hides. `group-focus-within` keeps it reachable without a mouse.
+        !pinned &&
+          "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
         blocked && "cursor-not-allowed text-disabled-fg hover:bg-transparent"
       )}
     >
