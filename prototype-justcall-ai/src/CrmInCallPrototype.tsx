@@ -7,6 +7,7 @@ import { useDragPosition } from "@/lib/useDragPosition";
 import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
 import { AgentAssistCallSheet } from "./AgentAssistCallSheet";
+import hangupIcon from "./assets/dialer/hangup.svg";
 import { BarControl } from "./CallBarControl";
 import { voicemailLibrary } from "./callDeviceData";
 import {
@@ -56,7 +57,12 @@ type AssistTab = "script" | "guidance";
 type CallSurface = "keypad" | "transfer" | "voicemail";
 type CallPanel = CallSurface | "notes";
 
-const scenario = CALL_SCENARIOS[0]!;
+/**
+ * The call on the line. Which script the agent runs is a choice made *on top*
+ * of it, so switching scripts must never swap who is on the other end — the
+ * caller, the number and the transfer flow's customer all read from here.
+ */
+const CALL = CALL_SCENARIOS[0]!;
 
 /**
  * The widget's box. Width is the design's; the height is capped rather than
@@ -147,6 +153,11 @@ type CallOutcome = { label: string; detail: string };
 
 export function CrmInCallPrototype() {
   const [tab, setTab] = useState<AssistTab>("script");
+  /* Which script is running. The picker lives in the Script pane's own header,
+     so both panes read the choice off one piece of state. */
+  const [scriptId, setScriptId] = useState(CALL.id);
+  const scenario =
+    CALL_SCENARIOS.find((item) => item.id === scriptId) ?? CALL;
   const [elapsedMs, setElapsedMs] = useState(14_000);
   const [notes, setNotes] = useState<NotesEditorValue>({ html: "", text: "" });
 
@@ -203,7 +214,7 @@ export function CrmInCallPrototype() {
    */
   const keypad = useKeypad();
   const transfer = useTransferFlow({
-    customerName: scenario.contactName,
+    customerName: CALL.contactName,
     elapsedMs,
     customerHeld: onHold,
     onCustomerHoldChange: setOnHold,
@@ -319,24 +330,28 @@ export function CrmInCallPrototype() {
                 {statusLabel ? ` · ${statusLabel}` : ""}
               </p>
             </div>
+            {/* Recording and the signal meter both report on the line rather
+                than on the call, so they share the row the caller's name is
+                on. The pill used to hold a 38px row of its own, which in a
+                430px panel is a row of the script the agent could have been
+                reading instead. */}
             {live ? (
-              <div className="flex items-end gap-[3px] pt-1" aria-label="Strong connection">
-                {[8, 12, 16, 20].map((height) => (
-                  <span key={height} className="w-[3px] rounded-full bg-success" style={{ height }} />
-                ))}
+              <div className="flex shrink-0 items-center gap-2.5">
+                <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-white px-2 text-[11px] font-medium text-error">
+                  <i className="size-2 rounded-full bg-error not-italic" />
+                  Recording
+                </span>
+                <div className="flex items-end gap-[3px]" aria-label="Strong connection">
+                  {[8, 12, 16, 20].map((height) => (
+                    <span key={height} className="w-[3px] rounded-full bg-success" style={{ height }} />
+                  ))}
+                </div>
               </div>
             ) : null}
           </div>
 
           {live ? (
             <>
-              <div className="mt-2.5 flex h-7 items-center">
-                <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-white px-2.5 text-[11px] font-medium text-error">
-                  <i className="size-2 rounded-full bg-error not-italic" />
-                  Recording
-                </span>
-              </div>
-
               {/* The dialer's live bar, in the order the dialer has it: the two
                   toggles that interrupt the line, then the four controls that
                   open a surface, then End call. `BarControl` rather than a
@@ -399,14 +414,23 @@ export function CrmInCallPrototype() {
                 >
                   <IconCallNotes size={20} />
                 </BarControl>
+                {/* The dialer's End call button, not a smaller relative of
+                    it: same white pill, same hangup mark off the same asset,
+                    same label type. It read as a different button before
+                    because it was one — a text glyph and an ad-hoc 11px. */}
                 <button
                   type="button"
                   onClick={() =>
                     setOutcome({ label: "Call ended", detail: "Ended by you" })
                   }
-                  className="ml-auto flex h-8 shrink-0 items-center rounded-full bg-white px-3 text-[11px] font-medium text-error transition-colors duration-base hover:bg-surface-hover"
+                  className="ml-auto flex h-10 shrink-0 items-center gap-2 rounded-full bg-white pr-4 pl-3 outline-none transition-colors duration-base hover:bg-surface-hover focus-visible:ring-4 focus-visible:ring-white/30 active:scale-[0.97]"
                 >
-                  ☎ &nbsp; End call
+                  <span className="relative size-6 shrink-0 overflow-clip">
+                    <img src={hangupIcon} alt="" className="size-full object-contain" />
+                  </span>
+                  <span className="text-label-sm whitespace-nowrap text-error">
+                    End call
+                  </span>
                 </button>
               </div>
             </>
@@ -426,7 +450,11 @@ export function CrmInCallPrototype() {
               className="grid h-11 w-full shrink-0 grid-cols-2 gap-0 border-b border-line px-1 [&>button]:items-center"
             />
             <div className="min-h-0 flex-1 overflow-hidden">
-              {tab === "script" ? <AgentAssistCallSheet elapsedMs={elapsedMs} scenario={scenario} onScenarioChange={() => undefined} scope="v1" guidanceDetached className="h-full [&>header]:hidden" /> : null}
+              {/* The Script pane keeps its header here — hidden everywhere
+                  else in this panel — because that header is where the script
+                  picker lives. Its title is dropped: the tab above already
+                  says "Script". */}
+              {tab === "script" ? <AgentAssistCallSheet elapsedMs={elapsedMs} scenario={scenario} onScenarioChange={setScriptId} scope="v1" guidanceDetached titleHidden transcriptDetached className="h-full [&>header]:h-9" /> : null}
               {tab === "guidance" ? <LiveAgentAssistPanel elapsedMs={elapsedMs} scenario={scenario} scope="v1" className="h-full [&>header]:hidden" /> : null}
             </div>
           </div>

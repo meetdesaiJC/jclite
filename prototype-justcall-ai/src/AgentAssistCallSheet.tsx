@@ -131,6 +131,12 @@ export interface AgentAssistCallSheetProps {
   actionStates?: Record<string, ActionState>;
   /** V1 has no in-call actions, so the recap can never open pre-completed. */
   scope?: AgentAssistScope;
+  /**
+   * Something around this pane already names the view — a tab row above it in
+   * the CRM panel — so the header keeps only its controls. Dropping the whole
+   * header instead would take the script picker with it.
+   */
+  titleHidden?: boolean;
   className?: string;
 }
 
@@ -148,6 +154,7 @@ export function AgentAssistCallSheet({
   guidanceDetached = false,
   actionStates,
   scope = "v2",
+  titleHidden = false,
   className,
 }: AgentAssistCallSheetProps) {
   const [view, setView] = useState<"assist" | "transcript">("assist");
@@ -211,10 +218,11 @@ export function AgentAssistCallSheet({
       <header
         className={cn(
           "flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-4",
+          titleHidden && "justify-end",
           !reduced && "assist-head-in"
         )}
       >
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className={cn("flex min-w-0 items-center gap-1.5", titleHidden && "hidden")}>
           {ended ? (
             <IconSparkles
               size={16}
@@ -1325,6 +1333,9 @@ export interface LiveTranscriptPanelProps {
    */
   active?: boolean;
   onClose?: () => void;
+  /** Same bargain as the assist sheet's: something outside already names the
+      pane, so the header keeps only its close control. */
+  titleHidden?: boolean;
   className?: string;
 }
 
@@ -1335,6 +1346,7 @@ export function LiveTranscriptPanel({
   exiting = false,
   active = true,
   onClose,
+  titleHidden = false,
   className,
 }: LiveTranscriptPanelProps) {
   const snapshot = simulationAt(scenario, elapsedMs, guidanceItems);
@@ -1352,10 +1364,11 @@ export function LiveTranscriptPanel({
       <header
         className={cn(
           "flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-4",
+          titleHidden && "justify-end",
           !reduced && "assist-head-in"
         )}
       >
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className={cn("flex min-w-0 items-center gap-1.5", titleHidden && "hidden")}>
           <IconWaveform className="size-4 shrink-0 text-muted-foreground" />
           <span className="text-label-md-semi text-foreground">Live transcript</span>
         </div>
