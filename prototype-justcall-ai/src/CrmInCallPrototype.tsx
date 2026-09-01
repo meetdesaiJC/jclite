@@ -8,6 +8,7 @@ import { usePresence } from "@/lib/usePresence";
 import { cn } from "@/lib/utils";
 import { AgentAssistCallSheet } from "./AgentAssistCallSheet";
 import hangupIcon from "./assets/dialer/hangup.svg";
+import justcallMark from "./assets/justcall-mark.svg";
 import { BarControl } from "./CallBarControl";
 import { voicemailLibrary } from "./callDeviceData";
 import {
@@ -300,8 +301,7 @@ export function CrmInCallPrototype() {
             : "shadow-400 transition-[translate] duration-fast ease-standard motion-reduce:transition-none"
         )}
       >
-        {/* The title bar is the grip. The real JustCall mark replaces this
-            square once the asset lands — initials are a stand-in. */}
+        {/* The title bar is the grip. */}
         <header
           {...drag.handleProps}
           className={cn(
@@ -309,8 +309,10 @@ export function CrmInCallPrototype() {
             drag.dragging ? "cursor-grabbing" : "cursor-grab"
           )}
         >
-          <div className="flex items-center gap-2">
-            <span className="flex size-6 items-center justify-center rounded-[6px] bg-brand text-[11px] font-bold text-white">JC</span>
+          <div className="flex items-center gap-1">
+            {/* The mark carries its own padding from the favicon export, so the
+                gap to the wordmark is one step tighter than it looks. */}
+            <img src={justcallMark} alt="" aria-hidden="true" className="size-7 shrink-0" />
             <span className="text-label-md-semi text-foreground">JustCall</span>
           </div>
           <button type="button" aria-label="Close panel" className="text-muted-foreground hover:text-foreground">

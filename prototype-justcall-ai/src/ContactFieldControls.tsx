@@ -1,7 +1,6 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
-import { IconAlertTriangleFilled, IconContacts } from "@/components/Icon";
 import { InputField } from "@/components/InputField";
 import { useDropdownPresence } from "@/components/Dropdown/useDropdownPresence";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
@@ -19,19 +18,19 @@ import {
 
 /**
  * The three surfaces a contact field needs in the builder: a way to put one
- * in, a way to see what it becomes, and a way to say what happens when the
- * record is empty. They are here rather than in PlaybookEditor because the
- * fallbacks belong to the script as a whole and the other two belong to a
- * step — one file for the feature reads better than the feature split across
- * the editor and the page that hosts it.
+ * in, a way to read it in the sentence it lands in, and a way to say what
+ * happens when the record is empty. They are here rather than in
+ * PlaybookEditor because the fallbacks belong to the script as a whole and the
+ * other two belong to a step — one file for the feature reads better than the
+ * feature split across the editor and the page that hosts it.
  */
 
 /* ------------------------------------------------------------------ insert */
 
 /**
- * Sits beside the AI control on a step's wording. Icon-only for the same
- * reason that one is: the field is 3 lines tall and the two affordances share
- * its top-right corner.
+ * Sits on the bar under a step's wording, at the end of the line the admin is
+ * writing rather than on top of it. Braces rather than a word: the admin is
+ * about to put a token in, and the glyph is the token.
  */
 export function InsertFieldButton({
   disabled,
@@ -71,12 +70,12 @@ export function InsertFieldButton({
             setOpen((current) => !current);
           }}
           className={cn(
-            "flex size-7 items-center justify-center rounded-[4px] text-muted-foreground hover:bg-secondary-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24 disabled:pointer-events-none disabled:opacity-40",
+            "flex h-7 items-center justify-center rounded-[4px] border border-line bg-white px-2 text-label-sm text-muted-foreground hover:bg-secondary-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24 disabled:pointer-events-none disabled:opacity-40",
             open && "bg-secondary-bg text-foreground",
             className
           )}
         >
-          <IconContacts size={16} />
+          {"{ }"}
         </button>
       </TooltipTrigger>
 
@@ -107,15 +106,21 @@ function FieldMenu({
   onPick: (field: ContactFieldMeta) => void;
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null);
-  const [pos, setPos] = React.useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number; above: boolean } | null>(null);
   const WIDTH = 216;
 
   const updatePos = React.useCallback(() => {
     const rect = anchorRef.current?.getBoundingClientRect();
     if (!rect) return;
+    // The trigger sits at the bottom of a tall field, so below is often off
+    // screen. Measure the panel we have already rendered rather than guessing
+    // at its height from the field count.
+    const height = panelRef.current?.offsetHeight ?? 0;
+    const above = rect.bottom + 4 + height > window.innerHeight - 8 && rect.top - 4 - height > 8;
     setPos({
-      top: rect.bottom + 4,
+      top: above ? rect.top - 4 - height : rect.bottom + 4,
       left: Math.max(8, Math.min(rect.right - WIDTH, window.innerWidth - WIDTH - 8)),
+      above,
     });
   }, [anchorRef]);
 
@@ -146,8 +151,6 @@ function FieldMenu({
     };
   }, [anchorRef, onClose, updatePos]);
 
-  if (!pos) return null;
-
   return createPortal(
     <div
       ref={panelRef}
@@ -155,7 +158,16 @@ function FieldMenu({
       aria-label="Insert contact field"
       data-state={panelState}
       className="dropdown-panel z-50 overflow-hidden rounded-[8px] border border-line bg-white py-1 shadow-200"
-      style={{ position: "fixed", top: pos.top, left: pos.left, width: WIDTH, transformOrigin: "top right" }}
+      style={{
+        position: "fixed",
+        top: pos?.top ?? 0,
+        left: pos?.left ?? 0,
+        width: WIDTH,
+        // Hidden for the one frame between mount and measurement — the flip
+        // needs a height, and a height needs a rendered panel.
+        visibility: pos ? undefined : "hidden",
+        transformOrigin: pos?.above ? "bottom right" : "top right",
+      }}
     >
       <p className="px-3 pt-1.5 pb-1 text-label-sm text-muted-foreground">
         Insert contact field
@@ -166,15 +178,9 @@ function FieldMenu({
           type="button"
           role="menuitem"
           onClick={() => onPick(field)}
-          className="dropdown-item flex w-full items-baseline justify-between gap-3 px-3 py-1.5 text-left hover:bg-secondary-bg focus-visible:bg-secondary-bg focus-visible:outline-none"
+          className="dropdown-item flex w-full items-center px-3 py-1.5 text-left hover:bg-secondary-bg focus-visible:bg-secondary-bg focus-visible:outline-none"
         >
           <span className="text-paragraph-sm text-foreground">{field.label}</span>
-          {/* The sample, not the token: the admin is picking what the sentence
-              will say, and the braces are an implementation detail they never
-              have to type. */}
-          <span className="truncate text-label-sm text-muted-foreground">
-            {field.sample}
-          </span>
         </button>
       ))}
     </div>,
@@ -182,84 +188,62 @@ function FieldMenu({
   );
 }
 
-/* ----------------------------------------------------------------- preview */
+/* ------------------------------------------------------------------- chips */
+
+/** `{{ first_name }}` split into the braces and the name between them. */
+const TOKEN_PARTS = /^(\{\{\s*)([\s\S]*?)(\s*\}\})$/;
 
 /**
- * The resolved sentence, under the field it belongs to. Values from the record
- * are marked in brand; values standing in for missing data are marked in
- * warning — the difference is the whole point of the fallback, so it has to be
- * visible without reading the two versions side by side.
+ * The chips the admin sees while typing. A textarea cannot paint a background
+ * behind part of its own value, so this mirror sits directly under one with
+ * the same metrics and draws the tokens; the textarea on top keeps the caret,
+ * the selection and the wrapping, and renders its own text transparent.
+ *
+ * Nothing here may change the width of a character or the two drift apart —
+ * which is why the braces are still drawn, just transparent. They are the
+ * chip's padding.
  */
-export function FieldPreviewLine({
-  text,
-  contact,
-  fallbacks,
-  className,
-}: {
-  text: string;
-  contact: ContactRecord;
-  fallbacks: FieldFallbacks;
-  className?: string;
-}) {
-  const segments = segmentFieldText(text, contact, fallbacks);
-  const hasUnknown = segments.some((segment) => segment.kind === "unknown");
-
+export const FieldTokenOverlay = React.forwardRef<
+  HTMLDivElement,
+  { text: string; className?: string }
+>(function FieldTokenOverlay({ text, className }, ref) {
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      <p className="flex flex-wrap items-baseline gap-x-1.5 text-paragraph-sm text-muted-foreground">
-        <span className="shrink-0 text-label-sm">On this call</span>
-        <span className="min-w-0 text-foreground">
-          “
-          {segments.map((segment, index) => {
-            if (segment.kind === "text") {
-              return <React.Fragment key={index}>{segment.text}</React.Fragment>;
-            }
-            if (segment.kind === "unknown") {
-              return (
-                <span
-                  key={index}
-                  className="rounded-[3px] bg-error-subtle px-1 text-error line-through"
-                  title={`${segment.name} is not a contact field`}
-                >
-                  {segment.raw}
-                </span>
-              );
-            }
-            // A blank resolution has nothing to mark — the sentence simply
-            // closes over it, which is exactly what the agent will hear.
-            if (!segment.value) return null;
-            return (
-              <span
-                key={index}
-                className={cn(
-                  "rounded-[3px] px-1",
-                  segment.filled
-                    ? "bg-brand-subtle text-brand"
-                    : "bg-warning-secondary text-warning-text"
-                )}
-                title={
-                  segment.filled
-                    ? `${segment.field.label} from the contact record`
-                    : `${segment.field.label} is empty — using the fallback`
-                }
-              >
-                {segment.value}
-              </span>
-            );
-          })}
-          ”
-        </span>
-      </p>
-      {hasUnknown ? (
-        <p className="flex items-start gap-1.5 text-label-sm text-error">
-          <IconAlertTriangleFilled size={16} className="mt-px size-4 shrink-0" />
-          That field doesn’t exist. Agents will hear the sentence without it —
-          insert one from the list instead.
-        </p>
-      ) : null}
+    <div
+      ref={ref}
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words text-paragraph-md text-foreground",
+        className
+      )}
+    >
+      {segmentFieldText(text).map((segment, index) => {
+        if (segment.kind === "text") {
+          return <React.Fragment key={index}>{segment.text}</React.Fragment>;
+        }
+        // A token naming nothing is not a field yet, so it gets no chip — it
+        // reads as the typo it is.
+        if (segment.kind === "unknown") {
+          return <React.Fragment key={index}>{segment.raw}</React.Fragment>;
+        }
+        const parts = TOKEN_PARTS.exec(segment.raw);
+        if (!parts) return <React.Fragment key={index}>{segment.raw}</React.Fragment>;
+        return (
+          <span
+            key={index}
+            className="box-decoration-clone rounded-[3px] bg-badge-bluegrey-bg text-foreground"
+          >
+            <span className="text-transparent">{parts[1]}</span>
+            {parts[2]}
+            <span className="text-transparent">{parts[3]}</span>
+          </span>
+        );
+      })}
+      {/* Wording that ends in a newline would otherwise leave the mirror one
+          line short of the textarea. */}
+      {"​"}
     </div>
   );
-}
+});
 
 /* --------------------------------------------------------------- fallbacks */
 

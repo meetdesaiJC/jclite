@@ -18,14 +18,8 @@ import {
   type WordingTone,
 } from "./scriptPlaybook";
 import { useScriptCardReorder } from "./useScriptCardReorder";
-import {
-  hasFields,
-  insertFieldToken,
-  SAMPLE_CONTACT,
-  type ContactFieldMeta,
-  type FieldFallbacks,
-} from "./contactFields";
-import { FieldPreviewLine, InsertFieldButton } from "./ContactFieldControls";
+import { insertFieldToken, type ContactFieldMeta } from "./contactFields";
+import { FieldTokenOverlay, InsertFieldButton } from "./ContactFieldControls";
 
 function DragHandleIcon({ size = 16 }: { size?: number }) {
   return (
@@ -328,7 +322,6 @@ export function PlaybookEditor({
                   stepIndex={stepIndex}
                   stepsLength={steps.length}
                   canRewrite={canRewrite}
-                  fallbacks={playbook.fieldFallbacks}
                   menuOpen={menuStepId === item.id}
                   customOpen={customStepId === item.id}
                   draft={itemDraft}
@@ -394,7 +387,6 @@ export function PlaybookEditor({
                 canRewrite={Boolean(
                   floatingStep.title.trim() || floatingStep.suggestedWording.trim()
                 )}
-                fallbacks={playbook.fieldFallbacks}
                 menuOpen={false}
                 customOpen={false}
                 draft={draft?.stepId === floatingStep.id ? draft : null}
@@ -433,7 +425,6 @@ function ScriptStepCard({
   stepIndex,
   stepsLength,
   canRewrite,
-  fallbacks,
   menuOpen,
   customOpen,
   draft,
@@ -458,7 +449,6 @@ function ScriptStepCard({
   stepIndex: number;
   stepsLength: number;
   canRewrite: boolean;
-  fallbacks: FieldFallbacks;
   menuOpen: boolean;
   customOpen: boolean;
   draft: AiDraft | null;
@@ -570,7 +560,6 @@ function ScriptStepCard({
         item={item}
         preview={preview}
         canRewrite={canRewrite}
-        fallbacks={fallbacks}
         onInsertField={insertField}
         menuOpen={menuOpen}
         customOpen={customOpen}
@@ -608,7 +597,6 @@ function ScriptWordingField({
   item,
   preview,
   canRewrite,
-  fallbacks,
   onInsertField,
   menuOpen,
   customOpen,
@@ -631,7 +619,6 @@ function ScriptWordingField({
   item: PlaybookStep;
   preview: boolean;
   canRewrite: boolean;
-  fallbacks: FieldFallbacks;
   onInsertField: (field: ContactFieldMeta) => void;
   menuOpen: boolean;
   customOpen: boolean;
@@ -652,11 +639,7 @@ function ScriptWordingField({
   onCancelDraft: () => void;
 }) {
   const menuPresence = useDropdownPresence(menuOpen && !preview);
-
-  // The preview only earns its line when there is something to resolve, and
-  // never while an AI draft is on screen — that draft is not what the agent
-  // will hear yet.
-  const showPreview = hasFields(item.suggestedWording) && !showingAi;
+  const overlayRef = React.useRef<HTMLDivElement>(null);
 
   return (
     <div className="flex flex-col gap-2">
@@ -694,34 +677,53 @@ function ScriptWordingField({
           onCancel={onCancelDraft}
         />
       ) : (
-        <textarea
-          ref={textareaRef}
-          value={item.suggestedWording}
-          onChange={(event) => onUpdate({ suggestedWording: event.target.value })}
-          onSelect={(event) => onCaptureSelection(event.currentTarget)}
-          onKeyUp={(event) => onCaptureSelection(event.currentTarget)}
-          onMouseUp={(event) => onCaptureSelection(event.currentTarget)}
-          placeholder="What the agent should say"
-          aria-label="Suggested wording"
-          rows={3}
-          readOnly={preview}
-          tabIndex={preview ? -1 : 0}
-          className="min-h-[72px] w-full resize-y rounded-[4px] bg-transparent px-3 py-2 pr-16 text-paragraph-md text-foreground outline-none placeholder:text-muted-foreground"
-        />
+        <>
+          <div className="relative">
+            {/* The chips live on a mirror under the textarea; the two share
+                every metric, so the padding here has to match the padding
+                there exactly. */}
+            <FieldTokenOverlay
+              ref={overlayRef}
+              text={item.suggestedWording}
+              className="px-3 py-2 pr-10"
+            />
+            <textarea
+              ref={textareaRef}
+              value={item.suggestedWording}
+              onChange={(event) => onUpdate({ suggestedWording: event.target.value })}
+              onSelect={(event) => onCaptureSelection(event.currentTarget)}
+              onKeyUp={(event) => onCaptureSelection(event.currentTarget)}
+              onMouseUp={(event) => onCaptureSelection(event.currentTarget)}
+              onScroll={(event) => {
+                if (overlayRef.current) {
+                  overlayRef.current.scrollTop = event.currentTarget.scrollTop;
+                }
+              }}
+              placeholder="What the agent should say"
+              aria-label="Suggested wording"
+              rows={3}
+              readOnly={preview}
+              tabIndex={preview ? -1 : 0}
+              className="relative block min-h-[72px] w-full resize-y rounded-[4px] bg-transparent px-3 py-2 pr-10 text-paragraph-md text-transparent caret-foreground outline-none selection:bg-brand/24 placeholder:text-muted-foreground"
+            />
+          </div>
+
+          {/* Its own bar rather than a third icon in the corner: inserting a
+              field is a step in writing the line, not a control over it. */}
+          <div className="flex items-center justify-end rounded-b-[4px] border-t border-line bg-secondary-bg px-2 py-1.5">
+            <InsertFieldButton
+              disabled={preview}
+              onBeforeOpen={() => {
+                if (textareaRef.current) onCaptureSelection(textareaRef.current);
+              }}
+              onInsert={onInsertField}
+            />
+          </div>
+        </>
       )}
 
       {!showingAi ? (
-        // Two affordances, one corner: insert a field, or rewrite the line.
-        // The field control comes first because it acts on the caret, and the
-        // AI one acts on everything around it.
         <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5">
-          <InsertFieldButton
-            disabled={preview}
-            onBeforeOpen={() => {
-              if (textareaRef.current) onCaptureSelection(textareaRef.current);
-            }}
-            onInsert={onInsertField}
-          />
           <button
             ref={sparklesRef}
             type="button"
@@ -761,15 +763,6 @@ function ScriptWordingField({
         />
       ) : null}
       </div>
-
-      {showPreview ? (
-        <FieldPreviewLine
-          text={item.suggestedWording}
-          contact={SAMPLE_CONTACT}
-          fallbacks={fallbacks}
-          className="px-0.5"
-        />
-      ) : null}
     </div>
   );
 }
