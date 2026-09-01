@@ -504,6 +504,9 @@ const AUTHORED_SCENARIOS: CallScenario[] = [
       company: "Acme Corp",
       email: "elena@acmecorp.com",
       phone: "+1 415 555 0142",
+      // The discovery step asks what they run today; the authored story
+      // answers Salesforce. Without it the step reads its fallback aloud.
+      crm_name: "Salesforce",
     },
     // Story follows the script: Aircall → after-hours pain → cost of
     // missed leads → Salesforce for the ops lead → price → book session.
