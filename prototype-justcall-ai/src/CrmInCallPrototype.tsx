@@ -47,7 +47,7 @@ import {
  */
 
 /** The two views. Everything else the panel can show is a control's surface. */
-type AssistTab = "guidance" | "script";
+type AssistTab = "script" | "guidance";
 
 /**
  * What a call control can open over the tabs — the dialer's own three, and
@@ -146,7 +146,7 @@ function formatDuration(ms: number) {
 type CallOutcome = { label: string; detail: string };
 
 export function CrmInCallPrototype() {
-  const [tab, setTab] = useState<AssistTab>("guidance");
+  const [tab, setTab] = useState<AssistTab>("script");
   const [elapsedMs, setElapsedMs] = useState(14_000);
   const [notes, setNotes] = useState<NotesEditorValue>({ html: "", text: "" });
 
@@ -420,14 +420,14 @@ export function CrmInCallPrototype() {
         <div className="relative min-h-0 flex-1">
           <div className="flex h-full min-h-0 flex-col">
             <Tabs
-              items={[{ key: "guidance", label: "Guidance" }, { key: "script", label: "Script" }]}
+              items={[{ key: "script", label: "Script" }, { key: "guidance", label: "Guidance" }]}
               value={tab}
               onValueChange={(key) => setTab(key as AssistTab)}
               className="grid h-11 w-full shrink-0 grid-cols-2 gap-0 border-b border-line px-1 [&>button]:items-center"
             />
             <div className="min-h-0 flex-1 overflow-hidden">
-              {tab === "guidance" ? <LiveAgentAssistPanel elapsedMs={elapsedMs} scenario={scenario} scope="v1" className="h-full [&>header]:hidden" /> : null}
               {tab === "script" ? <AgentAssistCallSheet elapsedMs={elapsedMs} scenario={scenario} onScenarioChange={() => undefined} scope="v1" guidanceDetached className="h-full [&>header]:hidden" /> : null}
+              {tab === "guidance" ? <LiveAgentAssistPanel elapsedMs={elapsedMs} scenario={scenario} scope="v1" className="h-full [&>header]:hidden" /> : null}
             </div>
           </div>
 
