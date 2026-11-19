@@ -88,9 +88,21 @@ const APP_VIEWS: readonly AppView[] = [
 
 /**
  * The open prototype lives in the URL hash, so the browser's Back button
- * returns to the launcher and a reload lands where it was. The hash, not the
- * query string: `?` already belongs to the popped-out dialer window.
+ * returns to the launcher and a shared link opens straight into a prototype.
+ * The hash, not the query string: `?` already belongs to the popped-out
+ * dialer window.
+ *
+ * A reload is the exception: it returns to the launcher. A demo restarts
+ * from the entry point rather than mid-flow, with whatever state the page
+ * had already gone. Only a reload — a link opened fresh still deep-links.
  */
+const RELOADED =
+  (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)
+    ?.type === "reload";
+if (RELOADED && window.location.hash) {
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+}
+
 function viewFromHash(): AppView {
   const key = window.location.hash.slice(1);
   return (APP_VIEWS as readonly string[]).includes(key) ? (key as AppView) : "launcher";
@@ -686,7 +698,8 @@ export default function App() {
   if (view === "lite" || view === "view-only" || view === "license-admin") {
     // Lite and View-only are one prototype: same element, same position, so
     // switching license keeps whatever page the reviewer is on. The switch
-    // swaps the hash in place (no new history entry) so a reload keeps it.
+    // swaps the hash in place (no new history entry), so Back still leads
+    // to the launcher.
     return (
       <LicenseFlow
         experience={view}
