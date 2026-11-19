@@ -175,12 +175,9 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
                           padded="comfortable"
                           className="max-w-[280px]"
                         >
-                          <span className="flex flex-col gap-1 whitespace-normal px-1 py-2">
-                            <span className="text-label-md">How license counts work</span>
-                            <span className="text-tooltip-dark-muted">
-                              License counts are set by your contract. To change them,
-                              contact your CSM at <CsmEmail tone="dark" />.
-                            </span>
+                          <span className="block whitespace-normal px-1 py-2 text-tooltip-dark-fg">
+                            License counts are set by your contract. To change them,
+                            contact your CSM at <CsmEmail tone="dark" />.
                           </span>
                         </Tooltip>
                       }
