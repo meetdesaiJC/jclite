@@ -110,10 +110,55 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
     <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-white p-6">
       <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6">
         <Card>
-          <CardHeading
-            title="Plan Details"
-            subtitle={`Your subscription renews on ${BILLING.renewsOn}`}
-          />
+          <div className="flex items-start justify-between gap-4">
+            <CardHeading
+              title="Plan Details"
+              subtitle={`Your subscription renews on ${BILLING.renewsOn}`}
+            />
+            {/* The whole card is contract-bound, so the tag sits on the card,
+                not on a row. Interactive so the CSM's email can be clicked. */}
+            <TooltipTrigger
+              placement="bottom-right"
+              interactive
+              content={
+                <Tooltip
+                  theme="dark"
+                  arrow="top-right"
+                  padded="comfortable"
+                  className="max-w-[320px]"
+                >
+                  {/* Padding on the body, not the Tooltip: its className
+                      styles the shell that holds the arrow, so padding there
+                      pushes the bubble away from the tag. */}
+                  <span className="block whitespace-normal px-1 py-2">
+                    Your account is managed under a custom contract. For any
+                    questions or changes related to your plan or billing, please
+                    contact your Customer Success Manager, {BILLING.csm.name} at{" "}
+                    <a
+                      href={`mailto:${BILLING.csm.email}`}
+                      className="text-tooltip-dark-action hover:underline"
+                    >
+                      {BILLING.csm.email}
+                    </a>
+                    .
+                  </span>
+                </Tooltip>
+              }
+            >
+              <button
+                type="button"
+                className="shrink-0 rounded-[4px] outline-none focus-visible:ring-4 focus-visible:ring-brand/24"
+              >
+                <Tag
+                  size="lg"
+                  color="pink"
+                  infoIcon={<IconInfoCircle size={16} aria-hidden="true" />}
+                >
+                  Custom Contract
+                </Tag>
+              </button>
+            </TooltipTrigger>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -122,43 +167,22 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
                 <TableHead className="w-[200px] text-label-md">
                   <span className="inline-flex items-center gap-1.5">
                     Licenses
-                    {/* One icon for the whole column: the rule differs by
-                        type (a minimum vs a limit), so it's explained once
-                        here rather than per row. */}
+                    {/* One icon for the whole column. Generic on purpose:
+                        the per-type rules live in the contract, and spelling
+                        them out here made the tooltip a wall of text. */}
                     <TooltipTrigger
                       placement="bottom"
                       content={
-                        // Children-only mode, not title/description: that
-                        // pair is 12px grey, sized for one-line hints. A
-                        // three-part explanation needs the 14px white body.
                         <Tooltip
                           theme="dark"
                           arrow="top-center"
                           padded="comfortable"
-                          className="max-w-[380px] p-4"
+                          className="max-w-[280px]"
                         >
-                          <span className="flex flex-col gap-2 whitespace-normal">
+                          <span className="flex flex-col gap-1 whitespace-normal px-1 py-2">
                             <span className="text-label-md">How license counts work</span>
-                            {/* Each type's name on its own line, so the two
-                                rules scan as a pair rather than a paragraph. */}
-                            <span className="flex flex-col">
-                              {/* The limit's direction sits beside the name: Standard is a
-                                  floor, the other two are a ceiling, and "sets a
-                                  limit" alone didn't say which. */}
-                              <span className="font-medium">
-                                Standard <span className="text-tooltip-dark-muted">· Minimum</span>
-                              </span>
-                              {/* Body in the tooltip's secondary text, so the
-                                  type names above carry the scan. */}
-                              <span className="text-tooltip-dark-muted">
-                                Your contract sets a minimum. You can add more Standard licenses as needed. Your license count will be adjusted to match the number of active team members at the time of billing renewal.
-                              </span>
-                            </span>
-                            <span className="flex flex-col">
-                              <span className="font-medium">
-                                Lite and View-only <span className="text-tooltip-dark-muted">· Maximum</span>
-                              </span>
-                              <span className="text-tooltip-dark-muted">Your contract sets a maximum for each license type. Contact your CSM to increase it.</span>
+                            <span className="text-tooltip-dark-muted">
+                              License counts are set by your contract. Contact your CSM to change them.
                             </span>
                           </span>
                         </Tooltip>

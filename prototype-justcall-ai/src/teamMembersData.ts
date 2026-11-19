@@ -132,6 +132,8 @@ export const BILLING = {
   cycleDays: 30,
   card: { brand: "VISA", last4: "6311", expires: "07-2026", nameOnCard: "Aryan" },
   address: "101, tapasya enclave, ddd, Karnataka, KA 201010, in",
+  /** The account's Customer Success Manager — plan and billing changes go through them. */
+  csm: { name: "Chaitanya", email: "chaitanya@saaslabs.co" },
 } as const;
 
 export type PlanChargeKey = "team-members" | "phone-numbers" | "add-ons" | "a2p-10dlc";
@@ -228,6 +230,17 @@ export function planChargeTotal(key: PlanChargeKey): number {
  */
 export function memberLicense(id: string): NonNullable<PlanChargeRow["license"]> {
   return PLAN_CHARGES["team-members"].rows.find((row) => row.id === id)?.license ?? "Standard";
+}
+
+/**
+ * The role a member shows. Lite and View-only carry fixed access rather than
+ * a role picked from the list, so their role reads as the license itself —
+ * a "Supervisor" next to "View-only" would claim powers the license doesn't
+ * have.
+ */
+export function memberRole(member: TeamMember): string {
+  const license = memberLicense(member.id);
+  return license === "Standard" ? member.role : license;
 }
 
 /** The account's user groups, for the Team Members filter. */

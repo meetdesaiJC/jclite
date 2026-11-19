@@ -610,7 +610,10 @@ export function TooltipTrigger({
               ref={bubbleRef}
               data-state={state}
               className={cn(
-                "tooltip-presence fixed z-[100]",
+                // `flex`, not the default block: the bubble is inline-flex, and
+                // in a block it sits on a text line whose line-height pushed
+                // it ~9px past TRIGGER_GAP_PX, away from its trigger.
+                "tooltip-presence fixed z-[100] flex",
                 interactive ? "pointer-events-auto" : "pointer-events-none"
               )}
               style={{ top: 0, left: 0 }}

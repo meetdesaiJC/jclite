@@ -30,6 +30,7 @@ import {
   USER_GROUPS,
   memberGroup,
   memberLicense,
+  memberRole,
   type TeamMember,
   type TeamMemberState,
 } from "./teamMembersData";
@@ -197,8 +198,8 @@ const FILTERS: {
   {
     key: "role",
     label: "Role",
-    options: asOptions(unique(TEAM_MEMBERS.map((m) => m.role))),
-    read: (m) => m.role,
+    options: asOptions(unique(TEAM_MEMBERS.map(memberRole))),
+    read: memberRole,
   },
   {
     key: "group",
@@ -410,7 +411,7 @@ export function TeamMembersPage({
                         </Tag>
                       </TableCell>
                       <TableCell className="text-paragraph-md text-foreground">
-                        {member.role}
+                        {memberRole(member)}
                       </TableCell>
                       <TableCell className="text-paragraph-md text-foreground">
                         {member.timeZone}
