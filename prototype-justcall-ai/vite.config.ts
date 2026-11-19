@@ -8,6 +8,10 @@ import { fileURLToPath, URL } from "node:url";
 // content scanning apply.
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
+  // GitHub Pages serves the site from /<repo>/, so the Pages workflow sets
+  // PAGES_BASE. Everywhere else (dev, Vercel, local builds) it stays "/".
+  // Routing is hash-based, so no 404 fallback is needed on Pages.
+  base: process.env.PAGES_BASE ?? "/",
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

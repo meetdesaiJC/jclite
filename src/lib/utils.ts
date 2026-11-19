@@ -15,6 +15,8 @@ const twMerge = extendTailwindMerge({
             "label-sm",
             "label-md",
             "label-md-semi",
+            "label-md-bold",
+            "label-lg",
             "paragraph-sm",
             "paragraph-md",
             "paragraph-lg",

@@ -1,17 +1,16 @@
-import * as React from "react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { IconArrowRight } from "@/components/Icon";
 
+/**
+ * Non-calling licenses (JustCall Lite and View-only). Three experiences, one
+ * per persona in the PRD. Each card opens its experience on the dashboard; a
+ * card passed no `onClick` stays inert (no hover lift, no arrow).
+ */
 type PrototypeLauncherProps = {
-  /* V1 — the scope planned for the first release. */
-  onStartV1EmptySetup: () => void;
-  onStartV1Setup: () => void;
-  onStartV1InCall: () => void;
-  onStartV1CrmInCall: () => void;
-  /* V2 — the fuller experience the existing prototypes already cover. */
-  onStartEmptySetup: () => void;
-  onStartSetup: () => void;
-  onStartInCall: () => void;
+  onStartLite?: () => void;
+  onStartViewOnly?: () => void;
+  onStartLicenseManagement?: () => void;
 };
 
 function PrototypeCard({
@@ -21,37 +20,39 @@ function PrototypeCard({
 }: {
   index: string;
   title: string;
-  onClick: () => void;
+  onClick?: () => void;
 }) {
+  const ready = Boolean(onClick);
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={!ready}
       className={cn(
-        "group flex h-[179px] w-full flex-col justify-end overflow-hidden rounded-lg border border-line bg-avatar-indigo-bg p-[19px] text-left",
+        "group relative flex min-h-[179px] w-full flex-col justify-end overflow-hidden rounded-lg border border-line bg-avatar-indigo-bg p-[19px] text-left",
         // `translate` and `scale`, not `transform` — Tailwind v4 emits the
         // standalone properties, so a transform-named transition matches
         // nothing and the lift snaps.
         "transition-[translate,scale,box-shadow,border-color,background-color] duration-moderate ease-entrance",
-        "hover:-translate-y-1 hover:border-brand hover:bg-brand-subtle hover:shadow-200",
-        "active:scale-[0.98] active:duration-micro active:ease-exit",
         "outline-none focus-visible:ring-4 focus-visible:ring-brand/24",
-        // Travel is the part reduced motion drops; the border, fill and
-        // shadow still answer the pointer.
-        "motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
+        ready &&
+          "hover:-translate-y-1 hover:border-brand hover:bg-brand-subtle hover:shadow-200 active:scale-[0.98] active:duration-micro active:ease-exit motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100",
+        !ready && "cursor-default"
       )}
     >
       <div className="flex w-full items-end justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-heading-xl text-disabled-fg transition-colors duration-moderate ease-entrance group-hover:text-brand">
+          <p className="text-heading-xl text-disabled-fg transition-colors duration-moderate ease-entrance group-hover:group-enabled:text-brand">
             {index}
           </p>
           <p className="text-heading-xl text-foreground">{title}</p>
         </div>
-        <IconArrowRight
-          size={24}
-          className="shrink-0 text-foreground transition-[translate] duration-moderate ease-entrance group-hover:translate-x-1.5 motion-reduce:group-hover:translate-x-0"
-        />
+        {ready && (
+          <IconArrowRight
+            size={24}
+            className="shrink-0 text-foreground transition-[translate] duration-moderate ease-entrance group-hover:translate-x-1.5 motion-reduce:group-hover:translate-x-0"
+          />
+        )}
       </div>
     </button>
   );
@@ -62,10 +63,10 @@ function PrototypeGroup({
   children,
 }: {
   label: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="flex w-full shrink-0 flex-col items-start gap-3 sm:w-[333px]">
+    <div className="flex w-full flex-col items-start gap-3">
       <h3 className="text-label-sm uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </h3>
@@ -74,122 +75,49 @@ function PrototypeGroup({
   );
 }
 
-function ScopePanel({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  /**
-   * The only copy separating the two panels. Current Scope lists its contents
-   * outright; Target Experience states itself as that plus what it adds, which
-   * is shorter to scan than repeating the shared four.
-   */
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col items-start gap-6 sm:w-[333px]">
-      <div className="flex flex-col items-start gap-2">
-        <h2 className="text-heading-xxxl text-foreground">{title}</h2>
-        {/* Two lines reserved either way, so the SETUP label sits at the same
-            height in both columns however the copy wraps. */}
-        <p className="text-paragraph-md text-muted-foreground sm:min-h-10 sm:w-[333px]">
-          {description}
-        </p>
-      </div>
-
-      {/* One stack per category, with more air between the categories than
-          between a category's own cards, so the break reads as a new group
-          rather than as one long queue. */}
-      <div className="flex w-full flex-col items-start gap-10">{children}</div>
-    </section>
-  );
-}
-
 export function PrototypeLauncher({
-  onStartV1EmptySetup,
-  onStartV1Setup,
-  onStartV1InCall,
-  onStartV1CrmInCall,
-  onStartEmptySetup,
-  onStartSetup,
-  onStartInCall,
+  onStartLite,
+  onStartViewOnly,
+  onStartLicenseManagement,
 }: PrototypeLauncherProps) {
   return (
     <div className="h-screen overflow-y-auto bg-white">
       <main className="flex flex-col items-start gap-10 px-6 pb-[42px] pt-[42px] md:px-[75px]">
-        <h1 className="text-heading-xxxl text-foreground">
-          Agent Assist Prototypes
-        </h1>
+        <div className="flex flex-col items-start gap-2">
+          <h1 className="text-heading-xxxl text-foreground">
+            JustCall Lite &amp; View-only
+          </h1>
+          <p className="text-paragraph-md text-muted-foreground">
+            Non-calling licenses for people who need access to JustCall but
+            don&rsquo;t make calls or send texts.
+          </p>
+        </div>
 
-        {/* Side by side, identical weight — the two scopes are read against
-            each other, so neither column gets to look like the answer. The
-            gutter rule is what the removed panel borders were really doing. */}
-        <div className="flex flex-col items-start gap-12 lg:flex-row lg:gap-16">
-          <ScopePanel
-            title="Current Scope"
-            description="Scripts, Response Cards, and Knowledge Base"
-          >
-            <PrototypeGroup label="Setup">
-              {/* Same flow as 02, walked on a day-one account so every list
-                  lands on its empty state. */}
-              <PrototypeCard
-                index="01"
-                title="Empty States"
-                onClick={onStartV1EmptySetup}
-              />
-              <PrototypeCard
-                index="02"
-                title="Configured State"
-                onClick={onStartV1Setup}
-              />
-            </PrototypeGroup>
+        {/* More air between the groups than between a group's own cards, so
+            the admin flow reads as its own thing. */}
+        <div className="flex w-full flex-col items-start gap-10 sm:w-[400px]">
+          {/* Admin first: licenses have to be assigned before a Lite or
+              View-only user has anything to experience. */}
+          <PrototypeGroup label="Admin">
+            <PrototypeCard
+              index="01"
+              title="Team Member & License Management"
+              onClick={onStartLicenseManagement}
+            />
+          </PrototypeGroup>
 
-            <PrototypeGroup label="In-Call">
-              <PrototypeCard
-                index="03"
-                title="Agent Experience"
-                onClick={onStartV1InCall}
-              />
-              <PrototypeCard
-                index="04"
-                title="Inside CRM"
-                onClick={onStartV1CrmInCall}
-              />
-            </PrototypeGroup>
-          </ScopePanel>
-
-          <div
-            aria-hidden="true"
-            className="hidden w-px self-stretch bg-line lg:block"
-          />
-
-          <ScopePanel
-            title="Target Experience"
-            description="Current Scope + Behavioral Coaching, Next Best Actions, and Live Assist"
-          >
-            <PrototypeGroup label="Setup">
-              <PrototypeCard
-                index="01"
-                title="Empty States"
-                onClick={onStartEmptySetup}
-              />
-              <PrototypeCard
-                index="02"
-                title="Configured State"
-                onClick={onStartSetup}
-              />
-            </PrototypeGroup>
-
-            <PrototypeGroup label="In-Call">
-              <PrototypeCard
-                index="03"
-                title="Agent Experience"
-                onClick={onStartInCall}
-              />
-            </PrototypeGroup>
-          </ScopePanel>
+          <PrototypeGroup label="License experiences">
+            <PrototypeCard
+              index="02"
+              title="JustCall Lite"
+              onClick={onStartLite}
+            />
+            <PrototypeCard
+              index="03"
+              title="JustCall View-only"
+              onClick={onStartViewOnly}
+            />
+          </PrototypeGroup>
         </div>
       </main>
     </div>

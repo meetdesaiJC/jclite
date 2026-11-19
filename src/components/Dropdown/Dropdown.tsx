@@ -215,7 +215,11 @@ export interface DropdownProps
   /** Empty-state title when search yields no matches. */
   emptyTitle?: string;
   emptyDescription?: string;
-  /** Max tags shown before "+N more". Default `2`. */
+  /**
+   * Tags shown before the rest collapse into "+N". Default `1` — the house
+   * rule for any list of chosen items: one named, the count for the rest, so
+   * the field never wraps or truncates into a row of half-labels.
+   */
   maxVisibleTags?: number;
   /**
    * When set and a value is selected, the trigger becomes an applied-filter
@@ -330,7 +334,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
       searchPlaceholder = "Search placeholder value",
       emptyTitle = "No Results Found",
       emptyDescription = "Try searching with another keyword",
-      maxVisibleTags = 2,
+      maxVisibleTags = 1,
       appliedField,
       selectAllLabel = "Select all",
       ...props
@@ -719,7 +723,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
                     <Tag key={tag}>{tag}</Tag>
                   ))}
                   {overflowCount > 0 && (
-                    <Tag className="shrink-0">+{overflowCount} more</Tag>
+                    <Tag className="shrink-0">+{overflowCount}</Tag>
                   )}
                 </>
               ) : (

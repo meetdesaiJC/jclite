@@ -260,12 +260,18 @@ export interface DashboardProps {
    * nothing authored in Agent Assist, so it never leaves the webphone.
    */
   assistConfigured?: boolean;
+  /** The blue "Explore Live Monitoring" announcement above Calls Overview. */
+  showLiveMonitoringBanner?: boolean;
+  /** Profile menu › Billing. Omit and the item stays inert, as before. */
+  onBillingClick?: () => void;
 }
 
 export function Dashboard({
   profileName = "Sarah Johnson",
   scope = "v2",
   assistConfigured = true,
+  showLiveMonitoringBanner = true,
+  onBillingClick,
 }: DashboardProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);
@@ -298,7 +304,18 @@ export function Dashboard({
           setDialerOpen(false);
           setProfileMenuOpen((open) => !open);
         }}
-        profileMenuPanel={<ProfileMenu userName={profileName} />}
+        profileMenuPanel={
+          <ProfileMenu
+            userName={profileName}
+            onBillingClick={
+              onBillingClick &&
+              (() => {
+                setProfileMenuOpen(false);
+                onBillingClick();
+              })
+            }
+          />
+        }
       />
 
       {dialerOpen ? (
@@ -354,16 +371,18 @@ export function Dashboard({
 
       <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-white px-6 pb-6">
         <div className="flex w-full flex-col gap-3">
-          <div className="flex w-full items-center gap-2 rounded-[4px] bg-info-secondary px-4 py-4">
-            <IconInfoCircleFilled size={20} className="size-5 shrink-0 text-info" />
-            <p className="min-w-0 flex-1 text-paragraph-md text-foreground">
-              <span className="text-label-md-semi">Monitor calls and agents in one place!</span> You can now view
-              live calls along with agent availability in the Live Monitoring page.
-            </p>
-            <Button size="xs" className="shrink-0">
-              Explore Live Monitoring
-            </Button>
-          </div>
+          {showLiveMonitoringBanner ? (
+            <div className="flex w-full items-center gap-2 rounded-[4px] bg-info-secondary px-4 py-4">
+              <IconInfoCircleFilled size={20} className="size-5 shrink-0 text-info" />
+              <p className="min-w-0 flex-1 text-paragraph-md text-foreground">
+                <span className="text-label-md-semi">Monitor calls and agents in one place!</span> You can now view
+                live calls along with agent availability in the Live Monitoring page.
+              </p>
+              <Button size="xs" className="shrink-0">
+                Explore Live Monitoring
+              </Button>
+            </div>
+          ) : null}
 
           <div className="flex flex-col gap-3">
             <SectionHeader title="Calls Overview" lastUpdated />
