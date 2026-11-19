@@ -562,7 +562,10 @@ function LicenseFlow({
             ) : page === "inbox" ? (
               <InboxPage locks={inboxLocks(license)} />
             ) : page === "phone-numbers" ? (
-              <PhoneNumbersPage locks={phoneNumberLocks(license)} />
+              <PhoneNumbersPage
+                locks={phoneNumberLocks(license)}
+                registrationCta={license === "lite"}
+              />
             ) : page === "live-monitoring" ? (
               // Open to every license; View-only's Monitor Call is locked.
               <LiveMonitoringPage locks={liveMonitoringLocks(license)} />
@@ -570,6 +573,7 @@ function LicenseFlow({
               <EditMemberPage
                 key={editingMember.id}
                 member={editingMember}
+                locks={teamMemberLocks(license)}
                 onClose={() => setEditingMember(null)}
               />
             ) : addingMembers ? (

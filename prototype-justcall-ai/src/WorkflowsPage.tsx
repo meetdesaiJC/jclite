@@ -27,6 +27,7 @@ import {
 import { Tag } from "@/components/Tag";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import flagUs from "./assets/flag-us.svg";
+import { WorkflowEditor } from "./WorkflowEditor";
 import { WORKFLOWS, WORKFLOWS_TOTAL, type Workflow, type WorkflowStatus } from "./workflowsData";
 
 /**
@@ -42,7 +43,10 @@ import { WORKFLOWS, WORKFLOWS_TOTAL, type Workflow, type WorkflowStatus } from "
 export interface WorkflowsLocks {
   /** Create Workflow, and Duplicate — a copy is a new workflow. */
   createVoice?: Lock;
-  /** Edit (pencil), Rename and Publish on a Voice workflow. */
+  /**
+   * Rename and Publish on a Voice workflow. Not the Edit pencil — that opens
+   * the builder, the only way to view a workflow, so it stays open.
+   */
   editVoice?: Lock;
   /** Delete in a Voice workflow's ⋮ menu. */
   deleteVoice?: Lock;
@@ -119,22 +123,30 @@ function Named({
  * action explains itself instead of naming itself, so it never shows two
  * tooltips.
  */
-function RowActions({ workflow, locks }: { workflow: Workflow; locks?: WorkflowsLocks }) {
-  const primary = workflow.viewOnly ? (
+function RowActions({
+  workflow,
+  locks,
+  onOpen,
+}: {
+  workflow: Workflow;
+  locks?: WorkflowsLocks;
+  onOpen: () => void;
+}) {
+  // A license that can't edit gets the eye too: a pencil would promise an
+  // edit the builder then refuses. Same button, same builder — only the
+  // promise changes.
+  const primary = workflow.viewOnly || locks?.editVoice ? (
     <Named title="View">
-      <button type="button" aria-label="View workflow" className={ACTION_BUTTON}>
+      <button type="button" aria-label="View workflow" onClick={onOpen} className={ACTION_BUTTON}>
         <IconEye size={20} />
       </button>
     </Named>
-  ) : locks?.editVoice ? (
-    <Gate lock={locks.editVoice} className="flex">
-      <button type="button" aria-label="Edit workflow" className={ACTION_BUTTON}>
-        <IconPencil size={20} />
-      </button>
-    </Gate>
   ) : (
+    // Never locked: the primary button is the only way into the builder, and
+    // the builder is the only place a workflow can be read. Locking it would
+    // lock a page, not a verb — the changes inside are what the license blocks.
     <Named title="Edit">
-      <button type="button" aria-label="Edit workflow" className={ACTION_BUTTON}>
+      <button type="button" aria-label="Edit workflow" onClick={onOpen} className={ACTION_BUTTON}>
         <IconPencil size={20} />
       </button>
     </Named>
@@ -214,6 +226,7 @@ export function WorkflowsPage({ locks }: { locks?: WorkflowsLocks } = {}) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [openWorkflow, setOpenWorkflow] = useState<Workflow | null>(null);
 
   const q = search.trim().toLowerCase();
   const rows = q ? WORKFLOWS.filter((w) => w.name.toLowerCase().includes(q)) : WORKFLOWS;
@@ -349,7 +362,7 @@ export function WorkflowsPage({ locks }: { locks?: WorkflowsLocks } = {}) {
                   )}
                 </TableCell>
                 <TableCell className={CELL}>
-                  <RowActions workflow={w} locks={locks} />
+                  <RowActions workflow={w} locks={locks} onOpen={() => setOpenWorkflow(w)} />
                 </TableCell>
               </TableRow>
             ))}
@@ -370,6 +383,15 @@ export function WorkflowsPage({ locks }: { locks?: WorkflowsLocks } = {}) {
           rangeLabel={`${first}-${last} of ${total} items`}
         />
       </div>
+
+      {openWorkflow ? (
+        <WorkflowEditor
+          workflow={openWorkflow}
+          lock={locks?.editVoice}
+          deleteLock={locks?.deleteVoice}
+          onClose={() => setOpenWorkflow(null)}
+        />
+      ) : null}
     </main>
   );
 }

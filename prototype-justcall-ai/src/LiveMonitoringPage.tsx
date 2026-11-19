@@ -26,6 +26,7 @@ import {
 } from "@/components/Table";
 import { Tabs } from "@/components/Tabs";
 import { cn } from "@/lib/utils";
+import { MonitorCallWidget } from "./MonitorCallWidget";
 import {
   CALLERS_IN_QUEUE,
   LIVE_CALL_BREAKDOWN,
@@ -232,7 +233,15 @@ function DirectionIcon({ call }: { call: LiveCall }) {
 
 const TEXT_CELL = "h-14 text-paragraph-md text-foreground";
 
-function LiveCallRow({ call, monitorLock }: { call: LiveCall; monitorLock?: Lock }) {
+function LiveCallRow({
+  call,
+  monitorLock,
+  onMonitor,
+}: {
+  call: LiveCall;
+  monitorLock?: Lock;
+  onMonitor: (call: LiveCall) => void;
+}) {
   const status = STATUS[call.status];
   // Nothing to listen to until an agent is on the line.
   const canMonitor = call.status === "in-progress";
@@ -277,7 +286,12 @@ function LiveCallRow({ call, monitorLock }: { call: LiveCall; monitorLock?: Lock
           reason={monitorLock?.reason}
           hint={monitorLock?.hint}
         >
-          <Button variant="primary-outline" size="xs" disabled={!monitorLock && !canMonitor}>
+          <Button
+            variant="primary-outline"
+            size="xs"
+            disabled={!monitorLock && !canMonitor}
+            onClick={() => onMonitor(call)}
+          >
             Monitor Call
           </Button>
         </LockedControl>
@@ -293,6 +307,9 @@ type WidgetTab = "live-calls" | "queue" | "availability";
 function LiveCallsWidget({ locks }: { locks?: LiveMonitoringLocks }) {
   const [tab, setTab] = useState<WidgetTab>("live-calls");
   const [search, setSearch] = useState("");
+  // One call at a time: a supervisor can't listen to two lines at once, so
+  // monitoring another call swaps the widget rather than stacking a second.
+  const [monitoring, setMonitoring] = useState<LiveCall | null>(null);
 
   const calls = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -374,7 +391,14 @@ function LiveCallsWidget({ locks }: { locks?: LiveMonitoringLocks }) {
                   </TableCell>
                 </TableRow>
               ) : (
-                calls.map((call) => <LiveCallRow key={call.id} call={call} monitorLock={locks?.monitor} />)
+                calls.map((call) => (
+                  <LiveCallRow
+                    key={call.id}
+                    call={call}
+                    monitorLock={locks?.monitor}
+                    onMonitor={setMonitoring}
+                  />
+                ))
               )}
             </TableBody>
           </Table>
@@ -387,6 +411,14 @@ function LiveCallsWidget({ locks }: { locks?: LiveMonitoringLocks }) {
           prototype yet.
         </p>
       )}
+      {monitoring ? (
+        <MonitorCallWidget
+          key={monitoring.id}
+          call={monitoring}
+          bargeLock={locks?.barge}
+          onEnd={() => setMonitoring(null)}
+        />
+      ) : null}
     </section>
   );
 }
@@ -399,6 +431,8 @@ function LiveCallsWidget({ locks }: { locks?: LiveMonitoringLocks }) {
 export interface LiveMonitoringLocks {
   /** Monitor Call on a live call. */
   monitor?: Lock;
+  /** Barge, inside the monitor widget. */
+  barge?: Lock;
 }
 
 export function LiveMonitoringPage({ locks }: { locks?: LiveMonitoringLocks } = {}) {

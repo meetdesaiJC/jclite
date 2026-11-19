@@ -307,6 +307,7 @@ export function ActionsPage({
                   appliedField="Members"
                   options={TEAM_MEMBERS}
                   multiple
+                  confirm
                   searchable
                   value={memberFilter}
                   onValueChange={(value) => {
@@ -322,6 +323,7 @@ export function ActionsPage({
                   appliedField="User groups"
                   options={USER_GROUPS}
                   multiple
+                  confirm
                   searchable
                   value={groupFilter}
                   onValueChange={(value) => {
@@ -340,6 +342,7 @@ export function ActionsPage({
                     icon: <IntegrationLogo id={item.id} size={14} />,
                   }))}
                   multiple
+                  confirm
                   value={integrationFilter}
                   onValueChange={(value) => {
                     setIntegrationFilter(Array.isArray(value) ? value : [value]);
@@ -357,6 +360,7 @@ export function ActionsPage({
                     { value: "needs_attention", label: "Needs attention" },
                   ]}
                   multiple
+                  confirm
                   value={statusFilter}
                   onValueChange={(value) => {
                     setStatusFilter(Array.isArray(value) ? value : [value]);

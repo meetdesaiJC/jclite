@@ -885,6 +885,7 @@ export function AgentAssistPlaybooksPage({
                   appliedField="Members"
                   options={isScripts ? SCRIPT_TEAM_MEMBERS : TEAM_MEMBERS}
                   multiple
+                  confirm
                   searchable
                   value={memberFilter}
                   onValueChange={(value) => {
@@ -900,6 +901,7 @@ export function AgentAssistPlaybooksPage({
                   appliedField="User groups"
                   options={isScripts ? SCRIPT_USER_GROUPS : USER_GROUPS}
                   multiple
+                  confirm
                   searchable
                   value={groupFilter}
                   onValueChange={(value) => {

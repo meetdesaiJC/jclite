@@ -644,6 +644,54 @@ export function IconArchive({ size = 20, ...props }: IconProps) {
   );
 }
 
+export function IconArrowBackUp({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="arrow-back-up" transform="scale(0.6667)">
+          <path d="M9 14l-4 -4l4 -4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M5 10h11a4 4 0 1 1 0 8h-1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <g id="arrow-back-up" transform="scale(0.8333)">
+          <path d="M9 14l-4 -4l4 -4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M5 10h11a4 4 0 1 1 0 8h-1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="arrow-back-up" transform="scale(0.8333)">
+            <path d="M9 14l-4 -4l4 -4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M5 10h11a4 4 0 1 1 0 8h-1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconArrowDown({ size = 16, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -660,6 +708,54 @@ export function IconArrowDown({ size = 16, ...props }: IconProps) {
           <>
             <g>
             <path d="M8 3.33333V12.6667M4 8.66667L8 12.6667L12 8.66667" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconArrowForwardUp({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="arrow-forward-up" transform="scale(0.6667)">
+          <path d="M15 14l4 -4l-4 -4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M19 10h-11a4 4 0 1 0 0 8h1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <g id="arrow-forward-up" transform="scale(0.8333)">
+          <path d="M15 14l4 -4l-4 -4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M19 10h-11a4 4 0 1 0 0 8h1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="arrow-forward-up" transform="scale(0.8333)">
+            <path d="M15 14l4 -4l-4 -4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M19 10h-11a4 4 0 1 0 0 8h1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </g>
           </>
         );
@@ -840,6 +936,51 @@ export function IconBell({ size = 24, ...props }: IconProps) {
             <path id="Vector" d="M9 17V18C9 18.7956 9.31607 19.5587 9.87868 20.1213C10.4413 20.6839 11.2044 21 12 21C12.7956 21 13.5587 20.6839 14.1213 20.1213C14.6839 19.5587 15 18.7956 15 18V17M10 5C10 4.46957 10.2107 3.96086 10.5858 3.58579C10.9609 3.21071 11.4696 3 12 3C12.5304 3 13.0391 3.21071 13.4142 3.58579C13.7893 3.96086 14 4.46957 14 5C15.1484 5.54303 16.1274 6.38833 16.8321 7.4453C17.5367 8.50227 17.9404 9.73107 18 11V14C18.0753 14.6217 18.2954 15.2171 18.6428 15.7381C18.9902 16.2592 19.4551 16.6914 20 17H4C4.54494 16.6914 5.00981 16.2592 5.35719 15.7381C5.70457 15.2171 5.92474 14.6217 6 14V11C6.05956 9.73107 6.4633 8.50227 7.16795 7.4453C7.8726 6.38833 8.85159 5.54303 10 5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </g>
             </g>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconBolt({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="bolt" transform="scale(0.6667)">
+          <path d="M13 3v7h6l-8 11v-7h-6l8 -11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <g id="bolt" transform="scale(0.8333)">
+          <path d="M13 3v7h6l-8 11v-7h-6l8 -11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="bolt" transform="scale(0.8333)">
+            <path d="M13 3v7h6l-8 11v-7h-6l8 -11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </g>
           </>
         );
@@ -2967,6 +3108,63 @@ export function IconFilter({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconFocusCentered({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="focus-centered" transform="scale(0.6667)">
+          <path d="M11.5 12a.5 .5 0 1 0 1 0a.5 .5 0 1 0 -1 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M4 8v-2a2 2 0 0 1 2 -2h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M4 16v2a2 2 0 0 0 2 2h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M16 4h2a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M16 20h2a2 2 0 0 0 2 -2v-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <g id="focus-centered" transform="scale(0.8333)">
+          <path d="M11.5 12a.5 .5 0 1 0 1 0a.5 .5 0 1 0 -1 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M4 8v-2a2 2 0 0 1 2 -2h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M4 16v2a2 2 0 0 0 2 2h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M16 4h2a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M16 20h2a2 2 0 0 0 2 -2v-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="focus-centered" transform="scale(0.8333)">
+            <path d="M11.5 12a.5 .5 0 1 0 1 0a.5 .5 0 1 0 -1 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M4 8v-2a2 2 0 0 1 2 -2h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M4 16v2a2 2 0 0 0 2 2h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M16 4h2a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M16 20h2a2 2 0 0 0 2 -2v-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconGoBack({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -3001,6 +3199,133 @@ export function IconGoBack({ size = 24, ...props }: IconProps) {
           <>
             <g transform="translate(-36 0)">
             <path d="M54.2223 11.9996H41.7778M48.0001 5.77734L41.7778 11.9996L48.0001 18.2218" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconGripVertical({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="grip-vertical">
+          <g id="Vector">
+          <path d="M5.33333 3.33333C5.33333 3.51014 5.40357 3.67971 5.5286 3.80474C5.65362 3.92976 5.82319 4 6 4C6.17681 4 6.34638 3.92976 6.4714 3.80474C6.59643 3.67971 6.66667 3.51014 6.66667 3.33333C6.66667 3.15652 6.59643 2.98695 6.4714 2.86193C6.34638 2.7369 6.17681 2.66667 6 2.66667C5.82319 2.66667 5.65362 2.7369 5.5286 2.86193C5.40357 2.98695 5.33333 3.15652 5.33333 3.33333Z" fill="currentColor"/>
+          <path d="M5.33333 8C5.33333 8.17681 5.40357 8.34638 5.5286 8.4714C5.65362 8.59643 5.82319 8.66667 6 8.66667C6.17681 8.66667 6.34638 8.59643 6.4714 8.4714C6.59643 8.34638 6.66667 8.17681 6.66667 8C6.66667 7.82319 6.59643 7.65362 6.4714 7.52859C6.34638 7.40357 6.17681 7.33333 6 7.33333C5.82319 7.33333 5.65362 7.40357 5.5286 7.52859C5.40357 7.65362 5.33333 7.82319 5.33333 8Z" fill="currentColor"/>
+          <path d="M5.33333 12.6667C5.33333 12.8435 5.40357 13.013 5.5286 13.1381C5.65362 13.2631 5.82319 13.3333 6 13.3333C6.17681 13.3333 6.34638 13.2631 6.4714 13.1381C6.59643 13.013 6.66667 12.8435 6.66667 12.6667C6.66667 12.4899 6.59643 12.3203 6.4714 12.1953C6.34638 12.0702 6.17681 12 6 12C5.82319 12 5.65362 12.0702 5.5286 12.1953C5.40357 12.3203 5.33333 12.4899 5.33333 12.6667Z" fill="currentColor"/>
+          <path d="M9.33333 3.33333C9.33333 3.51014 9.40357 3.67971 9.52859 3.80474C9.65362 3.92976 9.82319 4 10 4C10.1768 4 10.3464 3.92976 10.4714 3.80474C10.5964 3.67971 10.6667 3.51014 10.6667 3.33333C10.6667 3.15652 10.5964 2.98695 10.4714 2.86193C10.3464 2.7369 10.1768 2.66667 10 2.66667C9.82319 2.66667 9.65362 2.7369 9.52859 2.86193C9.40357 2.98695 9.33333 3.15652 9.33333 3.33333Z" fill="currentColor"/>
+          <path d="M9.33333 8C9.33333 8.17681 9.40357 8.34638 9.52859 8.4714C9.65362 8.59643 9.82319 8.66667 10 8.66667C10.1768 8.66667 10.3464 8.59643 10.4714 8.4714C10.5964 8.34638 10.6667 8.17681 10.6667 8C10.6667 7.82319 10.5964 7.65362 10.4714 7.52859C10.3464 7.40357 10.1768 7.33333 10 7.33333C9.82319 7.33333 9.65362 7.40357 9.52859 7.52859C9.40357 7.65362 9.33333 7.82319 9.33333 8Z" fill="currentColor"/>
+          <path d="M9.33333 12.6667C9.33333 12.8435 9.40357 13.013 9.52859 13.1381C9.65362 13.2631 9.82319 13.3333 10 13.3333C10.1768 13.3333 10.3464 13.2631 10.4714 13.1381C10.5964 13.013 10.6667 12.8435 10.6667 12.6667C10.6667 12.4899 10.5964 12.3203 10.4714 12.1953C10.3464 12.0702 10.1768 12 10 12C9.82319 12 9.65362 12.0702 9.52859 12.1953C9.40357 12.3203 9.33333 12.4899 9.33333 12.6667Z" fill="currentColor"/>
+          <path d="M5.33333 3.33333C5.33333 3.51014 5.40357 3.67971 5.5286 3.80474C5.65362 3.92976 5.82319 4 6 4C6.17681 4 6.34638 3.92976 6.4714 3.80474C6.59643 3.67971 6.66667 3.51014 6.66667 3.33333C6.66667 3.15652 6.59643 2.98695 6.4714 2.86193C6.34638 2.7369 6.17681 2.66667 6 2.66667C5.82319 2.66667 5.65362 2.7369 5.5286 2.86193C5.40357 2.98695 5.33333 3.15652 5.33333 3.33333ZM5.33333 8C5.33333 8.17681 5.40357 8.34638 5.5286 8.4714C5.65362 8.59643 5.82319 8.66667 6 8.66667C6.17681 8.66667 6.34638 8.59643 6.4714 8.4714C6.59643 8.34638 6.66667 8.17681 6.66667 8C6.66667 7.82319 6.59643 7.65362 6.4714 7.5286C6.34638 7.40357 6.17681 7.33333 6 7.33333C5.82319 7.33333 5.65362 7.40357 5.5286 7.5286C5.40357 7.65362 5.33333 7.82319 5.33333 8ZM5.33333 12.6667C5.33333 12.8435 5.40357 13.013 5.5286 13.1381C5.65362 13.2631 5.82319 13.3333 6 13.3333C6.17681 13.3333 6.34638 13.2631 6.4714 13.1381C6.59643 13.013 6.66667 12.8435 6.66667 12.6667C6.66667 12.4899 6.59643 12.3203 6.4714 12.1953C6.34638 12.0702 6.17681 12 6 12C5.82319 12 5.65362 12.0702 5.5286 12.1953C5.40357 12.3203 5.33333 12.4899 5.33333 12.6667ZM9.33333 3.33333C9.33333 3.51014 9.40357 3.67971 9.5286 3.80474C9.65362 3.92976 9.82319 4 10 4C10.1768 4 10.3464 3.92976 10.4714 3.80474C10.5964 3.67971 10.6667 3.51014 10.6667 3.33333C10.6667 3.15652 10.5964 2.98695 10.4714 2.86193C10.3464 2.7369 10.1768 2.66667 10 2.66667C9.82319 2.66667 9.65362 2.7369 9.5286 2.86193C9.40357 2.98695 9.33333 3.15652 9.33333 3.33333ZM9.33333 8C9.33333 8.17681 9.40357 8.34638 9.5286 8.4714C9.65362 8.59643 9.82319 8.66667 10 8.66667C10.1768 8.66667 10.3464 8.59643 10.4714 8.4714C10.5964 8.34638 10.6667 8.17681 10.6667 8C10.6667 7.82319 10.5964 7.65362 10.4714 7.5286C10.3464 7.40357 10.1768 7.33333 10 7.33333C9.82319 7.33333 9.65362 7.40357 9.5286 7.5286C9.40357 7.65362 9.33333 7.82319 9.33333 8ZM9.33333 12.6667C9.33333 12.8435 9.40357 13.013 9.5286 13.1381C9.65362 13.2631 9.82319 13.3333 10 13.3333C10.1768 13.3333 10.3464 13.2631 10.4714 13.1381C10.5964 13.013 10.6667 12.8435 10.6667 12.6667C10.6667 12.4899 10.5964 12.3203 10.4714 12.1953C10.3464 12.0702 10.1768 12 10 12C9.82319 12 9.65362 12.0702 9.5286 12.1953C9.40357 12.3203 9.33333 12.4899 9.33333 12.6667Z" strokeWidth="0.571429" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="grip-vertical">
+            <g id="Vector">
+            <path d="M5.33333 3.33333C5.33333 3.51014 5.40357 3.67971 5.5286 3.80474C5.65362 3.92976 5.82319 4 6 4C6.17681 4 6.34638 3.92976 6.4714 3.80474C6.59643 3.67971 6.66667 3.51014 6.66667 3.33333C6.66667 3.15652 6.59643 2.98695 6.4714 2.86193C6.34638 2.7369 6.17681 2.66667 6 2.66667C5.82319 2.66667 5.65362 2.7369 5.5286 2.86193C5.40357 2.98695 5.33333 3.15652 5.33333 3.33333Z" fill="currentColor"/>
+            <path d="M5.33333 8C5.33333 8.17681 5.40357 8.34638 5.5286 8.4714C5.65362 8.59643 5.82319 8.66667 6 8.66667C6.17681 8.66667 6.34638 8.59643 6.4714 8.4714C6.59643 8.34638 6.66667 8.17681 6.66667 8C6.66667 7.82319 6.59643 7.65362 6.4714 7.52859C6.34638 7.40357 6.17681 7.33333 6 7.33333C5.82319 7.33333 5.65362 7.40357 5.5286 7.52859C5.40357 7.65362 5.33333 7.82319 5.33333 8Z" fill="currentColor"/>
+            <path d="M5.33333 12.6667C5.33333 12.8435 5.40357 13.013 5.5286 13.1381C5.65362 13.2631 5.82319 13.3333 6 13.3333C6.17681 13.3333 6.34638 13.2631 6.4714 13.1381C6.59643 13.013 6.66667 12.8435 6.66667 12.6667C6.66667 12.4899 6.59643 12.3203 6.4714 12.1953C6.34638 12.0702 6.17681 12 6 12C5.82319 12 5.65362 12.0702 5.5286 12.1953C5.40357 12.3203 5.33333 12.4899 5.33333 12.6667Z" fill="currentColor"/>
+            <path d="M9.33333 3.33333C9.33333 3.51014 9.40357 3.67971 9.52859 3.80474C9.65362 3.92976 9.82319 4 10 4C10.1768 4 10.3464 3.92976 10.4714 3.80474C10.5964 3.67971 10.6667 3.51014 10.6667 3.33333C10.6667 3.15652 10.5964 2.98695 10.4714 2.86193C10.3464 2.7369 10.1768 2.66667 10 2.66667C9.82319 2.66667 9.65362 2.7369 9.52859 2.86193C9.40357 2.98695 9.33333 3.15652 9.33333 3.33333Z" fill="currentColor"/>
+            <path d="M9.33333 8C9.33333 8.17681 9.40357 8.34638 9.52859 8.4714C9.65362 8.59643 9.82319 8.66667 10 8.66667C10.1768 8.66667 10.3464 8.59643 10.4714 8.4714C10.5964 8.34638 10.6667 8.17681 10.6667 8C10.6667 7.82319 10.5964 7.65362 10.4714 7.52859C10.3464 7.40357 10.1768 7.33333 10 7.33333C9.82319 7.33333 9.65362 7.40357 9.52859 7.52859C9.40357 7.65362 9.33333 7.82319 9.33333 8Z" fill="currentColor"/>
+            <path d="M9.33333 12.6667C9.33333 12.8435 9.40357 13.013 9.52859 13.1381C9.65362 13.2631 9.82319 13.3333 10 13.3333C10.1768 13.3333 10.3464 13.2631 10.4714 13.1381C10.5964 13.013 10.6667 12.8435 10.6667 12.6667C10.6667 12.4899 10.5964 12.3203 10.4714 12.1953C10.3464 12.0702 10.1768 12 10 12C9.82319 12 9.65362 12.0702 9.52859 12.1953C9.40357 12.3203 9.33333 12.4899 9.33333 12.6667Z" fill="currentColor"/>
+            <path d="M5.33333 3.33333C5.33333 3.51014 5.40357 3.67971 5.5286 3.80474C5.65362 3.92976 5.82319 4 6 4C6.17681 4 6.34638 3.92976 6.4714 3.80474C6.59643 3.67971 6.66667 3.51014 6.66667 3.33333C6.66667 3.15652 6.59643 2.98695 6.4714 2.86193C6.34638 2.7369 6.17681 2.66667 6 2.66667C5.82319 2.66667 5.65362 2.7369 5.5286 2.86193C5.40357 2.98695 5.33333 3.15652 5.33333 3.33333ZM5.33333 8C5.33333 8.17681 5.40357 8.34638 5.5286 8.4714C5.65362 8.59643 5.82319 8.66667 6 8.66667C6.17681 8.66667 6.34638 8.59643 6.4714 8.4714C6.59643 8.34638 6.66667 8.17681 6.66667 8C6.66667 7.82319 6.59643 7.65362 6.4714 7.5286C6.34638 7.40357 6.17681 7.33333 6 7.33333C5.82319 7.33333 5.65362 7.40357 5.5286 7.5286C5.40357 7.65362 5.33333 7.82319 5.33333 8ZM5.33333 12.6667C5.33333 12.8435 5.40357 13.013 5.5286 13.1381C5.65362 13.2631 5.82319 13.3333 6 13.3333C6.17681 13.3333 6.34638 13.2631 6.4714 13.1381C6.59643 13.013 6.66667 12.8435 6.66667 12.6667C6.66667 12.4899 6.59643 12.3203 6.4714 12.1953C6.34638 12.0702 6.17681 12 6 12C5.82319 12 5.65362 12.0702 5.5286 12.1953C5.40357 12.3203 5.33333 12.4899 5.33333 12.6667ZM9.33333 3.33333C9.33333 3.51014 9.40357 3.67971 9.5286 3.80474C9.65362 3.92976 9.82319 4 10 4C10.1768 4 10.3464 3.92976 10.4714 3.80474C10.5964 3.67971 10.6667 3.51014 10.6667 3.33333C10.6667 3.15652 10.5964 2.98695 10.4714 2.86193C10.3464 2.7369 10.1768 2.66667 10 2.66667C9.82319 2.66667 9.65362 2.7369 9.5286 2.86193C9.40357 2.98695 9.33333 3.15652 9.33333 3.33333ZM9.33333 8C9.33333 8.17681 9.40357 8.34638 9.5286 8.4714C9.65362 8.59643 9.82319 8.66667 10 8.66667C10.1768 8.66667 10.3464 8.59643 10.4714 8.4714C10.5964 8.34638 10.6667 8.17681 10.6667 8C10.6667 7.82319 10.5964 7.65362 10.4714 7.5286C10.3464 7.40357 10.1768 7.33333 10 7.33333C9.82319 7.33333 9.65362 7.40357 9.5286 7.5286C9.40357 7.65362 9.33333 7.82319 9.33333 8ZM9.33333 12.6667C9.33333 12.8435 9.40357 13.013 9.5286 13.1381C9.65362 13.2631 9.82319 13.3333 10 13.3333C10.1768 13.3333 10.3464 13.2631 10.4714 13.1381C10.5964 13.013 10.6667 12.8435 10.6667 12.6667C10.6667 12.4899 10.5964 12.3203 10.4714 12.1953C10.3464 12.0702 10.1768 12 10 12C9.82319 12 9.65362 12.0702 9.5286 12.1953C9.40357 12.3203 9.33333 12.4899 9.33333 12.6667Z" strokeWidth="0.571429" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconHeadphonesOff({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="headphones-off">
+          <path id="Vector" d="M2 2L14 14M2.66667 10C2.66667 9.64638 2.80714 9.30724 3.05719 9.05719C3.30724 8.80714 3.64638 8.66667 4 8.66667H4.66667C5.02029 8.66667 5.35943 8.80714 5.60948 9.05719C5.85952 9.30724 6 9.64638 6 10V12C6 12.3536 5.85952 12.6928 5.60948 12.9428C5.35943 13.1929 5.02029 13.3333 4.66667 13.3333H4C3.64638 13.3333 3.30724 13.1929 3.05719 12.9428C2.80714 12.6928 2.66667 12.3536 2.66667 12V10ZM2.66667 10V8.00002C2.66667 6.52668 3.264 5.19335 4.22933 4.22802M11.3333 8.66667H12C12.3536 8.66667 12.6928 8.80714 12.9428 9.05719C13.1929 9.30724 13.3333 9.64638 13.3333 10M13.3333 10V10.6667M13.3333 10V8.00002C13.3336 7.10895 13.1106 6.232 12.6847 5.4493C12.2588 4.66659 11.6436 4.00307 10.8953 3.51934C10.1469 3.0356 9.28933 2.74708 8.40077 2.68012C7.51222 2.61316 6.62105 2.7699 5.80867 3.13602M12.9407 12.9447C12.7 13.1847 12.3673 13.3333 12 13.3333H11.3333C10.9797 13.3333 10.6406 13.1929 10.3905 12.9428C10.1405 12.6928 10 12.3536 10 12V10" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="headphones-off">
+            <path id="Vector" d="M2 2L14 14M2.66667 10C2.66667 9.64638 2.80714 9.30724 3.05719 9.05719C3.30724 8.80714 3.64638 8.66667 4 8.66667H4.66667C5.02029 8.66667 5.35943 8.80714 5.60948 9.05719C5.85952 9.30724 6 9.64638 6 10V12C6 12.3536 5.85952 12.6928 5.60948 12.9428C5.35943 13.1929 5.02029 13.3333 4.66667 13.3333H4C3.64638 13.3333 3.30724 13.1929 3.05719 12.9428C2.80714 12.6928 2.66667 12.3536 2.66667 12V10ZM2.66667 10V8.00002C2.66667 6.52668 3.264 5.19335 4.22933 4.22802M11.3333 8.66667H12C12.3536 8.66667 12.6928 8.80714 12.9428 9.05719C13.1929 9.30724 13.3333 9.64638 13.3333 10M13.3333 10V10.6667M13.3333 10V8.00002C13.3336 7.10895 13.1106 6.232 12.6847 5.4493C12.2588 4.66659 11.6436 4.00307 10.8953 3.51934C10.1469 3.0356 9.28933 2.74708 8.40077 2.68012C7.51222 2.61316 6.62105 2.7699 5.80867 3.13602M12.9407 12.9447C12.7 13.1847 12.3673 13.3333 12 13.3333H11.3333C10.9797 13.3333 10.6406 13.1929 10.3905 12.9428C10.1405 12.6928 10 12.3536 10 12V10" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconHeadset({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="headset">
+          <path id="Vector" d="M2.66667 9.33333V7.33333C2.66667 5.91885 3.22857 4.56229 4.22876 3.5621C5.22896 2.5619 6.58551 2 8 2C9.41449 2 10.771 2.5619 11.7712 3.5621C12.7714 4.56229 13.3333 5.91885 13.3333 7.33333V9.33333M2.66667 9.33333C2.66667 8.97971 2.80714 8.64057 3.05719 8.39052C3.30724 8.14048 3.64638 8 4 8H4.66667C5.02029 8 5.35943 8.14048 5.60948 8.39052C5.85952 8.64057 6 8.97971 6 9.33333V11.3333C6 11.687 5.85952 12.0261 5.60948 12.2761C5.35943 12.5262 5.02029 12.6667 4.66667 12.6667H4C3.64638 12.6667 3.30724 12.5262 3.05719 12.2761C2.80714 12.0261 2.66667 11.687 2.66667 11.3333V9.33333ZM13.3333 9.33333C13.3333 8.97971 13.1929 8.64057 12.9428 8.39052C12.6928 8.14048 12.3536 8 12 8H11.3333C10.9797 8 10.6406 8.14048 10.3905 8.39052C10.1405 8.64057 10 8.97971 10 9.33333V11.3333C10 11.687 10.1405 12.0261 10.3905 12.2761C10.6406 12.5262 10.9797 12.6667 11.3333 12.6667H12M13.3333 9.33333V11.3333C13.3333 11.687 13.1929 12.0261 12.9428 12.2761C12.6928 12.5262 12.3536 12.6667 12 12.6667M12 12.6667C12 13.7713 10.2093 14.6667 8 14.6667" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="headset">
+            <path id="Vector" d="M2.66667 9.33333V7.33333C2.66667 5.91885 3.22857 4.56229 4.22876 3.5621C5.22896 2.5619 6.58551 2 8 2C9.41449 2 10.771 2.5619 11.7712 3.5621C12.7714 4.56229 13.3333 5.91885 13.3333 7.33333V9.33333M2.66667 9.33333C2.66667 8.97971 2.80714 8.64057 3.05719 8.39052C3.30724 8.14048 3.64638 8 4 8H4.66667C5.02029 8 5.35943 8.14048 5.60948 8.39052C5.85952 8.64057 6 8.97971 6 9.33333V11.3333C6 11.687 5.85952 12.0261 5.60948 12.2761C5.35943 12.5262 5.02029 12.6667 4.66667 12.6667H4C3.64638 12.6667 3.30724 12.5262 3.05719 12.2761C2.80714 12.0261 2.66667 11.687 2.66667 11.3333V9.33333ZM13.3333 9.33333C13.3333 8.97971 13.1929 8.64057 12.9428 8.39052C12.6928 8.14048 12.3536 8 12 8H11.3333C10.9797 8 10.6406 8.14048 10.3905 8.39052C10.1405 8.64057 10 8.97971 10 9.33333V11.3333C10 11.687 10.1405 12.0261 10.3905 12.2761C10.6406 12.5262 10.9797 12.6667 11.3333 12.6667H12M13.3333 9.33333V11.3333C13.3333 11.687 13.1929 12.0261 12.9428 12.2761C12.6928 12.5262 12.3536 12.6667 12 12.6667M12 12.6667C12 13.7713 10.2093 14.6667 8 14.6667" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
             </g>
           </>
         );
@@ -3390,6 +3715,43 @@ export function IconLayoutSidebarLeftCollapse({ size = 20, ...props }: IconProps
   );
 }
 
+export function IconLogin({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="login">
+          <path id="Vector" d="M9.33333 5.33333V4C9.33333 3.64638 9.19286 3.30724 8.94281 3.05719C8.69276 2.80714 8.35362 2.66667 8 2.66667H3.33333C2.97971 2.66667 2.64057 2.80714 2.39052 3.05719C2.14048 3.30724 2 3.64638 2 4V12C2 12.3536 2.14048 12.6928 2.39052 12.9428C2.64057 13.1929 2.97971 13.3333 3.33333 13.3333H8C8.35362 13.3333 8.69276 13.1929 8.94281 12.9428C9.19286 12.6928 9.33333 12.3536 9.33333 12V10.6667M13.3333 8H4.66667M6.66667 10L4.66667 8L6.66667 6" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="login">
+            <path id="Vector" d="M9.33333 5.33333V4C9.33333 3.64638 9.19286 3.30724 8.94281 3.05719C8.69276 2.80714 8.35362 2.66667 8 2.66667H3.33333C2.97971 2.66667 2.64057 2.80714 2.39052 3.05719C2.14048 3.30724 2 3.64638 2 4V12C2 12.3536 2.14048 12.6928 2.39052 12.9428C2.64057 13.1929 2.97971 13.3333 3.33333 13.3333H8C8.35362 13.3333 8.69276 13.1929 8.94281 12.9428C9.19286 12.6928 9.33333 12.3536 9.33333 12V10.6667M13.3333 8H4.66667M6.66667 10L4.66667 8L6.66667 6" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconManageReports({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -3748,6 +4110,88 @@ export function IconMessages({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconMicrophone({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="microphone">
+          <path id="Vector" d="M12.6667 6.66667C12.6667 7.90434 12.175 9.09133 11.2998 9.9665C10.4247 10.8417 9.23768 11.3333 8 11.3333C6.76232 11.3333 5.57534 10.8417 4.70017 9.9665C3.825 9.09133 3.33333 7.90434 3.33333 6.66667M8 11.3333V14M5.33333 14H10.6667M6 3.33333C6 2.8029 6.21071 2.29419 6.58579 1.91912C6.96086 1.54405 7.46957 1.33333 8 1.33333C8.53043 1.33333 9.03914 1.54405 9.41421 1.91912C9.78929 2.29419 10 2.8029 10 3.33333V6.66667C10 7.1971 9.78929 7.70581 9.41421 8.08088C9.03914 8.45595 8.53043 8.66667 8 8.66667C7.46957 8.66667 6.96086 8.45595 6.58579 8.08088C6.21071 7.70581 6 7.1971 6 6.66667V3.33333Z" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="microphone">
+            <path id="Vector" d="M12.6667 6.66667C12.6667 7.90434 12.175 9.09133 11.2998 9.9665C10.4247 10.8417 9.23768 11.3333 8 11.3333C6.76232 11.3333 5.57534 10.8417 4.70017 9.9665C3.825 9.09133 3.33333 7.90434 3.33333 6.66667M8 11.3333V14M5.33333 14H10.6667M6 3.33333C6 2.8029 6.21071 2.29419 6.58579 1.91912C6.96086 1.54405 7.46957 1.33333 8 1.33333C8.53043 1.33333 9.03914 1.54405 9.41421 1.91912C9.78929 2.29419 10 2.8029 10 3.33333V6.66667C10 7.1971 9.78929 7.70581 9.41421 8.08088C9.03914 8.45595 8.53043 8.66667 8 8.66667C7.46957 8.66667 6.96086 8.45595 6.58579 8.08088C6.21071 7.70581 6 7.1971 6 6.66667V3.33333Z" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconMinus({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="minus" transform="scale(0.6667)">
+          <path d="M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <g id="minus" transform="scale(0.8333)">
+          <path d="M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="minus" transform="scale(0.8333)">
+            <path d="M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconMoments({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -3890,6 +4334,54 @@ export function IconMore({ size = 24, ...props }: IconProps) {
             <path d="M44 12V12.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M48 12V12.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M52 12V12.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconNote({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="note" transform="scale(0.6667)">
+          <path d="M13 20l7 -7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M13 20v-6a1 1 0 0 1 1 -1h6v-7a2 2 0 0 0 -2 -2h-12a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <g id="note" transform="scale(0.8333)">
+          <path d="M13 20l7 -7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M13 20v-6a1 1 0 0 1 1 -1h6v-7a2 2 0 0 0 -2 -2h-12a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="note" transform="scale(0.8333)">
+            <path d="M13 20l7 -7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M13 20v-6a1 1 0 0 1 1 -1h6v-7a2 2 0 0 0 -2 -2h-12a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </g>
           </>
         );
@@ -4385,6 +4877,54 @@ export function IconPlayerPlay({ size = 20, ...props }: IconProps) {
         return (
           <>
             <path d="M5.83398 4.16602V15.8327L15.834 9.99935L5.83398 4.16602Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconPlus({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g id="plus" transform="scale(0.6667)">
+          <path d="M12 5v14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <g id="plus" transform="scale(0.8333)">
+          <path d="M12 5v14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g id="plus" transform="scale(0.8333)">
+            <path d="M12 5v14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </g>
           </>
         );
     }

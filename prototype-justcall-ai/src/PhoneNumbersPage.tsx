@@ -96,7 +96,7 @@ function NumberCell({ row }: { row: PhoneNumber }) {
   );
 }
 
-function CapabilityTags({ row }: { row: PhoneNumber }) {
+function CapabilityTags({ row, registrationCta }: { row: PhoneNumber; registrationCta?: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       {row.capabilities.map((capability) => {
@@ -114,13 +114,31 @@ function CapabilityTags({ row }: { row: PhoneNumber }) {
           <TooltipTrigger
             key={capability}
             placement="bottom"
+            // The link has to survive the trip from tag to bubble.
+            interactive={registrationCta}
             content={
-              <Tooltip
-                theme="dark"
-                arrow="top-center"
-                title={`${label} registration pending`}
-                description="Complete registration to start sending."
-              />
+              registrationCta ? (
+                // Lite can finish registration themselves, so the reason
+                // doubles as the way out rather than just a status. Kept to
+                // one line: wrapping only splits the link from its verb.
+                <Tooltip theme="dark" arrow="top-center" className="max-w-none">
+                  Complete{" "}
+                  <a
+                    href="#"
+                    onClick={(event) => event.preventDefault()}
+                    className="text-tooltip-dark-action underline underline-offset-2 hover:opacity-80"
+                  >
+                    A2P 10DLC Registration
+                  </a>{" "}
+                  to activate {label}
+                </Tooltip>
+              ) : (
+                <Tooltip
+                  theme="dark"
+                  arrow="top-center"
+                  title="A2P 10DLC registration pending"
+                />
+              )
             }
           >
             <Tag size="md" color="grey" icon={<IconInfoCircle size={16} />}>
@@ -214,7 +232,14 @@ function Gate({ lock, children }: { lock?: Lock; children: React.ReactElement<Re
   );
 }
 
-export function PhoneNumbersPage({ locks }: { locks?: PhoneNumberLocks }) {
+export function PhoneNumbersPage({
+  locks,
+  registrationCta,
+}: {
+  locks?: PhoneNumberLocks;
+  /** Pending SMS / MMS tooltips link to A2P 10DLC registration (Lite). */
+  registrationCta?: boolean;
+}) {
   const [tab, setTab] = useState<NumbersTab>("active");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<TableSortDirection>(false);
@@ -371,7 +396,7 @@ export function PhoneNumbersPage({ locks }: { locks?: PhoneNumberLocks }) {
                       </TableCell>
                       <TableCell className="text-paragraph-md text-foreground">{row.type}</TableCell>
                       <TableCell>
-                        <CapabilityTags row={row} />
+                        <CapabilityTags row={row} registrationCta={registrationCta} />
                       </TableCell>
                       <TableCell className="truncate text-paragraph-md text-foreground">{row.owner}</TableCell>
                       <TableCell>

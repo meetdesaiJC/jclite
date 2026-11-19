@@ -5,7 +5,18 @@ import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
 import { IconClose } from "@/components/Icon";
 import { InputField } from "@/components/InputField";
-import { type TeamMember } from "./teamMembersData";
+import { LockedControl, type Lock } from "@/components/LockedControl";
+import { Radio } from "@/components/Radio";
+import { RadioCard } from "@/components/RadioCard";
+import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
+import {
+  FixedAccess,
+  LICENSE_OPTIONS,
+  ROLE_OPTIONS,
+  type License,
+  type RoleChoice,
+} from "./AddMembersFlow";
+import { CUSTOM_ROLES, memberLicense, type TeamMember } from "./teamMembersData";
 
 /**
  * Team Members › Edit Member, opened from a row's pencil. Takes over the page
@@ -17,11 +28,11 @@ import { type TeamMember } from "./teamMembersData";
  * nothing on a clean form.
  */
 
-type Section = "basic" | "roles" | "working-hours" | "dialer-settings";
+type Section = "basic" | "access" | "working-hours" | "dialer-settings";
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: "basic", label: "Basic information" },
-  { key: "roles", label: "Roles" },
+  { key: "access", label: "License Type & Role" },
   { key: "working-hours", label: "Working Hours" },
   { key: "dialer-settings", label: "Dialer Settings" },
 ];
@@ -38,6 +49,35 @@ const TIME_ZONES = [
   { value: "Asia/Hong_Kong", label: "(GMT+08:00) Beijing - Chongqing - Hong Kong - Urumqi" },
 ];
 
+/**
+ * Dialer Settings for a member who can't call. It's the member's license, not
+ * the admin's, that rules it out — so the tooltip names that, rather than the
+ * generic "your current license".
+ */
+const NO_DIALER: Lock = {
+  reason: "Dialer settings are only available for members with a Standard license.",
+  // null, not omitted: undefined falls back to the generic "contact your
+  // admin" hint, and this sentence already says everything.
+  hint: null,
+};
+
+/** The member's license in the invite flow's keys. */
+function licenseOf(member: TeamMember): License {
+  const license = memberLicense(member.id);
+  return license === "Lite" ? "lite" : license === "View-only" ? "view-only" : "standard";
+}
+
+/** Fixture roles are free text; fold them onto the invite flow's three choices. */
+function roleOf(member: TeamMember): { role: RoleChoice; customRole: string } {
+  if (member.role === "Owner" || member.role === "Admin") {
+    return { role: "admin", customRole: "" };
+  }
+  if (member.role === "Team Member" || member.role === "Migrated Team Member") {
+    return { role: "member", customRole: "" };
+  }
+  return { role: "custom", customRole: member.role };
+}
+
 function splitName(name: string) {
   const [first, ...rest] = name.trim().split(/\s+/);
   return { first: first ?? "", last: rest.join(" ") };
@@ -45,9 +85,12 @@ function splitName(name: string) {
 
 export function EditMemberPage({
   member,
+  locks,
   onClose,
 }: {
   member: TeamMember;
+  /** Sections the signed-in license can't open; omit for full access. */
+  locks?: { dialerSettings?: Lock };
   onClose: () => void;
 }) {
   const initial = {
@@ -55,7 +98,9 @@ export function EditMemberPage({
     email: member.email,
     extension: member.extension,
     timeZone: member.timeZone,
+    ...roleOf(member),
   };
+  const license = licenseOf(member);
   const [form, setForm] = useState(initial);
   const [section, setSection] = useState<Section>("basic");
   const dirty = (Object.keys(initial) as (keyof typeof initial)[]).some(
@@ -63,6 +108,7 @@ export function EditMemberPage({
   );
   const set = (key: keyof typeof initial) => (value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
+  const setRole = (role: RoleChoice) => setForm((current) => ({ ...current, role }));
 
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
@@ -102,27 +148,49 @@ export function EditMemberPage({
           <nav aria-label="Member settings" className="flex flex-col gap-1">
             {SECTIONS.map((item) => {
               const active = item.key === section;
+              const lock =
+                item.key === "dialer-settings"
+                  ? (locks?.dialerSettings ?? (license === "standard" ? undefined : NO_DIALER))
+                  : undefined;
               return (
-                <button
+                <LockedControl
                   key={item.key}
-                  type="button"
-                  aria-current={active ? "page" : undefined}
-                  onClick={() => setSection(item.key)}
-                  className={cn(
-                    "rounded-[4px] px-7 py-2.5 text-left text-label-md transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
-                    active
-                      ? "bg-brand-subtle text-brand"
-                      : "text-foreground hover:bg-surface-hover"
-                  )}
+                  locked={Boolean(lock)}
+                  reason={lock?.reason}
+                  hint={lock?.hint}
+                  placement="right"
+                  // A locked row hugs its label so the tooltip opens beside the
+                  // words, not at the far edge of the nav. It has no hover fill,
+                  // so the narrower box doesn't show.
+                  triggerClassName={lock ? "flex w-fit" : "flex w-full"}
                 >
-                  {item.label}
-                </button>
+                  <button
+                    type="button"
+                    aria-current={active ? "page" : undefined}
+                    onClick={() => setSection(item.key)}
+                    className={cn(
+                      "w-full rounded-[4px] px-7 py-2.5 text-left text-label-md transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+                      active
+                        ? "bg-brand-subtle text-brand"
+                        : "text-foreground hover:bg-surface-hover",
+                      "data-[locked=true]:text-disabled-fg data-[locked=true]:hover:bg-transparent"
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                </LockedControl>
               );
             })}
           </nav>
         </aside>
 
-        <section className="flex w-full max-w-[640px] flex-col gap-6">
+        <section
+          className={cn(
+            "@container flex w-full flex-col gap-6",
+            // Three license cards need the invite flow's width to stay readable.
+            section === "access" ? "max-w-[760px]" : "max-w-[640px]"
+          )}
+        >
           {section === "basic" ? (
             <>
               <header className="flex flex-col gap-1">
@@ -163,6 +231,123 @@ export function EditMemberPage({
                   className="w-full"
                 />
               </div>
+            </>
+          ) : section === "access" ? (
+            <>
+              <header>
+                <h2 className="text-heading-xl text-foreground">License Type &amp; Role</h2>
+              </header>
+
+              {/* Heading sits close to its cards so it reads as their label,
+                  not as a section of its own. */}
+              <div className="flex flex-col gap-2">
+                <h3 className="text-label-lg text-foreground">License type</h3>
+                {/* The same three cards the invite flow offers, so the admin
+                    recognises them — but read-only. Moving someone between
+                    licenses changes the contract, which is the CSM's call, not
+                    a settings toggle; each card says so on hover. */}
+                <div
+                  role="radiogroup"
+                  aria-label="License type"
+                  aria-disabled="true"
+                  className="grid grid-cols-1 gap-3 @min-[600px]:grid-cols-3"
+                >
+                  {LICENSE_OPTIONS.map((option) => (
+                    <TooltipTrigger
+                      key={option.key}
+                      placement="top"
+                      className="flex h-full w-full"
+                      // Interactive so the pointer can travel into the bubble
+                      // and reach the CTA before it closes.
+                      interactive
+                      content={
+                        <Tooltip
+                          theme="dark"
+                          arrow="bottom-center"
+                          // White rather than the tooltip's muted grey / link
+                          // blue: the whole bubble is the message, as in Figma.
+                          description={
+                            <span className="text-tooltip-dark-fg">
+                              You can't change this member's license here. Contact your CSM
+                              to request a change.
+                            </span>
+                          }
+                          action={
+                            // The tooltip's own blue text link. A button, not an
+                            // <a>: the action slot underlines links on hover, and
+                            // this one stays plain. No CSM destination exists yet.
+                            <button type="button">Contact your CSM</button>
+                          }
+                        />
+                      }
+                    >
+                      <RadioCard
+                        wrapperClassName="w-full"
+                        name="edit-member-license"
+                        // Only the alternatives are disabled. The member's own
+                        // license keeps the selected look — greying it too
+                        // would read as "no license", not "this one".
+                        disabled={license !== option.key}
+                        checked={license === option.key}
+                        onCheckedChange={() => {}}
+                        title={option.label}
+                        icon={option.icon}
+                        description={option.description}
+                      />
+                    </TooltipTrigger>
+                  ))}
+                </div>
+              </div>
+
+              {license === "standard" ? (
+                <div className="flex flex-col gap-4">
+                  <h3 className="text-label-lg text-foreground">Role</h3>
+                  <div
+                    role="radiogroup"
+                    aria-label="Role"
+                    className="flex max-w-[620px] flex-col gap-5"
+                  >
+                    {ROLE_OPTIONS.map((option) => {
+                      const selected = form.role === option.key;
+                      return (
+                        <div key={option.key} className="flex flex-col gap-3">
+                          <Radio
+                            name="edit-member-role"
+                            size="md"
+                            checked={selected}
+                            onCheckedChange={(checked) => checked && setRole(option.key)}
+                            label={<span className="text-label-md">{option.label}</span>}
+                            description={
+                              <span className="text-muted-foreground">
+                                {option.description}
+                              </span>
+                            }
+                          />
+                          {option.key === "custom" && selected ? (
+                            <div className="pl-8">
+                              <Dropdown
+                                placeholder="Select a custom role"
+                                searchable
+                                searchPlaceholder="Search roles"
+                                options={CUSTOM_ROLES.map((r) => ({ value: r, label: r }))}
+                                value={form.customRole || undefined}
+                                onValueChange={(value) =>
+                                  set("customRole")(Array.isArray(value) ? value[0] : value)
+                                }
+                                className="w-full max-w-[360px]"
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                // Lite and View-only carry fixed access — the invite flow's
+                // reasoning holds here too: a role picker would have no effect.
+                <FixedAccess license={license} />
+              )}
             </>
           ) : (
             <header className="flex flex-col gap-1">
