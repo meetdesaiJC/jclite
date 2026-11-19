@@ -30,10 +30,11 @@ import {
   type PlanChargeKey,
 } from "./teamMembersData";
 import { PlanDetailsModal } from "./PlanDetailsModal";
+import { CsmEmail } from "./CsmEmail";
 
 /**
  * Profile › Billing — the account's plan, with Lite and View-only licenses as
- * line items in it, and the billing housekeeping (address, card, cancel).
+ * line items in it, and the billing housekeeping (address, card).
  * Sections and copy follow the ai-review-assist billing screen; the card
  * treatment matches the add-ons prototype's Billing Overview so the two read
  * as one product.
@@ -74,10 +75,8 @@ function CardHeading({ title, subtitle }: { title: React.ReactNode; subtitle?: R
 
 /** Billing actions the signed-in license can't take; omit for full access. */
 export interface BillingLocks {
-  cancel?: Lock;
   addCard?: Lock;
   cardActions?: Lock;
-  changePlan?: Lock;
 }
 
 /** Locks one control when `lock` is set; renders it untouched otherwise. */
@@ -134,12 +133,7 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
                     Your account is managed under a custom contract. For any
                     questions or changes related to your plan or billing, please
                     contact your Customer Success Manager, {BILLING.csm.name} at{" "}
-                    <a
-                      href={`mailto:${BILLING.csm.email}`}
-                      className="text-tooltip-dark-action hover:underline"
-                    >
-                      {BILLING.csm.email}
-                    </a>
+                    <CsmEmail tone="dark" />
                     .
                   </span>
                 </Tooltip>
@@ -172,6 +166,8 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
                         them out here made the tooltip a wall of text. */}
                     <TooltipTrigger
                       placement="bottom"
+                      // Interactive so the pointer can reach the CSM's email.
+                      interactive
                       content={
                         <Tooltip
                           theme="dark"
@@ -182,7 +178,8 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
                           <span className="flex flex-col gap-1 whitespace-normal px-1 py-2">
                             <span className="text-label-md">How license counts work</span>
                             <span className="text-tooltip-dark-muted">
-                              License counts are set by your contract. Contact your CSM to change them.
+                              License counts are set by your contract. To change them,
+                              contact your CSM at <CsmEmail tone="dark" />.
                             </span>
                           </span>
                         </Tooltip>
@@ -335,36 +332,6 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
               </TableRow>
             </TableBody>
           </Table>
-        </Card>
-
-        <Card>
-          <div className="flex items-center gap-6">
-            <CardHeading
-              title="Cancel Subscription"
-              // The date is the renewal date above, so "stays active until"
-              // and "renews on" never disagree on the same page.
-              subtitle={`If you cancel now, your subscription will stay active until ${BILLING.renewsOn}. Prefer a temporary break? You can choose to pause your subscription instead.`}
-            />
-            <Gate lock={locks?.cancel}>
-              <Button variant="grey-outline" size="md" className="shrink-0">
-                Cancel Subscription
-              </Button>
-            </Gate>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center gap-6">
-            <CardHeading
-              title="Change Plan"
-              subtitle="Upgrade as your team grows or switch to a lower plan if you need less. Compare plans and pick what fits today."
-            />
-            <Gate lock={locks?.changePlan}>
-              <Button variant="primary" size="md" className="shrink-0">
-                Compare Plans
-              </Button>
-            </Gate>
-          </div>
         </Card>
       </div>
       <PlanDetailsModal

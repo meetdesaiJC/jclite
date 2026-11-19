@@ -15,6 +15,7 @@ import {
   type License,
   type RoleChoice,
 } from "./AddMembersFlow";
+import { CsmEmail } from "./CsmEmail";
 import { CUSTOM_ROLES, memberLicense, type TeamMember } from "./teamMembersData";
 
 /**
@@ -238,15 +239,9 @@ export function EditMemberPage({
                           // blue: the whole bubble is the message, as in Figma.
                           description={
                             <span className="text-tooltip-dark-fg">
-                              You can't change this member's license here. Contact your CSM
-                              to request a change.
+                              You can't change this member's license here. To request a
+                              change, contact your CSM at <CsmEmail tone="dark" />.
                             </span>
-                          }
-                          action={
-                            // The tooltip's own blue text link. A button, not an
-                            // <a>: the action slot underlines links on hover, and
-                            // this one stays plain. No CSM destination exists yet.
-                            <button type="button">Contact your CSM</button>
                           }
                         />
                       }

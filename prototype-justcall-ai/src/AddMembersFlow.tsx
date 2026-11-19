@@ -23,6 +23,7 @@ import {
   CUSTOM_ROLES,
   LICENSE_SEATS,
 } from "./teamMembersData";
+import { CsmEmail } from "./CsmEmail";
 
 /**
  * Teams › Team Members › Add Members — a full-page, three-step flow that
@@ -473,7 +474,7 @@ export function FixedAccess() {
       icon={<IconInfoCircle size={20} className="shrink-0 text-muted-foreground" aria-hidden="true" />}
     >
       To see what's included and not included with this license, refer to your
-      contract or contact your CSM.
+      contract or contact your CSM at <CsmEmail tone="light" />.
     </Alert>
   );
 }
@@ -532,6 +533,8 @@ function SetAccessStep({
                 placement="top"
                 disabled={!short}
                 className="flex h-full w-full"
+                // Interactive so the pointer can reach the CSM's email.
+                interactive
                 content={
                   short ? (
                     <Tooltip
@@ -539,9 +542,20 @@ function SetAccessStep({
                       arrow="bottom-center"
                       title={`Not enough ${option.label} licenses`}
                       description={
-                        seats.left === 0
-                          ? `All ${option.label} licenses are in use. Ask your CSM to add more.`
-                          : `You're inviting ${inviteeCount} members, but only ${seats.left} ${option.label} ${seats.left === 1 ? "license is" : "licenses are"} left. Ask your CSM to add more, or invite fewer people.`
+                        seats.left === 0 ? (
+                          <>
+                            All {option.label} licenses are in use. To add more,
+                            contact your CSM at <CsmEmail tone="dark" />.
+                          </>
+                        ) : (
+                          <>
+                            You're inviting {inviteeCount} members, but only{" "}
+                            {seats.left} {option.label}{" "}
+                            {seats.left === 1 ? "license is" : "licenses are"} left.
+                            Invite fewer people, or to add more, contact your CSM
+                            at <CsmEmail tone="dark" />.
+                          </>
+                        )
                       }
                     />
                   ) : null

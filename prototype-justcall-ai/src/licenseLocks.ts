@@ -49,10 +49,8 @@ export function teamMemberLocks(license?: License) {
 /** Billing actions. */
 export function billingLocks(license?: License) {
   return {
-    cancel: forBoth(license),
     addCard: forViewOnly(license),
     cardActions: forViewOnly(license),
-    changePlan: forViewOnly(license),
   };
 }
 
