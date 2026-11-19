@@ -30,10 +30,11 @@ import {
   type PlanChargeKey,
 } from "./teamMembersData";
 import { PlanDetailsModal } from "./PlanDetailsModal";
+import { CsmEmail } from "./CsmEmail";
 
 /**
  * Profile › Billing — the account's plan, with Lite and View-only licenses as
- * line items in it, and the billing housekeeping (address, card, cancel).
+ * line items in it, and the billing housekeeping (address, card).
  * Sections and copy follow the ai-review-assist billing screen; the card
  * treatment matches the add-ons prototype's Billing Overview so the two read
  * as one product.
@@ -74,10 +75,8 @@ function CardHeading({ title, subtitle }: { title: React.ReactNode; subtitle?: R
 
 /** Billing actions the signed-in license can't take; omit for full access. */
 export interface BillingLocks {
-  cancel?: Lock;
   addCard?: Lock;
   cardActions?: Lock;
-  changePlan?: Lock;
 }
 
 /** Locks one control when `lock` is set; renders it untouched otherwise. */
@@ -110,10 +109,50 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
     <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-white p-6">
       <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6">
         <Card>
-          <CardHeading
-            title="Plan Details"
-            subtitle={`Your subscription renews on ${BILLING.renewsOn}`}
-          />
+          <div className="flex items-start justify-between gap-4">
+            <CardHeading
+              title="Plan Details"
+              subtitle={`Your subscription renews on ${BILLING.renewsOn}`}
+            />
+            {/* The whole card is contract-bound, so the tag sits on the card,
+                not on a row. Interactive so the CSM's email can be clicked. */}
+            <TooltipTrigger
+              placement="bottom-right"
+              interactive
+              content={
+                <Tooltip
+                  theme="dark"
+                  arrow="top-right"
+                  padded="comfortable"
+                  className="max-w-[320px]"
+                >
+                  {/* Padding on the body, not the Tooltip: its className
+                      styles the shell that holds the arrow, so padding there
+                      pushes the bubble away from the tag. */}
+                  <span className="block whitespace-normal px-1 py-2">
+                    Your account is managed under a custom contract. For any
+                    questions or changes related to your plan or billing, please
+                    contact your Customer Success Manager, {BILLING.csm.name} at{" "}
+                    <CsmEmail tone="dark" />
+                    .
+                  </span>
+                </Tooltip>
+              }
+            >
+              <button
+                type="button"
+                className="shrink-0 rounded-[4px] outline-none focus-visible:ring-4 focus-visible:ring-brand/24"
+              >
+                <Tag
+                  size="lg"
+                  color="pink"
+                  infoIcon={<IconInfoCircle size={16} aria-hidden="true" />}
+                >
+                  Custom Contract
+                </Tag>
+              </button>
+            </TooltipTrigger>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -122,44 +161,23 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
                 <TableHead className="w-[200px] text-label-md">
                   <span className="inline-flex items-center gap-1.5">
                     Licenses
-                    {/* One icon for the whole column: the rule differs by
-                        type (a minimum vs a limit), so it's explained once
-                        here rather than per row. */}
+                    {/* One icon for the whole column. Generic on purpose:
+                        the per-type rules live in the contract, and spelling
+                        them out here made the tooltip a wall of text. */}
                     <TooltipTrigger
                       placement="bottom"
+                      // Interactive so the pointer can reach the CSM's email.
+                      interactive
                       content={
-                        // Children-only mode, not title/description: that
-                        // pair is 12px grey, sized for one-line hints. A
-                        // three-part explanation needs the 14px white body.
                         <Tooltip
                           theme="dark"
                           arrow="top-center"
                           padded="comfortable"
-                          className="max-w-[380px] p-4"
+                          className="max-w-[280px]"
                         >
-                          <span className="flex flex-col gap-2 whitespace-normal">
-                            <span className="text-label-md">How license counts work</span>
-                            {/* Each type's name on its own line, so the two
-                                rules scan as a pair rather than a paragraph. */}
-                            <span className="flex flex-col">
-                              {/* The limit's direction sits beside the name: Standard is a
-                                  floor, the other two are a ceiling, and "sets a
-                                  limit" alone didn't say which. */}
-                              <span className="font-medium">
-                                Standard <span className="text-tooltip-dark-muted">· Minimum</span>
-                              </span>
-                              {/* Body in the tooltip's secondary text, so the
-                                  type names above carry the scan. */}
-                              <span className="text-tooltip-dark-muted">
-                                Your contract sets a minimum. You can add more Standard licenses as needed. Your license count will be adjusted to match the number of active team members at the time of billing renewal.
-                              </span>
-                            </span>
-                            <span className="flex flex-col">
-                              <span className="font-medium">
-                                Lite and View-only <span className="text-tooltip-dark-muted">· Maximum</span>
-                              </span>
-                              <span className="text-tooltip-dark-muted">Your contract sets a maximum for each license type. Contact your CSM to increase it.</span>
-                            </span>
+                          <span className="block whitespace-normal px-1 py-2 text-tooltip-dark-fg">
+                            License counts are set by your contract. To change them,
+                            contact your CSM at <CsmEmail tone="dark" />.
                           </span>
                         </Tooltip>
                       }
@@ -311,36 +329,6 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
               </TableRow>
             </TableBody>
           </Table>
-        </Card>
-
-        <Card>
-          <div className="flex items-center gap-6">
-            <CardHeading
-              title="Cancel Subscription"
-              // The date is the renewal date above, so "stays active until"
-              // and "renews on" never disagree on the same page.
-              subtitle={`If you cancel now, your subscription will stay active until ${BILLING.renewsOn}. Prefer a temporary break? You can choose to pause your subscription instead.`}
-            />
-            <Gate lock={locks?.cancel}>
-              <Button variant="grey-outline" size="md" className="shrink-0">
-                Cancel Subscription
-              </Button>
-            </Gate>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="flex items-center gap-6">
-            <CardHeading
-              title="Change Plan"
-              subtitle="Upgrade as your team grows or switch to a lower plan if you need less. Compare plans and pick what fits today."
-            />
-            <Gate lock={locks?.changePlan}>
-              <Button variant="primary" size="md" className="shrink-0">
-                Compare Plans
-              </Button>
-            </Gate>
-          </div>
         </Card>
       </div>
       <PlanDetailsModal

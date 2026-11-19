@@ -10,9 +10,7 @@ import type { Lock } from "@/components/LockedControl";
  * Locks are on actions, never on pages. View-only is read access: someone
  * with it should still be able to open AI Voice Agent, Salesfloor or the
  * Compliance center and see what's been set up — only the verbs inside are
- * locked. So no nav item or menu row is locked here — the one exception is
- * Dialer Settings in Edit Member, which configures a dialer these licenses
- * don't have (see teamMemberLocks).
+ * locked. So no nav item, menu row or section is locked here.
  *
  * `undefined` means "not locked" — the admin experience, or an action this
  * license keeps. Screens pass the result straight to a `locked` / `*Locked`
@@ -42,23 +40,17 @@ export function dialerLock(license?: License) {
 
 /**
  * Team Members: invite, duplicate and edit are member management.
- *
- * Edit Member › Dialer Settings is the one section lock in this file, and it
- * is deliberate: neither license can place a call, so there is no dialer for
- * those settings to configure. (View-only never reaches Edit Member at all.)
  */
 export function teamMemberLocks(license?: License) {
   const manage = forViewOnly(license);
-  return { addMember: manage, duplicate: manage, edit: manage, dialerSettings: forBoth(license) };
+  return { addMember: manage, duplicate: manage, edit: manage };
 }
 
 /** Billing actions. */
 export function billingLocks(license?: License) {
   return {
-    cancel: forBoth(license),
     addCard: forViewOnly(license),
     cardActions: forViewOnly(license),
-    changePlan: forViewOnly(license),
   };
 }
 

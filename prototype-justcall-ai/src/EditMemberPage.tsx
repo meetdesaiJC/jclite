@@ -5,7 +5,6 @@ import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
 import { IconClose } from "@/components/Icon";
 import { InputField } from "@/components/InputField";
-import { LockedControl, type Lock } from "@/components/LockedControl";
 import { Radio } from "@/components/Radio";
 import { RadioCard } from "@/components/RadioCard";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
@@ -16,6 +15,7 @@ import {
   type License,
   type RoleChoice,
 } from "./AddMembersFlow";
+import { CsmEmail } from "./CsmEmail";
 import { CUSTOM_ROLES, memberLicense, type TeamMember } from "./teamMembersData";
 
 /**
@@ -49,18 +49,6 @@ const TIME_ZONES = [
   { value: "Asia/Hong_Kong", label: "(GMT+08:00) Beijing - Chongqing - Hong Kong - Urumqi" },
 ];
 
-/**
- * Dialer Settings for a member who can't call. It's the member's license, not
- * the admin's, that rules it out — so the tooltip names that, rather than the
- * generic "your current license".
- */
-const NO_DIALER: Lock = {
-  reason: "Dialer settings are only available for members with a Standard license.",
-  // null, not omitted: undefined falls back to the generic "contact your
-  // admin" hint, and this sentence already says everything.
-  hint: null,
-};
-
 /** The member's license in the invite flow's keys. */
 function licenseOf(member: TeamMember): License {
   const license = memberLicense(member.id);
@@ -85,12 +73,9 @@ function splitName(name: string) {
 
 export function EditMemberPage({
   member,
-  locks,
   onClose,
 }: {
   member: TeamMember;
-  /** Sections the signed-in license can't open; omit for full access. */
-  locks?: { dialerSettings?: Lock };
   onClose: () => void;
 }) {
   const initial = {
@@ -148,37 +133,23 @@ export function EditMemberPage({
           <nav aria-label="Member settings" className="flex flex-col gap-1">
             {SECTIONS.map((item) => {
               const active = item.key === section;
-              const lock =
-                item.key === "dialer-settings"
-                  ? (locks?.dialerSettings ?? (license === "standard" ? undefined : NO_DIALER))
-                  : undefined;
+              // Every section stays open, Dialer Settings included, whatever
+              // the member's or the admin's license — locks go on verbs, not pages.
               return (
-                <LockedControl
+                <button
                   key={item.key}
-                  locked={Boolean(lock)}
-                  reason={lock?.reason}
-                  hint={lock?.hint}
-                  placement="right"
-                  // A locked row hugs its label so the tooltip opens beside the
-                  // words, not at the far edge of the nav. It has no hover fill,
-                  // so the narrower box doesn't show.
-                  triggerClassName={lock ? "flex w-fit" : "flex w-full"}
+                  type="button"
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => setSection(item.key)}
+                  className={cn(
+                    "w-full rounded-[4px] px-7 py-2.5 text-left text-label-md transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
+                    active
+                      ? "bg-brand-subtle text-brand"
+                      : "text-foreground hover:bg-surface-hover"
+                  )}
                 >
-                  <button
-                    type="button"
-                    aria-current={active ? "page" : undefined}
-                    onClick={() => setSection(item.key)}
-                    className={cn(
-                      "w-full rounded-[4px] px-7 py-2.5 text-left text-label-md transition-colors outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
-                      active
-                        ? "bg-brand-subtle text-brand"
-                        : "text-foreground hover:bg-surface-hover",
-                      "data-[locked=true]:text-disabled-fg data-[locked=true]:hover:bg-transparent"
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                </LockedControl>
+                  {item.label}
+                </button>
               );
             })}
           </nav>
@@ -268,15 +239,9 @@ export function EditMemberPage({
                           // blue: the whole bubble is the message, as in Figma.
                           description={
                             <span className="text-tooltip-dark-fg">
-                              You can't change this member's license here. Contact your CSM
-                              to request a change.
+                              You can't change this member's license here. To request a
+                              change, contact your CSM at <CsmEmail tone="dark" />.
                             </span>
-                          }
-                          action={
-                            // The tooltip's own blue text link. A button, not an
-                            // <a>: the action slot underlines links on hover, and
-                            // this one stays plain. No CSM destination exists yet.
-                            <button type="button">Contact your CSM</button>
                           }
                         />
                       }
@@ -346,7 +311,7 @@ export function EditMemberPage({
               ) : (
                 // Lite and View-only carry fixed access — the invite flow's
                 // reasoning holds here too: a role picker would have no effect.
-                <FixedAccess license={license} />
+                <FixedAccess />
               )}
             </>
           ) : (

@@ -999,16 +999,18 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
 
             {confirming && (
               <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-3 py-2">
+                {/* xs, not sm: the footer serves the list above it, and at
+                    36px the buttons outweighed the 14px option rows. */}
                 <Button
                   variant="link"
-                  size="sm"
+                  size="xs"
                   disabled={draft.length === 0}
                   onClick={() => setDraft([])}
                 >
                   Clear
                 </Button>
                 <Button
-                  size="sm"
+                  size="xs"
                   // Nothing to apply until the draft differs from what's on.
                   disabled={!draftChanged}
                   onClick={() => {

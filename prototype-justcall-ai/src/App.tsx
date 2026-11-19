@@ -573,7 +573,6 @@ function LicenseFlow({
               <EditMemberPage
                 key={editingMember.id}
                 member={editingMember}
-                locks={teamMemberLocks(license)}
                 onClose={() => setEditingMember(null)}
               />
             ) : addingMembers ? (

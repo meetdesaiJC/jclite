@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { Alert } from "@/components/Alert";
 import { Button } from "@/components/Button";
 import { Dropdown } from "@/components/Dropdown";
 import { Modal } from "@/components/Modal";
@@ -11,7 +12,6 @@ import { Stepper, type StepperStep } from "@/components/Stepper";
 import { Tag } from "@/components/Tag";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import {
-  IconCheck,
   IconClose,
   IconEye,
   IconInfoCircle,
@@ -23,6 +23,7 @@ import {
   CUSTOM_ROLES,
   LICENSE_SEATS,
 } from "./teamMembersData";
+import { CsmEmail } from "./CsmEmail";
 
 /**
  * Teams › Team Members › Add Members — a full-page, three-step flow that
@@ -66,46 +67,6 @@ export const LICENSE_OPTIONS: {
     description: "View team activity and export reports. Editing is disabled.",
   },
 ];
-
-// Copy is verbatim from the license access tables in the PRD.
-const FIXED_ACCESS: Record<
-  Exclude<License, "standard">,
-  { can: string[]; cant: string[] }
-> = {
-  lite: {
-    can: [
-      "Manage phone numbers, team members, groups, and roles",
-      "Manage inbox conversations, contacts, and integrations",
-      "Manage Sales Dialer workflows",
-      "Review call logs, recordings, transcripts, and reports",
-      "Monitor live calls and whisper to agents",
-      "Manage billing, payments, and plan changes",
-    ],
-    cant: [
-      "Calling and SMS sending",
-      "Campaign creation, editing, and launch",
-      "Voice workflow creation, editing, and publishing",
-      "Live call barge-in",
-      "Plan cancellation",
-    ],
-  },
-  "view-only": {
-    can: [
-      "Read inbox threads and review call logs, recordings, and transcripts",
-      "View campaigns, workflows, dashboards, and analytics",
-      "Export reports and download call logs",
-      "View numbers, team members, groups, roles, and invoices",
-      "Check integration status and update personal settings",
-    ],
-    cant: [
-      "Calling and SMS sending",
-      "Live call monitoring",
-      "Inbox and campaign management",
-      "Team, number, and workflow changes",
-      "Integration setup and billing changes",
-    ],
-  },
-};
 
 export const ROLE_OPTIONS: {
   key: RoleChoice;
@@ -498,49 +459,23 @@ export function SeatCount({ license }: { license: License }) {
   );
 }
 
-function AccessColumn({
-  title,
-  items,
-  included,
-}: {
-  title: string;
-  items: readonly string[];
-  included: boolean;
-}) {
-  const Mark = included ? IconCheck : IconClose;
+// Fixed-access licenses get one generic note in place of a Role list. It
+// deliberately names no features — the contract is the source of truth for
+// what a license includes, and a list here would drift from it.
+export function FixedAccess() {
   return (
-    <div className="flex flex-col gap-3 p-5">
-      <h4 className="text-label-md text-foreground">{title}</h4>
-      <ul className="flex flex-col gap-2">
-        {items.map((item) => (
-          <li key={item} className="flex gap-3 text-paragraph-md text-foreground">
-            <Mark
-              size={20}
-              className={cn("shrink-0", included ? "text-success" : "text-error")}
-              aria-hidden="true"
-            />
-            {item}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// What a fixed-access license can and can't do, in place of a Role list: one
-// card, two columns with no rule between, so they read as one comparison. The
-// "not included" half matters as much as the other: it's what stops an admin
-// giving Lite to someone who needs to dial.
-export function FixedAccess({ license }: { license: Exclude<License, "standard"> }) {
-  const access = FIXED_ACCESS[license];
-  return (
-    <section
+    // Grey, not the info blue: this is a pointer elsewhere, not news, and the
+    // blue fill outweighed the license cards it sits under. Flat for the
+    // same reason — the Alert's float shadow is for messages that overlay.
+    <Alert
+      variant="info"
       aria-label="License access"
-      className="grid grid-cols-1 overflow-hidden rounded-md border border-line @min-[600px]:grid-cols-2"
+      className="border-line bg-secondary-bg shadow-none"
+      icon={<IconInfoCircle size={20} className="shrink-0 text-muted-foreground" aria-hidden="true" />}
     >
-      <AccessColumn title="Included" items={access.can} included />
-      <AccessColumn title="Not included" items={access.cant} included={false} />
-    </section>
+      To see what's included and not included with this license, refer to your
+      contract or contact your CSM at <CsmEmail tone="light" />.
+    </Alert>
   );
 }
 
@@ -598,6 +533,8 @@ function SetAccessStep({
                 placement="top"
                 disabled={!short}
                 className="flex h-full w-full"
+                // Interactive so the pointer can reach the CSM's email.
+                interactive
                 content={
                   short ? (
                     <Tooltip
@@ -605,9 +542,20 @@ function SetAccessStep({
                       arrow="bottom-center"
                       title={`Not enough ${option.label} licenses`}
                       description={
-                        seats.left === 0
-                          ? `All ${option.label} licenses are in use. Ask your CSM to add more.`
-                          : `You're inviting ${inviteeCount} members, but only ${seats.left} ${option.label} ${seats.left === 1 ? "license is" : "licenses are"} left. Ask your CSM to add more, or invite fewer people.`
+                        seats.left === 0 ? (
+                          <>
+                            All {option.label} licenses are in use. To add more,
+                            contact your CSM at <CsmEmail tone="dark" />.
+                          </>
+                        ) : (
+                          <>
+                            You're inviting {inviteeCount} members, but only{" "}
+                            {seats.left} {option.label}{" "}
+                            {seats.left === 1 ? "license is" : "licenses are"} left.
+                            Invite fewer people, or to add more, contact your CSM
+                            at <CsmEmail tone="dark" />.
+                          </>
+                        )
                       }
                     />
                   ) : null
@@ -633,7 +581,7 @@ function SetAccessStep({
       </div>
 
       {license === "lite" || license === "view-only" ? (
-        <FixedAccess license={license} />
+        <FixedAccess />
       ) : null}
 
       {license === "standard" ? (
@@ -742,7 +690,7 @@ function AssignNumbersStep({
       // Only the share-only step gets a field label; in the radio layout the
       // "Share Number" option directly above already names the picker.
       label={shareOnly ? "Select phone numbers" : undefined}
-      placeholder={shareOnly ? "Select numbers to share" : "Select numbers"}
+      placeholder={shareOnly ? "Select numbers to assign" : "Select numbers"}
       options={ACCOUNT_NUMBERS}
       value={sharedNumbers}
       onValueChange={(value) => onSharedNumbersChange(Array.isArray(value) ? value : [value])}
@@ -755,9 +703,9 @@ function AssignNumbersStep({
       {shareOnly ? (
         <div className="flex flex-col gap-6">
           <header className="flex flex-col gap-2">
-            <h2 className="text-heading-xl text-foreground">Share phone numbers</h2>
+            <h2 className="text-heading-xl text-foreground">Assign Numbers</h2>
             <p className="text-paragraph-md text-muted-foreground">
-              This allows members to share your existing numbers
+              Assign phone numbers to newly added members
             </p>
           </header>
           {numberPicker}
@@ -888,8 +836,8 @@ export function AddMembersFlow({
   const steps: StepperStep[] = [
     { key: "invite", label: "Invite Member" },
     { key: "access", label: "License Type & Role" },
-    // Named for what the step does: View-only can only share numbers.
-    { key: "numbers", label: license === "view-only" ? "Share numbers" : "Assign Numbers" },
+    // "Assign" for every license — View-only still only gets existing numbers.
+    { key: "numbers", label: "Assign Numbers" },
   ];
 
   const inviteReady =
@@ -938,7 +886,10 @@ export function AddMembersFlow({
           size="md"
           disabled={!canAdvance}
           onClick={() => {
-            if (finishes) setReviewing(true);
+            // Lite and View-only draw from a fixed pool of licenses already
+            // bought, so inviting into one adds no charge — no notice to confirm.
+            if (finishes && fixedAccess) onComplete(inviteeCount);
+            else if (finishes) setReviewing(true);
             else setStep(step === "invite" ? "access" : "numbers");
           }}
         >
