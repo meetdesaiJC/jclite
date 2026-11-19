@@ -2051,3 +2051,95 @@ button.call-bar-control[data-help="active"] {
     animation-name: dropdown-fade-in;
   }
 }
+
+/* Live Monitoring › Monitor Call widget — drops in from where the supervisor's
+   eye already is (the top-right of the page) rather than from an edge, a short
+   travel, so `base` on the entrance curve. Reduced motion keeps the fade only,
+   so the panel still announces itself. */
+@keyframes monitor-widget-in {
+  from {
+    opacity: 0;
+    translate: 0 -8px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes monitor-widget-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.monitor-widget {
+  animation: monitor-widget-in var(--duration-base) var(--ease-entrance) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .monitor-widget {
+    animation-name: monitor-widget-fade-in;
+  }
+}
+
+/* ── Filter row (Team Members, Call Logs) ───────────────────────────────────────
+   Opens by growing a grid track from 0fr to 1fr, so the table slides down
+   instead of jumping. It's one short row toggled by a click, not a list
+   re-rendering per keystroke, so the reflow is cheap. Closing is a step
+   faster than opening (moderate → base), and the chips fade a beat ahead
+   of the track so they never get clipped mid-fade. */
+.filter-row {
+  display: grid;
+  grid-template-rows: 0fr;
+  flex-shrink: 0;
+  transition: grid-template-rows var(--duration-base) var(--ease-exit);
+}
+
+.filter-row.is-open {
+  position: relative;
+  z-index: 20;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--duration-moderate) var(--ease-entrance);
+}
+
+.filter-row-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Open menus hang below the row; once it's fully open, stop clipping them. */
+.filter-row.is-open .filter-row-clip {
+  overflow: visible;
+}
+
+.filter-row-inner {
+  opacity: 0;
+  translate: 0 -4px;
+  transition:
+    opacity var(--duration-fast) var(--ease-exit),
+    translate var(--duration-fast) var(--ease-exit);
+}
+
+.filter-row.is-open .filter-row-inner {
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity var(--duration-moderate) var(--ease-entrance),
+    translate var(--duration-moderate) var(--ease-entrance);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No travel: the row snaps open, the chips just fade. */
+  .filter-row,
+  .filter-row.is-open {
+    transition-duration: var(--duration-instant);
+  }
+  .filter-row-inner,
+  .filter-row.is-open .filter-row-inner {
+    translate: none;
+  }
+}

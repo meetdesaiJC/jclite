@@ -11,7 +11,6 @@ import {
   IconDotsVertical,
   IconDownload,
   IconFilter,
-  IconPhone,
   IconPhoneIncoming,
   IconPhoneOutgoing,
   IconPlayerPlay,
@@ -46,8 +45,6 @@ import {
 
 /** Actions the signed-in license can't take here; omit for full access. */
 export interface CallLogsLocks {
-  /** Click-to-call from a log row — placing a call. */
-  call?: Lock;
   /** Archiving calls, one row or a bulk selection. */
   archive?: Lock;
   /**
@@ -98,7 +95,17 @@ function FilterChip({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Toolbar({ search, onSearch }: { search: string; onSearch: (value: string) => void }) {
+function Toolbar({
+  search,
+  onSearch,
+  filtersOpen,
+  onToggleFilters,
+}: {
+  search: string;
+  onSearch: (value: string) => void;
+  filtersOpen: boolean;
+  onToggleFilters: () => void;
+}) {
   return (
     <div className="flex h-[60px] shrink-0 items-center justify-between px-6">
       <div className="flex items-center gap-3">
@@ -131,9 +138,12 @@ function Toolbar({ search, onSearch }: { search: string; onSearch: (value: strin
           variant="grey-outline"
           size="sm"
           leftIcon={<IconFilter size={20} />}
-          className="gap-2 pr-3 pl-2.5 [&_svg]:size-5"
+          aria-expanded={filtersOpen}
+          aria-controls="call-log-filters"
+          onClick={onToggleFilters}
+          className={cn("gap-2 pr-3 pl-2.5 [&_svg]:size-5", filtersOpen && "bg-secondary-bg")}
         >
-          Hide Filters
+          {filtersOpen ? "Hide Filters" : "Filters"}
         </Button>
       </div>
       <div className="flex items-center gap-3">
@@ -201,7 +211,7 @@ function LogRow({
           className={log.direction === "incoming" ? "text-success" : "text-brand"}
         />
       </TableCell>
-      <TableCell className="relative text-paragraph-md">
+      <TableCell className="text-paragraph-md">
         <div className="flex min-w-0 flex-col">
           <span className="truncate">{log.contactName ?? log.contactNumber}</span>
           {log.contactName ? (
@@ -209,19 +219,6 @@ function LogRow({
               {log.contactNumber}
             </span>
           ) : null}
-        </div>
-        {/* Click-to-call: surfaces on row hover or focus, like the live app,
-            floating over the cell's end so it never squeezes the number. */}
-        <div className="absolute top-1/2 right-1 flex -translate-y-1/2">
-          <Gate lock={locks?.call}>
-            <button
-              type="button"
-              aria-label={`Call ${log.contactName ?? log.contactNumber}`}
-              className="flex size-7 items-center justify-center rounded-[4px] bg-secondary-bg text-brand opacity-0 outline-none transition-opacity group-hover/row:opacity-100 group-data-[state=selected]/row:bg-brand-subtle focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-brand/24 data-[locked=true]:text-disabled-fg"
-            >
-              <IconPhone size={16} />
-            </button>
-          </Gate>
         </div>
       </TableCell>
       <TableCell className="text-paragraph-md">
@@ -268,6 +265,8 @@ export function CallLogsPage({ locks }: { locks?: CallLogsLocks } = {}) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
+  // Collapsed by default, as on Team Members: the table is what you came for.
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const q = search.trim().toLowerCase();
   const rows = CALL_LOGS.filter(
@@ -301,21 +300,36 @@ export function CallLogsPage({ locks }: { locks?: CallLogsLocks } = {}) {
         </button>
       </div>
 
-      <Toolbar search={search} onSearch={setSearch} />
+      <Toolbar
+        search={search}
+        onSearch={setSearch}
+        filtersOpen={filtersOpen}
+        onToggleFilters={() => setFiltersOpen((open) => !open)}
+      />
 
-      <div className="flex h-14 shrink-0 items-center gap-3 border-t border-line px-6">
-        <FilterChip>Call Type</FilterChip>
-        <FilterChip>Status</FilterChip>
-        <FilterChip>JustCall Numbers</FilterChip>
-        <FilterChip>Members</FilterChip>
-        <Button
-          variant="grey-outline"
-          size="sm"
-          leftIcon={<IconAddPlus size={16} />}
-          className="h-8 gap-2 pr-3 pl-2.5"
-        >
-          Add Filter
-        </Button>
+      {/* Always mounted so it animates both ways (styles.css .filter-row). */}
+      <div
+        id="call-log-filters"
+        className={cn("filter-row shrink-0", filtersOpen && "is-open")}
+        aria-hidden={!filtersOpen}
+        inert={!filtersOpen ? true : undefined}
+      >
+        <div className="filter-row-clip">
+          <div className="filter-row-inner flex h-14 items-center gap-3 border-t border-line px-6">
+            <FilterChip>Call Type</FilterChip>
+            <FilterChip>Status</FilterChip>
+            <FilterChip>JustCall Numbers</FilterChip>
+            <FilterChip>Members</FilterChip>
+            <Button
+              variant="grey-outline"
+              size="sm"
+              leftIcon={<IconAddPlus size={16} />}
+              className="h-8 gap-2 pr-3 pl-2.5"
+            >
+              Add Filter
+            </Button>
+          </div>
+        </div>
       </div>
 
       <div className="relative flex min-h-0 flex-1 flex-col px-6">

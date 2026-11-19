@@ -1,6 +1,7 @@
 import * as React from "react";
 import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/Button";
 import {
   IconChevronDown,
   IconClose,
@@ -229,6 +230,18 @@ export interface DropdownProps
   appliedField?: string;
   /** Label for the multi-select "Select all" row. */
   selectAllLabel?: string;
+  /**
+   * Show the multi-select "Select all" row. Default `true`. Turn it off for a
+   * short list (three or four choices), where picking every option by hand
+   * is as quick and the extra row only adds noise.
+   */
+  selectAll?: boolean;
+  /**
+   * Multi-select only. Ticks are a draft until Apply, with Clear beside it —
+   * for filters, where each tick would otherwise re-run the table under the
+   * open menu. Closing without Apply drops the draft.
+   */
+  confirm?: boolean;
   /** className for the trigger button. */
   triggerClassName?: string;
   /** className for the dropdown panel. */
@@ -337,6 +350,8 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
       maxVisibleTags = 1,
       appliedField,
       selectAllLabel = "Select all",
+      selectAll = true,
+      confirm = false,
       ...props
     },
     ref
@@ -402,9 +417,25 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
       : value
         ? [String(value)]
         : [];
+    // With `confirm`, the menu edits a copy and the trigger keeps showing
+    // what's applied until Apply commits it.
+    const confirming = multiple && confirm;
+    const [draft, setDraft] = React.useState<string[]>([]);
+    const committedKey = selectedValues.join("\u0000");
+    React.useEffect(() => {
+      if (open && confirming) setDraft(committedKey ? committedKey.split("\u0000") : []);
+      // Seed once per open — re-seeding on every commit would wipe the draft.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, confirming]);
+    const menuValues = confirming ? draft : selectedValues;
+    const draftChanged =
+      confirming &&
+      (draft.length !== selectedValues.length ||
+        draft.some((v) => !selectedValues.includes(v)));
+
     const selectedSet = React.useMemo(
-      () => new Set(selectedValues),
-      [selectedValues]
+      () => new Set(menuValues),
+      [menuValues]
     );
 
     const filteredItems = React.useMemo(() => {
@@ -432,7 +463,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
       optionsOnly.length > 0 &&
       optionsOnly.every((o) => o.disabled || selectedSet.has(o.value));
     const someSelected =
-      multiple && selectedValues.length > 0 && !allSelected;
+      multiple && menuValues.length > 0 && !allSelected;
 
     // Click outside → close
     React.useEffect(() => {
@@ -517,17 +548,18 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
     const toggleMulti = (option: DropdownOption) => {
       if (option.disabled) return;
       const next = selectedSet.has(option.value)
-        ? selectedValues.filter((v) => v !== option.value)
-        : [...selectedValues, option.value];
-      setValue(next);
+        ? menuValues.filter((v) => v !== option.value)
+        : [...menuValues, option.value];
+      if (confirming) setDraft(next);
+      else setValue(next);
     };
 
     const toggleSelectAll = () => {
-      if (allSelected) {
-        setValue([]);
-      } else {
-        setValue(optionsOnly.filter((o) => !o.disabled).map((o) => o.value));
-      }
+      const next = allSelected
+        ? []
+        : optionsOnly.filter((o) => !o.disabled).map((o) => o.value);
+      if (confirming) setDraft(next);
+      else setValue(next);
     };
 
     const onTriggerKeyDown = (event: React.KeyboardEvent) => {
@@ -609,7 +641,10 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
     let optionIndex = -1;
 
     const triggerTextClass = cn(
-      filled
+      // A filter chip's empty label names the filter ("Status"), it isn't a
+      // hint to type over — so it reads at full strength, like the live
+      // product's filter row.
+      filled || appliedField
         ? "text-foreground"
         : "text-disabled-fg",
       disabled && "text-disabled-fg"
@@ -660,7 +695,9 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
             onKeyDown={onTriggerKeyDown}
             className={cn(
               triggerVariants({ variant, hasPrefix: Boolean(prefix) }),
-              isApplied && "min-w-0 gap-0 px-0",
+              // Applied chips take a grey fill so a row of filters shows at a
+              // glance which ones are doing something.
+              isApplied && "min-w-0 gap-0 bg-secondary-bg px-0",
               triggerClassName
             )}
             aria-label={
@@ -697,7 +734,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
             <span
               className={cn(
                 "flex min-w-0 flex-1 items-center",
-                isApplied ? "gap-2 py-2 pl-3 pr-2.5" : "gap-2",
+                isApplied ? "gap-1 py-2 pl-3 pr-2.5" : "gap-2",
                 prefix && !leftIcon && !isApplied && "pl-3",
                 multiple && filled && disabled && "opacity-50"
               )}
@@ -708,11 +745,12 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
                   <span className="shrink-0 whitespace-nowrap text-paragraph-md text-muted-foreground">
                     {appliedField} is
                   </span>
-                  <span className="min-w-0 truncate text-label-md text-foreground">
+                  {/* Capped so a long value truncates and "+N" stays in view. */}
+                  <span className="min-w-0 max-w-[120px] truncate text-paragraph-md text-foreground">
                     {selectedLabels[0]}
                   </span>
                   {appliedExtra > 0 && (
-                    <span className="shrink-0 tabular-nums text-label-md text-foreground">
+                    <span className="shrink-0 tabular-nums text-paragraph-md text-foreground">
                       +{appliedExtra}
                     </span>
                   )}
@@ -791,9 +829,14 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
                 // menu matches the field. A borderless trigger is only as wide
                 // as its text, so the menu sizes to its own content instead —
                 // never narrower than the trigger, capped before it sprawls.
+                // A filter chip (`appliedField`) is the same case: sized to
+                // "Role", it would squeeze the options into "Ad…", so its menu
+                // gets a floor of its own.
                 variant === "borderless"
                   ? "w-max min-w-full max-w-[280px]"
-                  : "w-full",
+                  : appliedField
+                    ? "w-max min-w-[240px] max-w-[320px]"
+                    : "w-full",
                 menuClassName
               )}
             >
@@ -858,7 +901,7 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
                 ref={listRef}
                 className="max-h-[216px] min-h-0 overflow-y-auto overscroll-contain py-0"
               >
-                {multiple && (
+                {multiple && selectAll && (
                   <button
                     type="button"
                     onClick={toggleSelectAll}
@@ -951,6 +994,30 @@ export const Dropdown = React.forwardRef<HTMLDivElement, DropdownProps>(
                     </button>
                   );
                 })}
+              </div>
+            )}
+
+            {confirming && (
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-3 py-2">
+                <Button
+                  variant="link"
+                  size="sm"
+                  disabled={draft.length === 0}
+                  onClick={() => setDraft([])}
+                >
+                  Clear
+                </Button>
+                <Button
+                  size="sm"
+                  // Nothing to apply until the draft differs from what's on.
+                  disabled={!draftChanged}
+                  onClick={() => {
+                    setValue(draft);
+                    setOpen(false);
+                  }}
+                >
+                  Apply
+                </Button>
               </div>
             )}
           </div>

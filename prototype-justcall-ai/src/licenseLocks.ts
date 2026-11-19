@@ -10,7 +10,9 @@ import type { Lock } from "@/components/LockedControl";
  * Locks are on actions, never on pages. View-only is read access: someone
  * with it should still be able to open AI Voice Agent, Salesfloor or the
  * Compliance center and see what's been set up — only the verbs inside are
- * locked. So no nav item or menu row is ever locked here.
+ * locked. So no nav item or menu row is locked here — the one exception is
+ * Dialer Settings in Edit Member, which configures a dialer these licenses
+ * don't have (see teamMemberLocks).
  *
  * `undefined` means "not locked" — the admin experience, or an action this
  * license keeps. Screens pass the result straight to a `locked` / `*Locked`
@@ -38,10 +40,16 @@ export function dialerLock(license?: License) {
 }
 
 
-/** Team Members: invite, duplicate and edit are member management. */
+/**
+ * Team Members: invite, duplicate and edit are member management.
+ *
+ * Edit Member › Dialer Settings is the one section lock in this file, and it
+ * is deliberate: neither license can place a call, so there is no dialer for
+ * those settings to configure. (View-only never reaches Edit Member at all.)
+ */
 export function teamMemberLocks(license?: License) {
   const manage = forViewOnly(license);
-  return { addMember: manage, duplicate: manage, edit: manage };
+  return { addMember: manage, duplicate: manage, edit: manage, dialerSettings: forBoth(license) };
 }
 
 /** Billing actions. */
@@ -72,23 +80,23 @@ export function inboxLocks(license?: License) {
 }
 
 /**
- * Sales Dialer. Neither license dials, and the PRD keeps campaign creation,
- * editing and launch from both — so Create Campaign, the row ▷ (start
- * dialing), Edit and Duplicate lock for Lite too. Lite keeps "Manage Sales
- * Dialer workflows": it can still reassign agents, archive a campaign and
- * apply the number fixes (phone-number management). View-only reads and
- * exports only.
+ * Sales Dialer. Neither license dials, and the permissions sheet keeps
+ * campaign creation, editing and launch from both — so Create Campaign, the
+ * row ▷ (start dialing), Edit, Duplicate, Assign agents and Archive lock for
+ * Lite too: reassigning agents or archiving changes the campaign. Lite keeps
+ * only the number fixes, which are phone-number management. View-only reads
+ * and exports only.
  */
 export function salesDialerLocks(license?: License) {
-  const manage = forViewOnly(license);
+  const both = forBoth(license);
   return {
-    createCampaign: forBoth(license),
-    startDialing: forBoth(license),
-    edit: forBoth(license),
-    duplicate: forBoth(license),
-    assignAgents: manage,
-    archive: manage,
-    reviewFixes: manage,
+    createCampaign: both,
+    startDialing: both,
+    edit: both,
+    duplicate: both,
+    assignAgents: both,
+    archive: both,
+    reviewFixes: forViewOnly(license),
   };
 }
 
@@ -97,8 +105,8 @@ export function salesDialerLocks(license?: License) {
  * knowing which numbers exist and who they're shared with is reading, not
  * managing. Adding, porting, editing settings and duplicating are number
  * management: Lite keeps them, View-only doesn't, matching Team Members.
- * Deleting releases the number back to the carrier and can't be undone, so
- * it is locked for both, like cancelling the subscription in Billing.
+ * Deleting is number management too — the permissions sheet includes it for
+ * Lite — so it follows the same rule.
  */
 export function phoneNumberLocks(license?: License) {
   const manage = forViewOnly(license);
@@ -107,16 +115,17 @@ export function phoneNumberLocks(license?: License) {
     portNumber: manage,
     edit: manage,
     duplicate: manage,
-    remove: forBoth(license),
+    remove: manage,
   };
 }
 
 /**
  * Live Monitoring: both licenses can open the page; View-only can't act on a
- * call. (Barge, when it appears, is blocked for both.)
+ * call. Lite can listen and whisper, but Barge — joining the call so the
+ * customer hears you — is calling, so it's locked for both.
  */
 export function liveMonitoringLocks(license?: License) {
-  return { monitor: forViewOnly(license) };
+  return { monitor: forViewOnly(license), barge: forBoth(license) };
 }
 
 /**
@@ -163,8 +172,9 @@ export function contactsLocks(license?: License) {
 }
 
 /**
- * Workflows: creating, editing and publishing Voice workflows is locked for
- * both licenses. Lite can still delete Voice workflows and manage Sales
+ * Workflows: creating, renaming and publishing Voice workflows is locked for
+ * both licenses. The Edit pencil itself stays open — it is the only way to
+ * view a workflow. Lite can still delete Voice workflows and manage Sales
  * Dialer ones; View-only can do neither.
  */
 export function workflowsLocks(license?: License) {
@@ -178,11 +188,11 @@ export function workflowsLocks(license?: License) {
 }
 
 /**
- * Call Logs: calling shortcuts follow the Dialer rule (locked for both).
- * View-only also can't archive calls or delete transcripts. Playback,
+ * Call Logs: View-only can't archive calls or delete transcripts. There is
+ * no call action on a log row, so nothing here is locked for Lite. Playback,
  * transcripts and exports stay open to everyone.
  */
 export function callLogsLocks(license?: License) {
   const viewOnly = forViewOnly(license);
-  return { call: forBoth(license), archive: viewOnly, deleteTranscript: viewOnly };
+  return { archive: viewOnly, deleteTranscript: viewOnly };
 }

@@ -307,6 +307,7 @@ export function KnowledgePage({
                   appliedField="Status"
                   options={STATUS_FILTER_OPTIONS}
                   multiple
+                  confirm
                   value={statusFilter}
                   onValueChange={(value) => {
                     setStatusFilter(Array.isArray(value) ? value : [value]);
@@ -321,6 +322,7 @@ export function KnowledgePage({
                   appliedField="Agents"
                   options={KNOWLEDGE_USERS}
                   multiple
+                  confirm
                   searchable
                   value={agentFilter}
                   onValueChange={(value) => {
@@ -336,6 +338,7 @@ export function KnowledgePage({
                   appliedField="User Groups"
                   options={KNOWLEDGE_TEAMS}
                   multiple
+                  confirm
                   searchable
                   value={groupFilter}
                   onValueChange={(value) => {

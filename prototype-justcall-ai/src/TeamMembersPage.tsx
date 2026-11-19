@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Avatar, initialsFromName } from "@/components/Avatar";
 import { Button } from "@/components/Button";
+import { Dropdown } from "@/components/Dropdown";
 import { InputField } from "@/components/InputField";
 import { Tabs } from "@/components/Tabs";
 import { Tag } from "@/components/Tag";
@@ -19,13 +20,19 @@ import {
 import {
   IconChartBar,
   IconCopy,
-  IconDotsVertical,
   IconDownload,
   IconFilter,
   IconPencil,
   IconSearch,
 } from "@/components/Icon";
-import { TEAM_MEMBERS, type TeamMember } from "./teamMembersData";
+import {
+  TEAM_MEMBERS,
+  USER_GROUPS,
+  memberGroup,
+  memberLicense,
+  type TeamMember,
+  type TeamMemberState,
+} from "./teamMembersData";
 
 /**
  * Teams › Team Members — the admin's list of everyone on the account. This is
@@ -103,9 +110,6 @@ function MemberRowActions({
   onEdit?: (member: TeamMember) => void;
   locks?: TeamMemberLocks;
 }) {
-  // An invited member has no activity yet, so the analytics shortcut gives
-  // way to a menu (resend / revoke invite), as on the live page.
-  const invited = member.state === "invited";
   return (
     <div
       className="inline-flex items-center"
@@ -125,11 +129,9 @@ function MemberRowActions({
         onClick={onEdit ? () => onEdit(member) : undefined}
         locked={locks?.edit}
       />
-      {invited ? (
-        <RowAction label="More actions" icon={<IconDotsVertical size={20} />} position="last" />
-      ) : (
-        <RowAction label="View analytics" icon={<IconChartBar size={20} />} position="last" />
-      )}
+      {/* Same three actions on every row, invited or not — a row whose last
+          button changes meaning makes the column impossible to scan. */}
+      <RowAction label="View analytics" icon={<IconChartBar size={20} />} position="last" />
     </div>
   );
 }
@@ -165,6 +167,59 @@ function MemberNameCell({ member }: { member: TeamMember }) {
   );
 }
 
+const unique = (values: string[]) => [...new Set(values)].sort((a, b) => a.localeCompare(b));
+const asOptions = (values: string[]) => values.map((value) => ({ value, label: value }));
+
+const STATE_LABEL: Record<TeamMemberState, string> = {
+  active: "Active",
+  invited: "Invited",
+  locked: "Locked",
+};
+
+/**
+ * The filter row: License Type first — it's what this page is about now —
+ * then the live page's own filters in their usual order.
+ * Each filter reads one fact off a member, so matching is the same check for
+ * all five: is that fact among the values picked?
+ */
+const FILTERS: {
+  key: string;
+  label: string;
+  options: { value: string; label: string }[];
+  read: (member: TeamMember) => string;
+}[] = [
+  {
+    key: "license",
+    label: "License Type",
+    options: asOptions(["Standard", "Lite", "View-only"]),
+    read: (m) => memberLicense(m.id),
+  },
+  {
+    key: "role",
+    label: "Role",
+    options: asOptions(unique(TEAM_MEMBERS.map((m) => m.role))),
+    read: (m) => m.role,
+  },
+  {
+    key: "group",
+    label: "User Group",
+    options: asOptions(USER_GROUPS),
+    read: (m) => memberGroup(m.id),
+  },
+  {
+    key: "zone",
+    label: "Time Zone",
+    options: asOptions(unique(TEAM_MEMBERS.map((m) => m.timeZone))),
+    read: (m) => m.timeZone,
+  },
+  {
+    key: "status",
+    label: "Status",
+    options: asOptions(Object.values(STATE_LABEL)),
+    read: (m) => STATE_LABEL[m.state],
+  },
+];
+
 /** Actions the signed-in license can't take here; omit for full access. */
 export interface TeamMemberLocks {
   addMember?: Lock;
@@ -186,16 +241,21 @@ export function TeamMembersPage({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [picked, setPicked] = useState<Record<string, string[]>>({});
+  const hasFilters = Object.values(picked).some((values) => values.length > 0);
 
   const filtered = useMemo(() => {
     const members =
       tab === "pending" ? TEAM_MEMBERS.filter((m) => m.state === "invited") : TEAM_MEMBERS;
     const q = search.trim().toLowerCase();
-    if (!q) return members;
     return members.filter(
-      (m) => m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)
+      (m) =>
+        (!q || m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)) &&
+        // Values within one filter widen the match; separate filters narrow it.
+        FILTERS.every((f) => !picked[f.key]?.length || picked[f.key].includes(f.read(m)))
     );
-  }, [tab, search]);
+  }, [tab, search, picked]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -230,8 +290,16 @@ export function TeamMembersPage({
               wrapperClassName="w-[266px]"
             />
             <span className="h-full w-px shrink-0 bg-line" aria-hidden="true" />
-            <Button variant="grey-outline" size="sm" leftIcon={<IconFilter size={16} />}>
-              Filters
+            <Button
+              variant="grey-outline"
+              size="sm"
+              leftIcon={<IconFilter size={16} />}
+              aria-expanded={filtersOpen}
+              aria-controls="team-member-filters"
+              onClick={() => setFiltersOpen((open) => !open)}
+              className={cn(filtersOpen && "bg-secondary-bg")}
+            >
+              {filtersOpen ? "Hide Filters" : "Filters"}
             </Button>
           </div>
           <div className="flex items-center gap-3">
@@ -259,22 +327,72 @@ export function TeamMembersPage({
           </div>
         </div>
 
+        {/* Always mounted so it can animate both ways (styles.css
+            .filter-row). Hidden, the choices still apply — closing the row is
+            about room, not about undoing what was picked. */}
+        <div
+          id="team-member-filters"
+          className={cn("filter-row -mx-6", filtersOpen && "is-open")}
+          aria-hidden={!filtersOpen}
+          inert={!filtersOpen ? true : undefined}
+        >
+          <div className="filter-row-clip">
+            <div className="filter-row-inner flex flex-wrap items-center gap-3 border-t border-line px-6 py-3">
+              {FILTERS.map((f) => (
+                <Dropdown
+                  key={f.key}
+                  placeholder={f.label}
+                  appliedField={f.label}
+                  options={f.options}
+                  multiple
+                  confirm
+                  selectAll={f.options.length > 5}
+                  searchable={f.options.length > 6}
+                  searchPlaceholder={`Search ${f.label.toLowerCase()}`}
+                  value={picked[f.key] ?? []}
+                  onValueChange={(value) => {
+                    setPicked((prev) => ({ ...prev, [f.key]: Array.isArray(value) ? value : [value] }));
+                    setPage(1);
+                  }}
+                  // Sized to the label, as on the live page — a row of equal
+                  // wide fields read as a form, not as a set of filters.
+                  className="w-auto shrink-0"
+                  triggerClassName="h-9 w-auto max-w-[260px]"
+                />
+              ))}
+              {hasFilters ? (
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => {
+                    setPicked({});
+                    setPage(1);
+                  }}
+                >
+                  Clear all
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-auto">
             <Table className="table-fixed">
               <TableHeader className="[&_tr]:border-b-0">
                 <TableRow>
                   <TableHead className="sticky top-0 z-10">Name</TableHead>
-                  <TableHead className="sticky top-0 z-10 w-[24%]">Role</TableHead>
-                  <TableHead className="sticky top-0 z-10 w-[19%]">Time Zone</TableHead>
-                  <TableHead className="sticky top-0 z-10 w-[12%]">Extension</TableHead>
+                  <TableHead className="sticky top-0 z-10 w-[13%]">License Type</TableHead>
+                  <TableHead className="sticky top-0 z-10 w-[20%]">Role</TableHead>
+                  <TableHead className="sticky top-0 z-10 w-[17%]">Time Zone</TableHead>
+                  <TableHead className="sticky top-0 z-10 w-[11%]">Extension</TableHead>
                   <TableHead className="sticky top-0 z-10 w-[150px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="[&_tr]:border-b-0">
                 {visible.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={5} className="text-paragraph-md text-muted-foreground">
+                    <TableCell colSpan={6} className="text-paragraph-md text-muted-foreground">
                       {tab === "pending" ? "No pending requests" : "No matching members"}
                     </TableCell>
                   </TableRow>
@@ -283,6 +401,13 @@ export function TeamMembersPage({
                     <TableRow key={member.id}>
                       <TableCell className="py-4">
                         <MemberNameCell member={member} />
+                      </TableCell>
+                      <TableCell>
+                        {/* Grey, as in Billing's breakdown: a license is a fact
+                            about the seat, not a status to draw the eye. */}
+                        <Tag size="sm" color="grey">
+                          {memberLicense(member.id)}
+                        </Tag>
                       </TableCell>
                       <TableCell className="text-paragraph-md text-foreground">
                         {member.role}

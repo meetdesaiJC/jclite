@@ -37,10 +37,10 @@ import {
 type StepKey = "invite" | "access" | "numbers";
 
 type InviteMode = "individual" | "bulk";
-type RoleChoice = "admin" | "member" | "custom";
-type License = "standard" | "lite" | "view-only";
+export type RoleChoice = "admin" | "member" | "custom";
+export type License = "standard" | "lite" | "view-only";
 
-const LICENSE_OPTIONS: {
+export const LICENSE_OPTIONS: {
   key: License;
   label: string;
   icon: React.ReactNode;
@@ -107,7 +107,7 @@ const FIXED_ACCESS: Record<
   },
 };
 
-const ROLE_OPTIONS: {
+export const ROLE_OPTIONS: {
   key: RoleChoice;
   label: string;
   description: React.ReactNode;
@@ -488,7 +488,7 @@ function seatsLeft(license: License) {
   return { left: total - used, total };
 }
 
-function SeatCount({ license }: { license: License }) {
+export function SeatCount({ license }: { license: License }) {
   const seats = seatsLeft(license);
   if (!seats) return null;
   return (
@@ -531,7 +531,7 @@ function AccessColumn({
 // card, two columns with no rule between, so they read as one comparison. The
 // "not included" half matters as much as the other: it's what stops an admin
 // giving Lite to someone who needs to dial.
-function FixedAccess({ license }: { license: Exclude<License, "standard"> }) {
+export function FixedAccess({ license }: { license: Exclude<License, "standard"> }) {
   const access = FIXED_ACCESS[license];
   return (
     <section
@@ -573,7 +573,9 @@ function SetAccessStep({
         <InviteeSummary lead="Inviting" invitees={invitees} />
       </header>
 
-      <div className="flex flex-col gap-4">
+      {/* Heading sits close to its cards so it reads as their label,
+          not as a section of its own. */}
+      <div className="flex flex-col gap-2">
         <h3 className="text-label-lg text-foreground">License type</h3>
         {/* Cards, side by side, because this is a comparison: the admin should
             see all three licenses at once before picking. They stack when the
@@ -815,7 +817,7 @@ function ChargesNoticeModal({
       onClose={onCancel}
       size="sm"
       showCloseButton={false}
-      title={<span className="text-heading-xl">Additional charges may apply</span>}
+      title={<span className="text-label-xl">Additional charges may apply</span>}
       description="Charges for additional team members will be calculated based on the rates specified in your Order Form, prorated for the remaining Contract Term."
       footer={
         <div className="flex w-full gap-4">
