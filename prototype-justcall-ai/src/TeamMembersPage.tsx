@@ -6,6 +6,7 @@ import { InputField } from "@/components/InputField";
 import { Tabs } from "@/components/Tabs";
 import { Tag } from "@/components/Tag";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
+import { LockedControl, type Lock } from "@/components/LockedControl";
 import {
   Table,
   TableBody,
@@ -41,37 +42,67 @@ const TABS = [
 const ACTION_BUTTON =
   "flex size-9 items-center justify-center border border-line bg-white text-foreground hover:bg-secondary-bg focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/24";
 
-function RowAction({
+export function RowAction({
   label,
   icon,
   position,
+  onClick,
+  locked,
 }: {
   label: string;
   icon: React.ReactNode;
   position: "first" | "middle" | "last";
+  onClick?: () => void;
+  locked?: Lock;
 }) {
+  const button = (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        ACTION_BUTTON,
+        "data-[locked=true]:text-disabled-fg data-[locked=true]:hover:bg-white",
+        position === "first" && "rounded-l-[4px]",
+        position === "last" && "rounded-r-[4px]"
+      )}
+    >
+      {icon}
+    </button>
+  );
+  // A locked action explains itself instead of naming itself — one tooltip,
+  // never two stacked on the same button.
+  if (locked) {
+    return (
+      <LockedControl
+        reason={locked.reason}
+        hint={locked.hint}
+        triggerClassName={position !== "last" ? "-mr-px" : undefined}
+      >
+        {button}
+      </LockedControl>
+    );
+  }
   return (
     <TooltipTrigger
       placement="bottom"
       className={position !== "last" ? "-mr-px" : undefined}
       content={<Tooltip theme="dark" arrow="top-center" title={label} />}
     >
-      <button
-        type="button"
-        aria-label={label}
-        className={cn(
-          ACTION_BUTTON,
-          position === "first" && "rounded-l-[4px]",
-          position === "last" && "rounded-r-[4px]"
-        )}
-      >
-        {icon}
-      </button>
+      {button}
     </TooltipTrigger>
   );
 }
 
-function MemberRowActions({ member }: { member: TeamMember }) {
+function MemberRowActions({
+  member,
+  onEdit,
+  locks,
+}: {
+  member: TeamMember;
+  onEdit?: (member: TeamMember) => void;
+  locks?: TeamMemberLocks;
+}) {
   // An invited member has no activity yet, so the analytics shortcut gives
   // way to a menu (resend / revoke invite), as on the live page.
   const invited = member.state === "invited";
@@ -81,8 +112,19 @@ function MemberRowActions({ member }: { member: TeamMember }) {
       role="group"
       aria-label={`Actions for ${member.name}`}
     >
-      <RowAction label="Duplicate" icon={<IconCopy size={20} />} position="first" />
-      <RowAction label="Edit" icon={<IconPencil size={20} />} position="middle" />
+      <RowAction
+        label="Duplicate"
+        icon={<IconCopy size={20} />}
+        position="first"
+        locked={locks?.duplicate}
+      />
+      <RowAction
+        label="Edit"
+        icon={<IconPencil size={20} />}
+        position="middle"
+        onClick={onEdit ? () => onEdit(member) : undefined}
+        locked={locks?.edit}
+      />
       {invited ? (
         <RowAction label="More actions" icon={<IconDotsVertical size={20} />} position="last" />
       ) : (
@@ -123,7 +165,23 @@ function MemberNameCell({ member }: { member: TeamMember }) {
   );
 }
 
-export function TeamMembersPage({ onAddMember }: { onAddMember?: () => void }) {
+/** Actions the signed-in license can't take here; omit for full access. */
+export interface TeamMemberLocks {
+  addMember?: Lock;
+  duplicate?: Lock;
+  edit?: Lock;
+}
+
+export function TeamMembersPage({
+  onAddMember,
+  onEditMember,
+  locks,
+}: {
+  locks?: TeamMemberLocks;
+  onAddMember?: () => void;
+  /** The row pencil. Omit and it stays a label-only control, as before. */
+  onEditMember?: (member: TeamMember) => void;
+}) {
   const [tab, setTab] = useState<MembersTab>("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -189,7 +247,15 @@ export function TeamMembersPage({ onAddMember }: { onAddMember?: () => void }) {
                 <IconDownload size={20} />
               </button>
             </TooltipTrigger>
-            <Button size="md" onClick={onAddMember}>Add Member</Button>
+            <LockedControl
+              locked={Boolean(locks?.addMember)}
+              reason={locks?.addMember?.reason}
+              hint={locks?.addMember?.hint}
+            >
+              <Button size="md" onClick={onAddMember}>
+                Add Member
+              </Button>
+            </LockedControl>
           </div>
         </div>
 
@@ -230,7 +296,7 @@ export function TeamMembersPage({ onAddMember }: { onAddMember?: () => void }) {
                         </Tag>
                       </TableCell>
                       <TableCell>
-                        <MemberRowActions member={member} />
+                        <MemberRowActions member={member} onEdit={onEditMember} locks={locks} />
                       </TableCell>
                     </TableRow>
                   ))

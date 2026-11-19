@@ -8,6 +8,7 @@ import {
   IconChevronRight,
 } from "@/components/Icon";
 import { Button } from "@/components/Button";
+import { LockedControl, type Lock } from "@/components/LockedControl";
 import { Avatar, AvatarIndicator, type AvatarStatus } from "@/components/Avatar";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import { useDropdownPresence } from "@/components/Dropdown/useDropdownPresence";
@@ -65,6 +66,11 @@ export interface GlobalHeaderProps
   onDialerClick?: () => void;
   /** Marks the Dialer button as active while the Dialer page is open. */
   dialerOpen?: boolean;
+  /**
+   * The signed-in license can't call. The Dialer stays in place, muted, and
+   * says why on hover / focus / tap rather than disappearing (LockedControl).
+   */
+  dialerLocked?: Lock;
   onMessagesClick?: () => void;
   onNotificationsClick?: () => void;
   /** Unread count shown on the bell icon. Renders "99+" above 99; hidden at 0. */
@@ -100,6 +106,7 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
       onLiveCallSupportClick,
       onDialerClick,
       dialerOpen = false,
+      dialerLocked,
       onMessagesClick,
       onNotificationsClick,
       notificationCount = 0,
@@ -233,14 +240,20 @@ export const GlobalHeader = React.forwardRef<HTMLElement, GlobalHeaderProps>(
               </TooltipTrigger>
             )}
 
-            <Button
-              size="xs"
-              leftIcon={<IconPhone size={16} />}
-              aria-pressed={dialerOpen}
-              onClick={onDialerClick}
+            <LockedControl
+              locked={Boolean(dialerLocked)}
+              reason={dialerLocked?.reason}
+              hint={dialerLocked?.hint}
             >
-              Dialer
-            </Button>
+              <Button
+                size="xs"
+                leftIcon={<IconPhone size={16} />}
+                aria-pressed={dialerOpen}
+                onClick={onDialerClick}
+              >
+                Dialer
+              </Button>
+            </LockedControl>
 
             <TooltipTrigger
               placement="bottom"

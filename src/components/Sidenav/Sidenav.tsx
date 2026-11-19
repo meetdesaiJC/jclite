@@ -1,6 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { DURATION } from "@/lib/motion";
+import { LockedControl, type Lock } from "@/components/LockedControl";
 import {
   JustCallLogo,
   IconDashboard,
@@ -56,6 +57,8 @@ export interface SidenavItem {
   sectionLabel?: string;
   /** Sub-items revealed when this item is expanded (implies `expandable`). */
   subItems?: SidenavSubItem[];
+  /** The license blocks this destination: shown muted, with the reason (LockedControl). */
+  locked?: Lock;
 }
 
 export interface SidenavSubItem {
@@ -96,7 +99,20 @@ const DEFAULT_ITEMS: SidenavItem[] = [
   { key: "contacts", label: "Contacts", icon: <IconContacts /> },
   { key: "call-logs", label: "Call Logs", icon: <IconCallLogs /> },
   { key: "agent-availability", label: "Agent Availability", icon: <IconAgentAvailability /> },
-  { key: "messaging", label: "Messaging", icon: <IconMessaging />, expandable: true },
+  {
+    key: "messaging",
+    label: "Messaging",
+    icon: <IconMessaging />,
+    expandable: true,
+    subItems: [
+      { key: "sms-inbox", label: "Inbox" },
+      { key: "sms-analytics", label: "Analytics" },
+      { key: "bulk-sms", label: "Bulk SMS/MMS" },
+      { key: "sms-workflows", label: "SMS Workflows" },
+      { key: "sms-bot", label: "SMS Bot" },
+      { key: "sms-settings", label: "SMS Settings" },
+    ],
+  },
   { key: "integrations", label: "Integrations", icon: <IconIntegrations /> },
   { key: "scheduler", label: "Scheduler", icon: <IconScheduler />, expandable: true },
   { key: "fax", label: "Fax", icon: <IconFax /> },
@@ -110,12 +126,24 @@ export interface SidenavProps extends Omit<React.HTMLAttributes<HTMLElement>, "o
   /** Key of the currently active item. */
   activeKey?: string;
   onItemSelect?: (key: string) => void;
+  /**
+   * Locks by item key, for the built-in product nav where callers don't pass
+   * `items`. A locked entry stays in place, muted, and says why on hover /
+   * focus / tap instead of navigating.
+   */
+  itemLocks?: Record<string, Lock>;
   /** "Total Credits:" card — pass `null` to hide it entirely. */
   creditsValue?: string | null;
   onAddCredits?: () => void;
   onViewUsageBalance?: () => void;
   /** Optional "Back To Dashboard"-style row rendered above the nav list. */
   backLink?: SidenavBackLink;
+  /**
+   * A primary action pinned above the nav list, e.g. Sales Dialer's
+   * "Create Campaign". It belongs to the nav set, so it slides with the items
+   * on an `itemsKey` swap rather than staying behind with the logo.
+   */
+  action?: React.ReactNode;
   /**
    * Makes the logo a button. Omit to keep it a static mark. Prototypes use it
    * as the way home to their launcher, the same place a real logo would lead.
@@ -159,10 +187,12 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
       items = DEFAULT_ITEMS,
       activeKey,
       onItemSelect,
+      itemLocks,
       creditsValue = "$145.21",
       onAddCredits,
       onViewUsageBalance,
       backLink,
+      action,
       onLogoClick,
       itemsKey,
       itemsTransition = "forward",
@@ -173,6 +203,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
   ) => {
     const [renderedItems, setRenderedItems] = React.useState(items);
     const [renderedBackLink, setRenderedBackLink] = React.useState(backLink);
+    const [renderedAction, setRenderedAction] = React.useState(action);
     const [motion, setMotion] = React.useState<NavBodyMotion>("idle");
     const [expandedKeys, setExpandedKeys] = React.useState<Set<string>>(() =>
       initialExpandedKeys(items, activeKey)
@@ -180,15 +211,18 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
     const prevKeyRef = React.useRef(itemsKey);
     const itemsRef = React.useRef(items);
     const backLinkRef = React.useRef(backLink);
+    const actionRef = React.useRef(action);
     const transitionRef = React.useRef(itemsTransition);
     itemsRef.current = items;
     backLinkRef.current = backLink;
+    actionRef.current = action;
     transitionRef.current = itemsTransition;
 
     React.useEffect(() => {
       if (itemsKey === undefined) {
         setRenderedItems(items);
         setRenderedBackLink(backLink);
+        setRenderedAction(action);
         prevKeyRef.current = undefined;
         return;
       }
@@ -197,6 +231,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
         prevKeyRef.current = itemsKey;
         setRenderedItems(items);
         setRenderedBackLink(backLink);
+        setRenderedAction(action);
         return;
       }
 
@@ -205,6 +240,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
       if (prefersReducedMotion()) {
         setRenderedItems(items);
         setRenderedBackLink(backLink);
+        setRenderedAction(action);
         setExpandedKeys(initialExpandedKeys(items, activeKey));
         setMotion("idle");
         prevKeyRef.current = itemsKey;
@@ -223,6 +259,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
         const nextBackLink = backLinkRef.current;
         setRenderedItems(nextItems);
         setRenderedBackLink(nextBackLink);
+        setRenderedAction(actionRef.current);
         setExpandedKeys(initialExpandedKeys(nextItems, activeKey));
         setMotion(enterMotion);
         prevKeyRef.current = itemsKey;
@@ -236,6 +273,12 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
       // intentionally keyed on itemsKey — items/backLink read from refs at swap time
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [itemsKey]);
+
+    // The action can change without a nav swap (a license switch relocks it);
+    // follow it in place unless a swap is mid-flight and will hand it over.
+    React.useEffect(() => {
+      if (prevKeyRef.current === itemsKey) setRenderedAction(action);
+    }, [action, itemsKey]);
 
     const toggleExpanded = (key: string) => {
       setExpandedKeys((prev) => {
@@ -285,16 +328,21 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
             </a>
           )}
 
+          {renderedAction ? (
+            <div className="shrink-0 px-3 pt-2 pb-2">{renderedAction}</div>
+          ) : null}
+
           <ul
             className={cn(
               "flex flex-1 flex-col gap-0.5 overflow-y-auto pb-2",
-              renderedBackLink ? "pt-0.5" : "pt-2"
+              renderedBackLink || renderedAction ? "pt-0.5" : "pt-2"
             )}
           >
             {renderedItems.map((item) => {
               const active = item.key === activeKey;
               const hasSubItems = !!item.subItems?.length;
               const isExpanded = expandedKeys.has(item.key);
+              const lock = item.locked ?? itemLocks?.[item.key];
               return (
                 <React.Fragment key={item.key}>
                   {item.sectionLabel && (
@@ -303,55 +351,80 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
                     </li>
                   )}
                   <li>
-                    <a
-                      href={item.href ?? "#"}
-                      aria-current={active ? "page" : undefined}
-                      aria-expanded={hasSubItems ? isExpanded : undefined}
-                      onClick={(e) => {
-                        if (hasSubItems) {
-                          e.preventDefault();
-                          toggleExpanded(item.key);
-                          return;
-                        }
-                        if (!item.href) e.preventDefault();
-                        onItemSelect?.(item.key);
-                      }}
-                      className={cn(
-                        "flex h-[38px] items-center gap-2.5 pl-4 pr-3 text-label-md transition-colors",
-                        active
-                          ? "border-l-4 text-white"
-                          : "ml-1 rounded-[5px] text-disabled-fg hover:bg-white/5 hover:text-white"
-                      )}
-                      style={{
-                        borderLeftColor: active ? SIDENAV_ACCENT : undefined,
-                        backgroundColor: active ? "var(--color-sidenav-item-active)" : undefined,
-                      }}
+                    <LockedControl
+                      locked={Boolean(lock)}
+                      reason={lock?.reason}
+                      hint={lock?.hint}
+                      placement="right"
+                      triggerClassName="flex w-full"
                     >
-                      <span className="flex size-[18px] shrink-0 items-center justify-center [&_svg]:size-full">
-                        {item.icon}
-                      </span>
-                      <span className="flex-1 truncate">{item.label}</span>
-                      {(item.badge || item.expandable) && (
-                        <span className="flex shrink-0 items-center gap-1">
-                          {item.badge && (
-                            <span
-                              className="shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] font-bold leading-none"
-                              style={{ borderColor: "var(--color-badge-pink)", color: "var(--color-badge-pink)" }}
-                            >
-                              {item.badge}
-                            </span>
-                          )}
-                          {item.expandable && (
-                            <IconChevronDown
-                              className={cn("size-4 shrink-0 transition-transform", isExpanded && "rotate-180")}
-                            />
-                          )}
+                      <a
+                        href={item.href ?? "#"}
+                        aria-current={active ? "page" : undefined}
+                        aria-expanded={hasSubItems ? isExpanded : undefined}
+                        onClick={(e) => {
+                          if (hasSubItems) {
+                            e.preventDefault();
+                            toggleExpanded(item.key);
+                            return;
+                          }
+                          if (!item.href) e.preventDefault();
+                          onItemSelect?.(item.key);
+                        }}
+                        className={cn(
+                          "flex h-[38px] items-center gap-2.5 pl-4 pr-3 text-label-md transition-colors",
+                          active
+                            ? "border-l-4 text-white"
+                            : "ml-1 rounded-[5px] text-disabled-fg hover:bg-white/5 hover:text-white",
+                          // Locked: inactive items are already grey here, so
+                          // dim further and drop the hover lift. `flex-1`, not
+                          // `w-full`: it fills the LockedControl wrapper when
+                          // locked and is inert in the plain <li> otherwise, so
+                          // the row (and its badge) sits identically either way.
+                          "min-w-0 flex-1 data-[locked=true]:opacity-50 data-[locked=true]:hover:bg-transparent data-[locked=true]:hover:text-disabled-fg"
+                        )}
+                        style={{
+                          borderLeftColor: active ? SIDENAV_ACCENT : undefined,
+                          backgroundColor: active ? "var(--color-sidenav-item-active)" : undefined,
+                        }}
+                      >
+                        <span className="flex size-[18px] shrink-0 items-center justify-center [&_svg]:size-full">
+                          {item.icon}
                         </span>
-                      )}
-                    </a>
+                        <span className="flex-1 truncate">{item.label}</span>
+                        {(item.badge || item.expandable) && (
+                          <span className="flex shrink-0 items-center gap-1">
+                            {item.badge && (
+                              <span
+                                className="shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] font-bold leading-none"
+                                style={{ borderColor: "var(--color-badge-pink)", color: "var(--color-badge-pink)" }}
+                              >
+                                {item.badge}
+                              </span>
+                            )}
+                            {item.expandable && (
+                              <IconChevronDown
+                                className={cn("size-4 shrink-0 transition-[rotate] duration-base ease-standard motion-reduce:transition-none", isExpanded && "rotate-180")}
+                              />
+                            )}
+                          </span>
+                        )}
+                      </a>
+                    </LockedControl>
                   </li>
-                  {hasSubItems && isExpanded && (
-                    <li>
+                  {hasSubItems && (
+                    // Always mounted, eased open and shut with the Accordion's
+                    // grid-rows panel (base.css) rather than popping in.
+                    // `inert` keeps a shut menu's links out of the tab order.
+                    <li
+                      // shrink-0: the nav list is a flex column taller than
+                      // the screen, and a clipped panel's min size is 0, so
+                      // without it flex squeezes an open menu flat.
+                      className="accordion-panel grid shrink-0"
+                      data-open={isExpanded}
+                      inert={!isExpanded}
+                    >
+                      <div className="accordion-panel-inner overflow-hidden">
                       <ul className="flex flex-col gap-0.5 pb-1">
                         {item.subItems!.map((sub) => {
                           const subActive = sub.key === activeKey;
@@ -381,6 +454,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
                           );
                         })}
                       </ul>
+                      </div>
                     </li>
                   )}
                 </React.Fragment>

@@ -12,6 +12,8 @@ const VARIANTS = [
   "warning",
   "blue-grey",
   "grey-inverted",
+  "primary-outline",
+  "purple",
   "new",
   "beta",
   "owner",

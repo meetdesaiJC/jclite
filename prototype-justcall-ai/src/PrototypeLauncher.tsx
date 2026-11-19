@@ -3,13 +3,13 @@ import { cn } from "@/lib/utils";
 import { IconArrowRight } from "@/components/Icon";
 
 /**
- * Non-calling licenses (JustCall Lite and View-only). Three experiences, one
- * per persona in the PRD. Each card opens its experience on the dashboard; a
- * card passed no `onClick` stays inert (no hover lift, no arrow).
+ * Non-calling licenses (JustCall Lite and View-only). Two prototypes: the
+ * admin who assigns licenses, and the member who has one. Lite and View-only
+ * are one flow with a switch inside it, since they differ only in what's
+ * locked. A card passed no `onClick` stays inert (no hover lift, no arrow).
  */
 type PrototypeLauncherProps = {
-  onStartLite?: () => void;
-  onStartViewOnly?: () => void;
+  onStartLicenseExperience?: () => void;
   onStartLicenseManagement?: () => void;
 };
 
@@ -76,8 +76,7 @@ function PrototypeGroup({
 }
 
 export function PrototypeLauncher({
-  onStartLite,
-  onStartViewOnly,
+  onStartLicenseExperience,
   onStartLicenseManagement,
 }: PrototypeLauncherProps) {
   return (
@@ -106,16 +105,11 @@ export function PrototypeLauncher({
             />
           </PrototypeGroup>
 
-          <PrototypeGroup label="License experiences">
+          <PrototypeGroup label="License experience">
             <PrototypeCard
               index="02"
-              title="JustCall Lite"
-              onClick={onStartLite}
-            />
-            <PrototypeCard
-              index="03"
-              title="JustCall View-only"
-              onClick={onStartViewOnly}
+              title="JustCall Lite & View-only"
+              onClick={onStartLicenseExperience}
             />
           </PrototypeGroup>
         </div>
