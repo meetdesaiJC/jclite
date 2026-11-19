@@ -55,6 +55,23 @@ type Story = StoryObj<typeof meta>;
 /** Four segments, icon plus label — the shape the Figma component set specifies. */
 export const Default: Story = {};
 
+/**
+ * Billing Overview (Apex) treatment: the card carries a border, inactive
+ * labels drop to secondary text, no separators, 54px track.
+ */
+export const Outlined: Story = {
+  args: {
+    variant: "outlined",
+    items: [
+      { key: "team-members", label: "Team members" },
+      { key: "phone-numbers", label: "Phone numbers" },
+      { key: "add-ons", label: "Add-ons" },
+      { key: "a2p-10dlc", label: "A2P 10DLC" },
+    ],
+    value: "team-members",
+  },
+};
+
 /** The Voice Agent panel this was drawn for, pending its four icons. */
 export const VoiceAgentPanel: Story = {
   args: { items: VOICE_AGENT_TABS, value: "context" },

@@ -8,7 +8,13 @@ import {
   isJustCallAiPageKey,
   type JustCallAiPageKey,
 } from "./JustCallAiShell";
+import { GlobalHeader } from "@/components/GlobalHeader";
+import { Toast } from "@/components/Toast";
+import { ProfileMenu } from "@/components/ProfileMenu";
 import { PrototypeLauncher } from "./PrototypeLauncher";
+import { TeamMembersPage } from "./TeamMembersPage";
+import { BillingPage, BILLING_NAV_ITEMS } from "./BillingPage";
+import { AddMembersFlow } from "./AddMembersFlow";
 import { CrmInCallPrototype } from "./CrmInCallPrototype";
 import { type AgentAssistScope } from "./agentAssistScope";
 import {
@@ -30,7 +36,37 @@ type AppView =
   | "v1-setup"
   | "v1-setup-empty"
   | "v1-in-call"
-  | "v1-in-call-crm";
+  | "v1-in-call-crm"
+  /* Non-calling licenses: one key per experience in the PRD. */
+  | "lite"
+  | "view-only"
+  | "license-admin";
+
+const APP_VIEWS: readonly AppView[] = [
+  "launcher",
+  "setup",
+  "setup-empty",
+  "in-call",
+  "v1-setup",
+  "v1-setup-empty",
+  "v1-in-call",
+  "v1-in-call-crm",
+  "lite",
+  "view-only",
+  "license-admin",
+];
+
+/**
+ * The open prototype lives in the URL hash, so the browser's Back button
+ * returns to the launcher and a reload lands where it was. The hash, not the
+ * query string: `?` already belongs to the popped-out dialer window.
+ */
+function viewFromHash(): AppView {
+  const key = window.location.hash.slice(1);
+  return (APP_VIEWS as readonly string[]).includes(key) ? (key as AppView) : "launcher";
+}
+
+type LicenseExperience = "lite" | "view-only" | "license-admin";
 type AppArea = "dashboard" | "justcall-ai";
 
 /**
@@ -48,9 +84,11 @@ type AppArea = "dashboard" | "justcall-ai";
 function SetupFlow({
   seeded = true,
   scope = "v2",
+  onHome,
 }: {
   seeded?: boolean;
   scope?: AgentAssistScope;
+  onHome: () => void;
 }) {
   const [area, setArea] = useState<AppArea>("dashboard");
   const [navTransition, setNavTransition] = useState<SidenavItemsTransition>("forward");
@@ -74,6 +112,7 @@ function SetupFlow({
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidenav
+        onLogoClick={onHome}
         activeKey={area === "justcall-ai" ? aiPage : "dashboard"}
         items={area === "justcall-ai" ? JUSTCALL_AI_ITEMS : undefined}
         itemsKey={area}
@@ -124,12 +163,127 @@ function SetupFlow({
  * actions from the guidance column, and the Live Assist control from the call
  * bar.
  */
-function InCallFlow({ scope = "v2" }: { scope?: AgentAssistScope }) {
+function InCallFlow({
+  scope = "v2",
+  onHome,
+}: {
+  scope?: AgentAssistScope;
+  onHome: () => void;
+}) {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <Sidenav activeKey="dashboard" />
+      <Sidenav activeKey="dashboard" onLogoClick={onHome} />
       <div className="relative flex min-w-0 flex-1 flex-col">
         <Dashboard scope={scope} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Non-calling license experiences — each lands on the Calls dashboard. All
+ * three render the same shell for now; `experience` is the seam where Lite,
+ * View-only and the admin's license management start to differ.
+ */
+type LicensePage = "dashboard" | "team-members" | "billing";
+
+function LicenseFlow({
+  experience,
+  onHome,
+}: {
+  experience: LicenseExperience;
+  onHome: () => void;
+}) {
+  const [page, setPage] = useState<LicensePage>("dashboard");
+  // Add Members takes over the page body rather than opening a modal: it is a
+  // three-step flow, and the list behind it has nothing to say meanwhile.
+  const [addingMembers, setAddingMembers] = useState(false);
+  // How many were just invited — the confirmation waits for the list, so the
+  // admin reads it on the page where the new people now appear.
+  // `count` outlives `open` so the title doesn't change while the toast exits.
+  const [invited, setInvited] = useState({ open: false, count: 0 });
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  // Billing swaps the product nav for its own "Your Plan" nav, with the same
+  // slide JustCall AI uses: forward on the way in, back on the way out.
+  const [navTransition, setNavTransition] = useState<SidenavItemsTransition>("forward");
+  const openBilling = useCallback(() => {
+    setProfileMenuOpen(false);
+    setAddingMembers(false);
+    setNavTransition("forward");
+    setPage("billing");
+  }, []);
+  const closeBilling = useCallback(() => {
+    setNavTransition("back");
+    setPage("dashboard");
+  }, []);
+  const billingBackLink = useMemo(
+    () => ({ label: "Back to Dashboard", onClick: closeBilling }),
+    [closeBilling]
+  );
+  const closeInvitedToast = useCallback(
+    () => setInvited((current) => ({ ...current, open: false })),
+    []
+  );
+
+  return (
+    <div
+      className="flex h-screen overflow-hidden bg-background"
+      data-experience={experience}
+    >
+      <Sidenav
+        onLogoClick={onHome}
+        activeKey={page === "billing" ? "overview" : page}
+        items={page === "billing" ? BILLING_NAV_ITEMS : undefined}
+        itemsKey={page === "billing" ? "billing" : "product"}
+        itemsTransition={navTransition}
+        backLink={page === "billing" ? billingBackLink : undefined}
+        onItemSelect={(key) => {
+          if (key === "dashboard" || key === "team-members") {
+            setPage(key);
+            setAddingMembers(false);
+          }
+        }}
+      />
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {page === "team-members" || page === "billing" ? (
+          <>
+            {profileMenuOpen ? (
+              // Click-away layer below the header, as on the Dashboard.
+              <div
+                className="fixed inset-x-0 top-[60px] bottom-0 z-40"
+                onClick={() => setProfileMenuOpen(false)}
+              />
+            ) : null}
+            <GlobalHeader
+              title={page === "billing" ? "Billing" : "Team Members"}
+              profileMenuOpen={profileMenuOpen}
+              onProfileClick={() => setProfileMenuOpen((open) => !open)}
+              profileMenuPanel={
+                <ProfileMenu userName="Sarah Johnson" onBillingClick={openBilling} />
+              }
+            />
+            {page === "billing" ? (
+              <BillingPage />
+            ) : addingMembers ? (
+              <AddMembersFlow
+                onClose={() => setAddingMembers(false)}
+                onComplete={(count) => {
+                  setAddingMembers(false);
+                  setInvited({ open: true, count });
+                }}
+              />
+            ) : (
+              <TeamMembersPage onAddMember={() => setAddingMembers(true)} />
+            )}
+          </>
+        ) : (
+          <Dashboard showLiveMonitoringBanner={false} onBillingClick={openBilling} />
+        )}
+        <Toast
+          open={invited.open}
+          onClose={closeInvitedToast}
+          title={`${invited.count} team ${invited.count === 1 ? "member" : "members"} invited`}
+        />
       </div>
     </div>
   );
@@ -169,7 +323,30 @@ function DialerWindow({
 const DIALER_WINDOW = readDialerWindowParams(window.location.search);
 
 export default function App() {
-  const [view, setView] = useState<AppView>("launcher");
+  const [view, setView] = useState<AppView>(viewFromHash);
+
+  useEffect(() => {
+    const sync = () => setView(viewFromHash());
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+
+  const openView = useCallback((next: AppView) => {
+    window.history.pushState({ fromLauncher: true }, "", `#${next}`);
+    setView(next);
+  }, []);
+
+  // The logo in each prototype's sidenav. When the launcher opened this view,
+  // step back through history so Back/Forward stay a clean pair; on a fresh
+  // load straight into a prototype there's nothing behind it, so swap in place.
+  const goHome = useCallback(() => {
+    if ((window.history.state as { fromLauncher?: boolean } | null)?.fromLauncher) {
+      window.history.back();
+      return;
+    }
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    setView("launcher");
+  }, []);
 
   if (DIALER_WINDOW) {
     return <DialerWindow {...DIALER_WINDOW} />;
@@ -178,19 +355,19 @@ export default function App() {
   if (view === "launcher") {
     return (
       <PrototypeLauncher
-        onStartV1EmptySetup={() => setView("v1-setup-empty")}
-        onStartV1Setup={() => setView("v1-setup")}
-        onStartV1InCall={() => setView("v1-in-call")}
-        onStartV1CrmInCall={() => setView("v1-in-call-crm")}
-        onStartEmptySetup={() => setView("setup-empty")}
-        onStartSetup={() => setView("setup")}
-        onStartInCall={() => setView("in-call")}
+        onStartLite={() => openView("lite")}
+        onStartViewOnly={() => openView("view-only")}
+        onStartLicenseManagement={() => openView("license-admin")}
       />
     );
   }
 
+  if (view === "lite" || view === "view-only" || view === "license-admin") {
+    return <LicenseFlow experience={view} onHome={goHome} />;
+  }
+
   if (view === "in-call" || view === "v1-in-call") {
-    return <InCallFlow scope={view === "v1-in-call" ? "v1" : "v2"} />;
+    return <InCallFlow scope={view === "v1-in-call" ? "v1" : "v2"} onHome={goHome} />;
   }
 
   if (view === "v1-in-call-crm") {
@@ -204,6 +381,7 @@ export default function App() {
     <SetupFlow
       seeded={view === "setup" || view === "v1-setup"}
       scope={view.startsWith("v1-") ? "v1" : "v2"}
+      onHome={goHome}
     />
   );
 }

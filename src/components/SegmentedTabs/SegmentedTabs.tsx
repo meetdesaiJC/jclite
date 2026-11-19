@@ -1,4 +1,5 @@
 import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 /**
@@ -73,8 +74,31 @@ export interface SegmentedTabItem {
   disabled?: boolean;
 }
 
+/**
+ * `default` is the Voice Agent tab system described above. `outlined` is the
+ * Billing Overview (Apex) treatment, Figma node 40003082:109278: the card
+ * carries its own 1px border, inactive labels drop to secondary text, there
+ * are no separators, and the track pads 8px inside its 1px outline (so 54px
+ * tall, not 48). There the label colour *does* carry state, because without
+ * separators the card alone doesn't say which neighbours are tabs.
+ */
+const trackVariants = cva(
+  "segmented-tabs relative flex w-full items-center gap-1.5 rounded-md bg-secondary-bg inset-ring-1 inset-ring-line",
+  {
+    variants: {
+      variant: {
+        default: "p-1.5",
+        // 1px inset outline + 8px padding = Figma's border + p-8.
+        outlined: "p-[9px]",
+      },
+    },
+    defaultVariants: { variant: "default" },
+  }
+);
+
 export interface SegmentedTabsProps
-  extends Omit<React.HTMLAttributes<HTMLDivElement>, "onSelect"> {
+  extends Omit<React.HTMLAttributes<HTMLDivElement>, "onSelect">,
+    VariantProps<typeof trackVariants> {
   items: SegmentedTabItem[];
   /** Controlled active segment key. */
   value: string;
@@ -84,7 +108,8 @@ export interface SegmentedTabsProps
 export const SegmentedTabs = React.forwardRef<
   HTMLDivElement,
   SegmentedTabsProps
->(({ items, value, onValueChange, className, onKeyDown, ...props }, ref) => {
+>(({ items, value, onValueChange, variant, className, onKeyDown, ...props }, ref) => {
+  const outlined = variant === "outlined";
   const trackRef = React.useRef<HTMLDivElement | null>(null);
   const indicatorRef = React.useRef<HTMLSpanElement | null>(null);
   const buttonRefs = React.useRef(new Map<string, HTMLButtonElement>());
@@ -182,10 +207,7 @@ export const SegmentedTabs = React.forwardRef<
     <div
       ref={setTrackRef}
       role="tablist"
-      className={cn(
-        "segmented-tabs relative flex w-full items-center gap-1.5 rounded-md bg-secondary-bg p-1.5 inset-ring-1 inset-ring-line",
-        className
-      )}
+      className={cn(trackVariants({ variant }), className)}
       onKeyDown={handleKeyDown}
       {...props}
     >
@@ -193,7 +215,12 @@ export const SegmentedTabs = React.forwardRef<
         ref={indicatorRef}
         aria-hidden="true"
         data-visible="false"
-        className="segmented-tabs-indicator pointer-events-none absolute left-0 top-0 rounded-[4px] bg-background shadow-200"
+        className={cn(
+          "segmented-tabs-indicator pointer-events-none absolute left-0 top-0 rounded-[4px] bg-background shadow-200",
+          // A real border, not an inset ring: both are box-shadows, so a
+          // ring would replace the shadow-200 lift rather than add to it.
+          outlined && "border border-line"
+        )}
       />
 
       {items.map((item, index) => {
@@ -207,7 +234,7 @@ export const SegmentedTabs = React.forwardRef<
 
         return (
           <React.Fragment key={item.key}>
-            {index > 0 && (
+            {index > 0 && !outlined && (
               <span
                 aria-hidden="true"
                 // The seam next to the card is dropped, not drawn under it:
@@ -235,7 +262,11 @@ export const SegmentedTabs = React.forwardRef<
               className={cn(
                 "segmented-tabs-segment relative z-[1] flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[4px] p-2 text-label-md",
                 "outline-none focus-visible:ring-2 focus-visible:ring-brand/24",
-                disabled ? "text-disabled-fg" : "text-foreground"
+                disabled
+                  ? "text-disabled-fg"
+                  : outlined && !selected
+                    ? "text-muted-foreground"
+                    : "text-foreground"
               )}
             >
               {item.icon}

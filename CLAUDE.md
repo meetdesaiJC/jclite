@@ -1,4 +1,4 @@
-# Agent Assist — working rules
+# JCLite — working rules
 
 Design-system-backed prototyping repo for JustCall AI. One component library,
 many prototypes. The prototypes are **demo artefacts built over weeks of design

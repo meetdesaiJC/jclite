@@ -113,6 +113,13 @@ input[type="radio"]:not(:disabled) {
     transform var(--duration-base) var(--ease-exit);
 }
 
+/* Reduced motion: no travel, the fade alone carries enter and exit. */
+@media (prefers-reduced-motion: reduce) {
+  .toast-panel[data-state] {
+    transform: none;
+  }
+}
+
 .toast-check[data-state="entering"] {
   transform: scale(0.85);
 }

@@ -70,6 +70,83 @@ export function IconAccountDetails({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconAdjustmentsHorizontal({ size = 24, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <circle cx="9.333" cy="4" r="1.333" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx="5.333" cy="8" r="1.333" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx="11.333" cy="12" r="1.333" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M2.667 4H8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M10.667 4H13.333" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M2.667 8H4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M6.667 8H13.333" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M2.667 12H10" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M12.667 12H13.333" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <circle cx="11.667" cy="5" r="1.667" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx="6.667" cy="10" r="1.667" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx="14.167" cy="15" r="1.667" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M3.333 5H10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M13.333 5H16.667" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M3.333 10H5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M8.333 10H16.667" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M3.333 15H12.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M15.833 15H16.667" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      case 24:
+        return (
+          <>
+          <circle cx="14" cy="6" r="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx="8" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <circle cx="17" cy="18" r="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M4 6H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M16 6H20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M4 12H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M10 12H20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M4 18H15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M19 18H20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      default:
+        return (
+          <>
+            <circle cx="14" cy="6" r="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="8" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="17" cy="18" r="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M4 6H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M16 6H20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M4 12H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M10 12H20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M4 18H15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M19 18H20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconAgentUnavailability({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {

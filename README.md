@@ -1,4 +1,4 @@
-# Agent Assist
+# JCLite
 
 Design-system-backed prototypes for JustCall AI — scripts, checklists, live
 guidance, and the JustCall AI shell.

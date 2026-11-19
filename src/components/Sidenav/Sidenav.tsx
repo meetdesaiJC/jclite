@@ -117,6 +117,11 @@ export interface SidenavProps extends Omit<React.HTMLAttributes<HTMLElement>, "o
   /** Optional "Back To Dashboard"-style row rendered above the nav list. */
   backLink?: SidenavBackLink;
   /**
+   * Makes the logo a button. Omit to keep it a static mark. Prototypes use it
+   * as the way home to their launcher, the same place a real logo would lead.
+   */
+  onLogoClick?: () => void;
+  /**
    * Stable key for the current nav set. When it changes, the nav body
    * (back link + items) slides/fades while the logo and footer stay fixed.
    * Omit to keep swaps instant (default).
@@ -158,6 +163,7 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
       onAddCredits,
       onViewUsageBalance,
       backLink,
+      onLogoClick,
       itemsKey,
       itemsTransition = "forward",
       className,
@@ -248,7 +254,18 @@ export const Sidenav = React.forwardRef<HTMLElement, SidenavProps>(
         {...props}
       >
         <div className="flex h-[60px] shrink-0 items-center border-b border-gray-700 px-5">
-          <JustCallLogo className="h-[19px] w-auto" />
+          {onLogoClick ? (
+            <button
+              type="button"
+              aria-label="Home"
+              onClick={onLogoClick}
+              className="-mx-1 rounded-md px-1 py-1 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            >
+              <JustCallLogo className="h-[19px] w-auto" />
+            </button>
+          ) : (
+            <JustCallLogo className="h-[19px] w-auto" />
+          )}
         </div>
 
         <div className="sidenav-body flex min-h-0 flex-1 flex-col overflow-hidden" data-motion={motion}>
