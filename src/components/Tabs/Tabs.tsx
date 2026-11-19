@@ -1,6 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/Badge";
+import { Badge, type BadgeProps } from "@/components/Badge";
 
 /**
  * Tabs — synced from Figma "Design System 2.0 / Tabs" (node 3464:126545),
@@ -31,6 +31,12 @@ export interface TabItem {
   icon?: React.ReactNode;
   /** Trailing count — rendered inside the DS error `Badge`. */
   badge?: React.ReactNode;
+  /**
+   * Tone of the trailing count. Defaults to `error` (an unread tally); a
+   * live count that isn't a problem — calls in progress, a queue — reads
+   * better as `success` / `warning`.
+   */
+  badgeVariant?: BadgeProps["variant"];
 }
 
 export interface TabsProps
@@ -171,7 +177,7 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
                   </span>
                 )}
                 {item.badge != null && (
-                  <Badge variant="error">{item.badge}</Badge>
+                  <Badge variant={item.badgeVariant ?? "error"}>{item.badge}</Badge>
                 )}
               </span>
               <span

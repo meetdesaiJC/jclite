@@ -16,6 +16,8 @@ const buttonVariants = cva(
   "relative inline-flex items-center justify-center whitespace-nowrap rounded-[4px] font-medium select-none " +
     // `button-press` (base.css) carries both the colour crossfade and the
     // press nudge, which run at different speeds — see §4.
+    // Locked (see LockedControl) looks disabled but keeps pointer events and
+    // focus, so the reason can show; its cursor comes from base.css.
     "button-press outline-none focus-visible:ring-4 disabled:pointer-events-none disabled:cursor-not-allowed",
   {
     variants: {
@@ -24,31 +26,38 @@ const buttonVariants = cva(
         // a loading button keeps its colour and just shows the spinner.)
         primary:
           "bg-brand text-white hover:bg-brand-hover focus-visible:ring-brand/24 " +
-          "disabled:data-[loading=false]:bg-disabled-bg disabled:data-[loading=false]:text-disabled-fg",
+          "disabled:data-[loading=false]:bg-disabled-bg disabled:data-[loading=false]:text-disabled-fg " +
+          "data-[locked=true]:bg-disabled-bg data-[locked=true]:text-disabled-fg",
         // Brand border + brand text on white.
         "primary-outline":
           "border border-brand bg-white text-brand hover:bg-brand-subtle focus-visible:ring-brand/24 " +
-          "disabled:data-[loading=false]:border-line disabled:data-[loading=false]:text-disabled-fg",
+          "disabled:data-[loading=false]:border-line disabled:data-[loading=false]:text-disabled-fg " +
+          "data-[locked=true]:border-line data-[locked=true]:bg-white data-[locked=true]:text-disabled-fg",
         // Neutral border, dark text.
         "grey-outline":
           "border border-line bg-white text-foreground hover:bg-surface-hover focus-visible:ring-brand/16 " +
-          "disabled:data-[loading=false]:text-disabled-fg",
+          "disabled:data-[loading=false]:text-disabled-fg " +
+          "data-[locked=true]:bg-white data-[locked=true]:text-disabled-fg",
         // Text-only link.
         link:
           "button-press-none bg-transparent text-brand hover:text-brand-hover focus-visible:ring-brand/24 " +
-          "disabled:data-[loading=false]:text-disabled-fg",
+          "disabled:data-[loading=false]:text-disabled-fg " +
+          "data-[locked=true]:text-disabled-fg",
         // Solid error red.
         error:
           "bg-error text-white hover:bg-error-hover focus-visible:ring-error/24 " +
-          "disabled:data-[loading=false]:bg-disabled-bg disabled:data-[loading=false]:text-disabled-fg",
+          "disabled:data-[loading=false]:bg-disabled-bg disabled:data-[loading=false]:text-disabled-fg " +
+          "data-[locked=true]:bg-disabled-bg data-[locked=true]:text-disabled-fg",
         // Error border + error text on white.
         "error-secondary":
           "border border-error bg-white text-error hover:bg-error-subtle focus-visible:ring-error/24 " +
-          "disabled:data-[loading=false]:border-line disabled:data-[loading=false]:text-disabled-fg",
+          "disabled:data-[loading=false]:border-line disabled:data-[loading=false]:text-disabled-fg " +
+          "data-[locked=true]:border-line data-[locked=true]:bg-white data-[locked=true]:text-disabled-fg",
         // Neutral border + error text.
         "error-grey-outline":
           "border border-line bg-white text-error hover:bg-error-subtle focus-visible:ring-error/16 " +
-          "disabled:data-[loading=false]:text-disabled-fg",
+          "disabled:data-[loading=false]:text-disabled-fg " +
+          "data-[locked=true]:bg-white data-[locked=true]:text-disabled-fg",
       },
       size: {
         xs: "h-7 gap-1 px-3 text-label-sm [&_svg]:size-4",

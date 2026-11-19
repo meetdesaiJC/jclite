@@ -11,6 +11,7 @@ import {
 } from "@/components/Table";
 import { IconCircleCheck, IconDotsVertical, IconInfoCircle } from "@/components/Icon";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
+import { LockedControl, type Lock } from "@/components/LockedControl";
 import {
   IconInvoiceDoc,
   IconOverviewEye,
@@ -71,7 +72,29 @@ function CardHeading({ title, subtitle }: { title: React.ReactNode; subtitle?: R
   );
 }
 
-export function BillingPage() {
+/** Billing actions the signed-in license can't take; omit for full access. */
+export interface BillingLocks {
+  cancel?: Lock;
+  addCard?: Lock;
+  cardActions?: Lock;
+  changePlan?: Lock;
+}
+
+/** Locks one control when `lock` is set; renders it untouched otherwise. */
+function Gate({ lock, children }: { lock?: Lock; children: React.ReactElement<Record<string, unknown>> }) {
+  return (
+    <LockedControl
+      locked={Boolean(lock)}
+      reason={lock?.reason}
+      hint={lock?.hint}
+      triggerClassName="shrink-0"
+    >
+      {children}
+    </LockedControl>
+  );
+}
+
+export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
   const full = ACCOUNT_PLAN.fullLicenses;
   const total = PLAN_CHARGE_KEYS.reduce((sum, key) => sum + planChargeTotal(key), 0);
   // The modal remembers its last tab while closed so the exit animation
@@ -226,9 +249,11 @@ export function BillingPage() {
               title="Payment Method"
               subtitle="Manage your saved cards to keep billing seamless."
             />
-            <Button variant="grey-outline" size="md" className="shrink-0">
-              Add Card
-            </Button>
+            <Gate lock={locks?.addCard}>
+              <Button variant="grey-outline" size="md" className="shrink-0">
+                Add Card
+              </Button>
+            </Gate>
           </div>
           {/* Same table treatment as Plan Details (Figma 40003082:102894),
               so every card with records on this page reads one way. */}
@@ -264,15 +289,17 @@ export function BillingPage() {
                   {BILLING.card.nameOnCard}
                 </TableCell>
                 <TableCell className="text-center">
-                  <Button
-                    variant="grey-outline"
-                    size="sm"
-                    iconOnly
-                    aria-label="Card actions"
-                    className="mx-auto"
-                  >
-                    <IconDotsVertical size={20} />
-                  </Button>
+                  <Gate lock={locks?.cardActions}>
+                    <Button
+                      variant="grey-outline"
+                      size="sm"
+                      iconOnly
+                      aria-label="Card actions"
+                      className="mx-auto"
+                    >
+                      <IconDotsVertical size={20} />
+                    </Button>
+                  </Gate>
                 </TableCell>
               </TableRow>
             </TableBody>
@@ -287,9 +314,11 @@ export function BillingPage() {
               // and "renews on" never disagree on the same page.
               subtitle={`If you cancel now, your subscription will stay active until ${BILLING.renewsOn}. Prefer a temporary break? You can choose to pause your subscription instead.`}
             />
-            <Button variant="grey-outline" size="md" className="shrink-0">
-              Cancel Subscription
-            </Button>
+            <Gate lock={locks?.cancel}>
+              <Button variant="grey-outline" size="md" className="shrink-0">
+                Cancel Subscription
+              </Button>
+            </Gate>
           </div>
         </Card>
 
@@ -299,9 +328,11 @@ export function BillingPage() {
               title="Change Plan"
               subtitle="Upgrade as your team grows or switch to a lower plan if you need less. Compare plans and pick what fits today."
             />
-            <Button variant="primary" size="md" className="shrink-0">
-              Compare Plans
-            </Button>
+            <Gate lock={locks?.changePlan}>
+              <Button variant="primary" size="md" className="shrink-0">
+                Compare Plans
+              </Button>
+            </Gate>
           </div>
         </Card>
       </div>

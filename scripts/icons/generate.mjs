@@ -220,7 +220,14 @@ export * from "./icons.generated";
 ${aliases.length ? "\n// Legacy / explicit aliases\n" + aliases.join("\n") + "\n" : ""}`;
 
   const publicPath = path.join(ROOT, "src/components/Icon/icons.tsx");
-  fs.writeFileSync(publicPath, publicFile);
+  // icons.tsx also holds hand-made icons the Figma set doesn't have (e.g.
+  // IconMessageCircle2). Everything from HAND_MADE_MARKER down is kept as-is;
+  // regenerating used to wipe it and break every prototype importing them.
+  const HAND_MADE_MARKER = "/* ── Hand-made icons";
+  const existing = fs.existsSync(publicPath) ? fs.readFileSync(publicPath, "utf8") : "";
+  const markerAt = existing.indexOf(HAND_MADE_MARKER);
+  const handMade = markerAt >= 0 ? "\n" + existing.slice(markerAt) : "";
+  fs.writeFileSync(publicPath, publicFile + handMade);
   console.log(`Wrote ${publicPath}`);
 }
 

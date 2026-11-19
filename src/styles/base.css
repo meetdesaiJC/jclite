@@ -27,6 +27,14 @@ input[type="radio"]:not(:disabled) {
   cursor: pointer;
 }
 
+/* License-locked controls (LockedControl) stay focusable, so they match the
+   pointer rule above; this puts the not-allowed cursor back. One rule for
+   any locked control, so each one doesn't need its own override. */
+[data-locked="true"],
+button[data-locked="true"] {
+  cursor: not-allowed;
+}
+
 /* ================================================================== */
 /* SKELETON / SHIMMER LOADING                                        */
 /* Use `.skeleton` on any placeholder bar shown while real data       */
@@ -293,7 +301,7 @@ input[type="radio"]:not(:disabled) {
     translate var(--duration-micro) var(--ease-standard);
 }
 
-.button-press:active:not(:disabled) {
+.button-press:active:not(:disabled):not([data-locked="true"]) {
   translate: 0 1px;
 }
 
@@ -1260,5 +1268,58 @@ input[type="radio"]:not(:disabled) {
   .slider::-webkit-slider-thumb,
   .slider::-moz-range-thumb {
     transition: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* DotsLoader — one dot travelling through three                       */
+/* ------------------------------------------------------------------ */
+
+/* Shaped with stops, not per-stop easing (a keyframe can't read an easing
+   token): the dot swells into a pill, then hands off — dimming to the 70%
+   trail before settling at rest — so the eye follows one dot moving right
+   rather than three blinking. Animates `scale`, not `transform`, because
+   that's the property the resting `scale-y-*` class sets. */
+@keyframes dots-loader-travel {
+  0% {
+    scale: 1 1;
+    opacity: 0.3;
+  }
+  20% {
+    scale: 1 1.7;
+    opacity: 1;
+  }
+  45% {
+    scale: 1 1;
+    opacity: 0.7;
+  }
+  70%,
+  100% {
+    scale: 1 1;
+    opacity: 0.3;
+  }
+}
+
+/* One breath of the loop carries the dot across all three, so the offset is
+   a third of the loop — derived from the token, not re-typed. `backwards`
+   holds a waiting dot at rest rather than at its Figma frame. */
+.dots-loader-dot {
+  animation: dots-loader-travel var(--duration-ambient-loop) var(--ease-standard) infinite
+    backwards;
+}
+
+.dots-loader-dot:nth-child(2) {
+  animation-delay: calc(var(--duration-ambient-loop) / 3);
+}
+
+.dots-loader-dot:nth-child(3) {
+  animation-delay: calc(var(--duration-ambient-loop) * 2 / 3);
+}
+
+/* Reduced motion: the loop stops and the dots hold the Figma frame (pill,
+   70%, 30%) from their resting classes — still reads as "waiting". */
+@media (prefers-reduced-motion: reduce) {
+  .dots-loader-dot {
+    animation: none;
   }
 }

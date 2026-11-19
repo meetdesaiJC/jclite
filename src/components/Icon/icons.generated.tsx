@@ -70,6 +70,43 @@ export function IconAccountDetails({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconAddPlus({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M8 3.33333V12.6667M3.33333 8H12.6667" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M8 3.33333V12.6667M3.33333 8H12.6667" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconAdjustmentsHorizontal({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -562,6 +599,88 @@ export function IconAppointmentScheduler({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconArchive({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M12.6667 5.33333C13.0203 5.33333 13.3594 5.19286 13.6095 4.94281C13.8595 4.69276 14 4.35362 14 4C14 3.64638 13.8595 3.30724 13.6095 3.05719C13.3594 2.80714 13.0203 2.66667 12.6667 2.66667H3.33333C2.97971 2.66667 2.64057 2.80714 2.39052 3.05719C2.14048 3.30724 2 3.64638 2 4C2 4.35362 2.14048 4.69276 2.39052 4.94281C2.64057 5.19286 2.97971 5.33333 3.33333 5.33333M12.6667 5.33333H3.33333M12.6667 5.33333V12C12.6667 12.3536 12.5262 12.6928 12.2761 12.9428C12.0261 13.1929 11.687 13.3333 11.3333 13.3333H4.66667C4.31304 13.3333 3.97391 13.1929 3.72386 12.9428C3.47381 12.6928 3.33333 12.3536 3.33333 12V5.33333M6.66667 8H9.33333" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <g>
+          <path d="M15.8333 6.66634C16.2754 6.66634 16.6993 6.49075 17.0118 6.17819C17.3244 5.86563 17.5 5.4417 17.5 4.99967C17.5 4.55765 17.3244 4.13372 17.0118 3.82116C16.6993 3.5086 16.2754 3.33301 15.8333 3.33301H4.16667C3.72464 3.33301 3.30072 3.5086 2.98816 3.82116C2.67559 4.13372 2.5 4.55765 2.5 4.99967C2.5 5.4417 2.67559 5.86563 2.98816 6.17819C3.30072 6.49075 3.72464 6.66634 4.16667 6.66634M15.8333 6.66634H4.16667M15.8333 6.66634V14.9997C15.8333 15.4417 15.6577 15.8656 15.3452 16.1782C15.0326 16.4907 14.6087 16.6663 14.1667 16.6663H5.83333C5.39131 16.6663 4.96738 16.4907 4.65482 16.1782C4.34226 15.8656 4.16667 15.4417 4.16667 14.9997V6.66634M8.33333 9.99967H11.6667" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M15.8333 6.66634C16.2754 6.66634 16.6993 6.49075 17.0118 6.17819C17.3244 5.86563 17.5 5.4417 17.5 4.99967C17.5 4.55765 17.3244 4.13372 17.0118 3.82116C16.6993 3.5086 16.2754 3.33301 15.8333 3.33301H4.16667C3.72464 3.33301 3.30072 3.5086 2.98816 3.82116C2.67559 4.13372 2.5 4.55765 2.5 4.99967C2.5 5.4417 2.67559 5.86563 2.98816 6.17819C3.30072 6.49075 3.72464 6.66634 4.16667 6.66634M15.8333 6.66634H4.16667M15.8333 6.66634V14.9997C15.8333 15.4417 15.6577 15.8656 15.3452 16.1782C15.0326 16.4907 14.6087 16.6663 14.1667 16.6663H5.83333C5.39131 16.6663 4.96738 16.4907 4.65482 16.1782C4.34226 15.8656 4.16667 15.4417 4.16667 14.9997V6.66634M8.33333 9.99967H11.6667" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconArrowDown({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M8 3.33333V12.6667M4 8.66667L8 12.6667L12 8.66667" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M8 3.33333V12.6667M4 8.66667L8 12.6667L12 8.66667" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconArrowRight({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -575,6 +694,80 @@ export function IconArrowRight({ size = 24, ...props }: IconProps) {
         return (
           <>
             <path d="M5 12H19M13 6L19 12L13 18" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconArrowsSort({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M7.25926 5.7778L4.29629 2.81484L1.33333 5.7778M4.29629 2.81484V13.1852M8.74074 10.2222L11.7037 13.1852L14.6667 10.2222M11.7037 13.1852V2.81484" strokeWidth="1.06667" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M7.25926 5.7778L4.29629 2.81484L1.33333 5.7778M4.29629 2.81484V13.1852M8.74074 10.2222L11.7037 13.1852L14.6667 10.2222M11.7037 13.1852V2.81484" strokeWidth="1.06667" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconAt({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M10.6667 8C10.6667 8.70724 10.3857 9.38552 9.88562 9.88562C9.38552 10.3857 8.70724 10.6667 8 10.6667C7.29276 10.6667 6.61448 10.3857 6.11438 9.88562C5.61428 9.38552 5.33333 8.70724 5.33333 8C5.33333 7.29276 5.61428 6.61448 6.11438 6.11438C6.61448 5.61428 7.29276 5.33333 8 5.33333C8.70724 5.33333 9.38552 5.61428 9.88562 6.11438C10.3857 6.61448 10.6667 7.29276 10.6667 8ZM10.6667 8L10.6667 9.00006C10.6667 9.44209 10.8423 9.86601 11.1548 10.1786C11.4674 10.4911 11.8913 10.6667 12.3333 10.6667C12.7754 10.6667 13.1993 10.4911 13.5118 10.1786C13.8244 9.86601 14 9.44209 14 9.00006V8.00006C14.0017 6.7108 13.588 5.45529 12.8203 4.41952C12.0525 3.38376 10.9716 2.62283 9.73759 2.24946C8.50357 1.87609 7.18211 1.91014 5.96896 2.34657C4.7558 2.783 3.7155 3.59858 3.00214 4.67251C2.28878 5.74644 1.94031 7.02159 2.00837 8.30906C2.07642 9.59652 2.55737 10.8278 3.37997 11.8206C4.20257 12.8133 5.32306 13.5147 6.57546 13.8208C7.82786 14.1269 9.14555 14.0214 10.3333 13.5201" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M10.6667 8C10.6667 8.70724 10.3857 9.38552 9.88562 9.88562C9.38552 10.3857 8.70724 10.6667 8 10.6667C7.29276 10.6667 6.61448 10.3857 6.11438 9.88562C5.61428 9.38552 5.33333 8.70724 5.33333 8C5.33333 7.29276 5.61428 6.61448 6.11438 6.11438C6.61448 5.61428 7.29276 5.33333 8 5.33333C8.70724 5.33333 9.38552 5.61428 9.88562 6.11438C10.3857 6.61448 10.6667 7.29276 10.6667 8ZM10.6667 8L10.6667 9.00006C10.6667 9.44209 10.8423 9.86601 11.1548 10.1786C11.4674 10.4911 11.8913 10.6667 12.3333 10.6667C12.7754 10.6667 13.1993 10.4911 13.5118 10.1786C13.8244 9.86601 14 9.44209 14 9.00006V8.00006C14.0017 6.7108 13.588 5.45529 12.8203 4.41952C12.0525 3.38376 10.9716 2.62283 9.73759 2.24946C8.50357 1.87609 7.18211 1.91014 5.96896 2.34657C4.7558 2.783 3.7155 3.59858 3.00214 4.67251C2.28878 5.74644 1.94031 7.02159 2.00837 8.30906C2.07642 9.59652 2.55737 10.8278 3.37997 11.8206C4.20257 12.8133 5.32306 13.5147 6.57546 13.8208C7.82786 14.1269 9.14555 14.0214 10.3333 13.5201" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
           </>
         );
     }
@@ -647,6 +840,80 @@ export function IconBell({ size = 24, ...props }: IconProps) {
             <path id="Vector" d="M9 17V18C9 18.7956 9.31607 19.5587 9.87868 20.1213C10.4413 20.6839 11.2044 21 12 21C12.7956 21 13.5587 20.6839 14.1213 20.1213C14.6839 19.5587 15 18.7956 15 18V17M10 5C10 4.46957 10.2107 3.96086 10.5858 3.58579C10.9609 3.21071 11.4696 3 12 3C12.5304 3 13.0391 3.21071 13.4142 3.58579C13.7893 3.96086 14 4.46957 14 5C15.1484 5.54303 16.1274 6.38833 16.8321 7.4453C17.5367 8.50227 17.9404 9.73107 18 11V14C18.0753 14.6217 18.2954 15.2171 18.6428 15.7381C18.9902 16.2592 19.4551 16.6914 20 17H4C4.54494 16.6914 5.00981 16.2592 5.35719 15.7381C5.70457 15.2171 5.92474 14.6217 6 14V11C6.05956 9.73107 6.4633 8.50227 7.16795 7.4453C7.8726 6.38833 8.85159 5.54303 10 5Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </g>
             </g>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconBookmark({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 20:
+        return (
+          <>
+          <g>
+          <path d="M7.5 3.33333H12.5C12.942 3.33333 13.366 3.50893 13.6785 3.82149C13.9911 4.13405 14.1667 4.55797 14.1667 5V16.6667L10 14.1667L5.83333 16.6667V5C5.83333 4.55797 6.00893 4.13405 6.32149 3.82149C6.63405 3.50893 7.05797 3.33333 7.5 3.33333Z" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M7.5 3.33333H12.5C12.942 3.33333 13.366 3.50893 13.6785 3.82149C13.9911 4.13405 14.1667 4.55797 14.1667 5V16.6667L10 14.1667L5.83333 16.6667V5C5.83333 4.55797 6.00893 4.13405 6.32149 3.82149C6.63405 3.50893 7.05797 3.33333 7.5 3.33333Z" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconBrandWhatsapp({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M6 6.66667C6 6.75507 6.03512 6.83986 6.09763 6.90237C6.16014 6.96488 6.24493 7 6.33333 7C6.42174 7 6.50652 6.96488 6.56904 6.90237C6.63155 6.83986 6.66667 6.75507 6.66667 6.66667V6C6.66667 5.91159 6.63155 5.82681 6.56904 5.7643C6.50652 5.70179 6.42174 5.66667 6.33333 5.66667C6.24493 5.66667 6.16014 5.70179 6.09763 5.7643C6.03512 5.82681 6 5.91159 6 6V6.66667ZM6 6.66667C6 7.55072 6.35119 8.39857 6.97631 9.02369C7.60143 9.64881 8.44928 10 9.33333 10M9.33333 10H10C10.0884 10 10.1732 9.96488 10.2357 9.90237C10.2982 9.83986 10.3333 9.75507 10.3333 9.66667C10.3333 9.57826 10.2982 9.49348 10.2357 9.43096C10.1732 9.36845 10.0884 9.33333 10 9.33333H9.33333C9.24493 9.33333 9.16014 9.36845 9.09763 9.43096C9.03512 9.49348 9 9.57826 9 9.66667C9 9.75507 9.03512 9.83986 9.09763 9.90237C9.16014 9.96488 9.24493 10 9.33333 10ZM2 14L3.1 11.4666C2.25844 10.272 1.88178 8.81134 2.0407 7.35872C2.19961 5.9061 2.88319 4.56141 3.96314 3.57699C5.04309 2.59258 6.44517 2.03612 7.90625 2.01205C9.36734 1.98797 10.787 2.49793 11.8988 3.44623C13.0106 4.39452 13.7381 5.71596 13.9448 7.16256C14.1515 8.60915 13.8231 10.0815 13.0214 11.3032C12.2197 12.5249 10.9996 13.412 9.59026 13.7981C8.1809 14.1841 6.67908 14.0426 5.36667 13.4L2 14Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M6 6.66667C6 6.75507 6.03512 6.83986 6.09763 6.90237C6.16014 6.96488 6.24493 7 6.33333 7C6.42174 7 6.50652 6.96488 6.56904 6.90237C6.63155 6.83986 6.66667 6.75507 6.66667 6.66667V6C6.66667 5.91159 6.63155 5.82681 6.56904 5.7643C6.50652 5.70179 6.42174 5.66667 6.33333 5.66667C6.24493 5.66667 6.16014 5.70179 6.09763 5.7643C6.03512 5.82681 6 5.91159 6 6V6.66667ZM6 6.66667C6 7.55072 6.35119 8.39857 6.97631 9.02369C7.60143 9.64881 8.44928 10 9.33333 10M9.33333 10H10C10.0884 10 10.1732 9.96488 10.2357 9.90237C10.2982 9.83986 10.3333 9.75507 10.3333 9.66667C10.3333 9.57826 10.2982 9.49348 10.2357 9.43096C10.1732 9.36845 10.0884 9.33333 10 9.33333H9.33333C9.24493 9.33333 9.16014 9.36845 9.09763 9.43096C9.03512 9.49348 9 9.57826 9 9.66667C9 9.75507 9.03512 9.83986 9.09763 9.90237C9.16014 9.96488 9.24493 10 9.33333 10ZM2 14L3.1 11.4666C2.25844 10.272 1.88178 8.81134 2.0407 7.35872C2.19961 5.9061 2.88319 4.56141 3.96314 3.57699C5.04309 2.59258 6.44517 2.03612 7.90625 2.01205C9.36734 1.98797 10.787 2.49793 11.8988 3.44623C13.0106 4.39452 13.7381 5.71596 13.9448 7.16256C14.1515 8.60915 13.8231 10.0815 13.0214 11.3032C12.2197 12.5249 10.9996 13.412 9.59026 13.7981C8.1809 14.1841 6.67908 14.0426 5.36667 13.4L2 14Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
             </g>
           </>
         );
@@ -1208,6 +1475,43 @@ export function IconCheck({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconChecks({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g transform="translate(0.8333 4.1667)">
+          <path d="M3.83333 3.83333L7.16667 7.16667L13.8333 0.5M0.5 3.83333L3.83333 7.16667M7.16667 3.83333L10.5 0.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g transform="translate(0.8333 4.1667)">
+            <path d="M3.83333 3.83333L7.16667 7.16667L13.8333 0.5M0.5 3.83333L3.83333 7.16667M7.16667 3.83333L10.5 0.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconChevronDown({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -1490,6 +1794,14 @@ export function IconCircle({ size = 24, ...props }: IconProps) {
 export function IconCircleCheck({ size = 20, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M6 8L7.33333 9.33333L10 6.66667M2 8C2 8.78793 2.15519 9.56815 2.45672 10.2961C2.75825 11.0241 3.20021 11.6855 3.75736 12.2426C4.31451 12.7998 4.97595 13.2417 5.7039 13.5433C6.43185 13.8448 7.21207 14 8 14C8.78793 14 9.56815 13.8448 10.2961 13.5433C11.0241 13.2417 11.6855 12.7998 12.2426 12.2426C12.7998 11.6855 13.2417 11.0241 13.5433 10.2961C13.8448 9.56815 14 8.78793 14 8C14 7.21207 13.8448 6.43185 13.5433 5.7039C13.2417 4.97595 12.7998 4.31451 12.2426 3.75736C11.6855 3.20021 11.0241 2.75825 10.2961 2.45672C9.56815 2.15519 8.78793 2 8 2C7.21207 2 6.43185 2.15519 5.7039 2.45672C4.97595 2.75825 4.31451 3.20021 3.75736 3.75736C3.20021 4.31451 2.75825 4.97595 2.45672 5.7039C2.15519 6.43185 2 7.21207 2 8Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
       case 20:
         return (
           <>
@@ -1927,6 +2239,45 @@ export function IconCopy({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconCopyPlus({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 20:
+        return (
+          <>
+          <path d="M17.6191 11.9048V4.28572C17.6191 3.23374 16.7662 2.38095 15.7142 2.38095H8.09524C7.04327 2.38095 6.19047 3.23374 6.19047 4.28572V11.9048C6.19047 12.9568 7.04327 13.8095 8.09524 13.8095H15.7142C16.7662 13.8095 17.6191 12.9568 17.6191 11.9048Z" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          <path d="M6.19047 6.19378H4.28572C3.23374 6.19378 2.38095 7.04656 2.38095 8.09853V15.7143C2.38095 16.7663 3.23374 17.6191 4.28572 17.6191H4.28901L11.9081 17.6059C12.9587 17.6041 13.8095 16.7518 13.8095 15.7011V13.8128" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          <path d="M11.9047 5.2381V10.9524" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          <path d="M14.7619 8.09524H9.04758" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </>
+        );
+      default:
+        return (
+          <>
+            <path d="M17.6191 11.9048V4.28572C17.6191 3.23374 16.7662 2.38095 15.7142 2.38095H8.09524C7.04327 2.38095 6.19047 3.23374 6.19047 4.28572V11.9048C6.19047 12.9568 7.04327 13.8095 8.09524 13.8095H15.7142C16.7662 13.8095 17.6191 12.9568 17.6191 11.9048Z" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            <path d="M6.19047 6.19378H4.28572C3.23374 6.19378 2.38095 7.04656 2.38095 8.09853V15.7143C2.38095 16.7663 3.23374 17.6191 4.28572 17.6191H4.28901L11.9081 17.6059C12.9587 17.6041 13.8095 16.7518 13.8095 15.7011V13.8128" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            <path d="M11.9047 5.2381V10.9524" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            <path d="M14.7619 8.09524H9.04758" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconCreateBot({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -2303,6 +2654,43 @@ export function IconDropDown({ size = 24, ...props }: IconProps) {
           <>
             <g transform="translate(-36 0)">
             <path d="M47.3003 14.3L44.7003 11.7C44.3836 11.3833 44.3129 11.021 44.4883 10.613C44.6636 10.205 44.9759 10.0007 45.4253 10H50.5753C51.0253 10 51.3379 10.2043 51.5133 10.613C51.6886 11.0217 51.6176 11.384 51.3003 11.7L48.7003 14.3C48.6003 14.4 48.4919 14.475 48.3753 14.525C48.2586 14.575 48.1336 14.6 48.0003 14.6C47.8669 14.6 47.7419 14.575 47.6253 14.525C47.5086 14.475 47.4003 14.4 47.3003 14.3Z" fill="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconEditCircle({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M10.6667 3.33333L12.6667 5.33333M5.99995 4.7133C4.83048 4.87992 3.76771 5.48386 3.02603 6.40329C2.28434 7.32271 1.91894 8.4892 2.00352 9.66745C2.08811 10.8457 2.61638 11.948 3.48179 12.7521C4.3472 13.5562 5.48533 14.0021 6.66662 14C7.78888 14.0001 8.8736 13.5958 9.722 12.8611C10.5704 12.1265 11.1256 11.1107 11.2859 9.99996M8 9.99999L13.59 4.38999C13.8526 4.12743 14.0001 3.77131 14.0001 3.39999C14.0001 3.02867 13.8526 2.67255 13.59 2.40999C13.3274 2.14743 12.9713 1.99992 12.6 1.99992C12.2287 1.99992 11.8726 2.14743 11.61 2.40999L6 7.99999V9.99999H8Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M10.6667 3.33333L12.6667 5.33333M5.99995 4.7133C4.83048 4.87992 3.76771 5.48386 3.02603 6.40329C2.28434 7.32271 1.91894 8.4892 2.00352 9.66745C2.08811 10.8457 2.61638 11.948 3.48179 12.7521C4.3472 13.5562 5.48533 14.0021 6.66662 14C7.78888 14.0001 8.8736 13.5958 9.722 12.8611C10.5704 12.1265 11.1256 11.1107 11.2859 9.99996M8 9.99999L13.59 4.38999C13.8526 4.12743 14.0001 3.77131 14.0001 3.39999C14.0001 3.02867 13.8526 2.67255 13.59 2.40999C13.3274 2.14743 12.9713 1.99992 12.6 1.99992C12.2287 1.99992 11.8726 2.14743 11.61 2.40999L6 7.99999V9.99999H8Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
             </g>
           </>
         );
@@ -2965,6 +3353,43 @@ export function IconJCMenu({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconLayoutSidebarLeftCollapse({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 20:
+        return (
+          <>
+          <g>
+          <path d="M7.22222 3.20988V16.0494M12.037 8.02469L10.4321 9.62963L12.037 11.2346M3.20988 4.81481C3.20988 4.38916 3.37897 3.98094 3.67995 3.67995C3.98094 3.37897 4.38916 3.20988 4.81481 3.20988H14.4444C14.8701 3.20988 15.2783 3.37897 15.5793 3.67995C15.8803 3.98094 16.0494 4.38916 16.0494 4.81481V14.4444C16.0494 14.8701 15.8803 15.2783 15.5793 15.5793C15.2783 15.8803 14.8701 16.0494 14.4444 16.0494H4.81481C4.38916 16.0494 3.98094 15.8803 3.67995 15.5793C3.37897 15.2783 3.20988 14.8701 3.20988 14.4444V4.81481Z" strokeWidth="1.15556" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M7.22222 3.20988V16.0494M12.037 8.02469L10.4321 9.62963L12.037 11.2346M3.20988 4.81481C3.20988 4.38916 3.37897 3.98094 3.67995 3.67995C3.98094 3.37897 4.38916 3.20988 4.81481 3.20988H14.4444C14.8701 3.20988 15.2783 3.37897 15.5793 3.67995C15.8803 3.98094 16.0494 4.38916 16.0494 4.81481V14.4444C16.0494 14.8701 15.8803 15.2783 15.5793 15.5793C15.2783 15.8803 14.8701 16.0494 14.4444 16.0494H4.81481C4.38916 16.0494 3.98094 15.8803 3.67995 15.5793C3.37897 15.2783 3.20988 14.8701 3.20988 14.4444V4.81481Z" strokeWidth="1.15556" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconManageReports({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -3180,6 +3605,76 @@ export function IconMarketplace({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconMessage2({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 20:
+        return (
+          <>
+          <path d="M6.66667 7.5H13.3333M6.66667 10.8333H11.6667M7.5 15H5C4.33696 15 3.70107 14.7366 3.23223 14.2678C2.76339 13.7989 2.5 13.163 2.5 12.5V5.83333C2.5 5.17029 2.76339 4.53441 3.23223 4.06557C3.70107 3.59673 4.33696 3.33333 5 3.33333H15C15.663 3.33333 16.2989 3.59673 16.7678 4.06557C17.2366 4.53441 17.5 5.17029 17.5 5.83333V12.5C17.5 13.163 17.2366 13.7989 16.7678 14.2678C16.2989 14.7366 15.663 15 15 15H12.5L10 17.5L7.5 15Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      default:
+        return (
+          <>
+            <path d="M6.66667 7.5H13.3333M6.66667 10.8333H11.6667M7.5 15H5C4.33696 15 3.70107 14.7366 3.23223 14.2678C2.76339 13.7989 2.5 13.163 2.5 12.5V5.83333C2.5 5.17029 2.76339 4.53441 3.23223 4.06557C3.70107 3.59673 4.33696 3.33333 5 3.33333H15C15.663 3.33333 16.2989 3.59673 16.7678 4.06557C17.2366 4.53441 17.5 5.17029 17.5 5.83333V12.5C17.5 13.163 17.2366 13.7989 16.7678 14.2678C16.2989 14.7366 15.663 15 15 15H12.5L10 17.5L7.5 15Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconMessage2Bolt({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M5.33333 6H10.6667M5.33333 8.66667H9.33333M8.66667 13.3333L8 14L6 12H4C3.46957 12 2.96086 11.7893 2.58579 11.4142C2.21071 11.0391 2 10.5304 2 10V4.66667C2 4.13623 2.21071 3.62753 2.58579 3.25245C2.96086 2.87738 3.46957 2.66667 4 2.66667H12C12.5304 2.66667 13.0391 2.87738 13.4142 3.25245C13.7893 3.62753 14 4.13623 14 4.66667V8.33333M12.6667 10.6667L11.3333 12.6667H14L12.6667 14.6667" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M5.33333 6H10.6667M5.33333 8.66667H9.33333M8.66667 13.3333L8 14L6 12H4C3.46957 12 2.96086 11.7893 2.58579 11.4142C2.21071 11.0391 2 10.5304 2 10V4.66667C2 4.13623 2.21071 3.62753 2.58579 3.25245C2.96086 2.87738 3.46957 2.66667 4 2.66667H12C12.5304 2.66667 13.0391 2.87738 13.4142 3.25245C13.7893 3.62753 14 4.13623 14 4.66667V8.33333M12.6667 10.6667L11.3333 12.6667H14L12.6667 14.6667" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconMessages({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -3293,6 +3788,43 @@ export function IconMoments({ size = 24, ...props }: IconProps) {
             <path d="M39 12H40M48 3V4M56 12H57M41.6 5.6L42.3 6.3M54.4 5.6L53.7 6.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M45 16C44.1605 15.3704 43.5403 14.4925 43.2274 13.4908C42.9145 12.4892 42.9247 11.4144 43.2566 10.4189C43.5884 9.4233 44.2251 8.55739 45.0764 7.94379C45.9278 7.33019 46.9506 7 48 7C49.0494 7 50.0722 7.33019 50.9236 7.94379C51.7749 8.55739 52.4116 9.4233 52.7434 10.4189C53.0753 11.4144 53.0855 12.4892 52.7726 13.4908C52.4597 14.4925 51.8395 15.3704 51 16C50.6096 16.3865 50.3156 16.8594 50.1419 17.3806C49.9681 17.9018 49.9195 18.4566 50 19C50 19.5304 49.7893 20.0391 49.4142 20.4142C49.0391 20.7893 48.5304 21 48 21C47.4696 21 46.9609 20.7893 46.5858 20.4142C46.2107 20.0391 46 19.5304 46 19C46.0805 18.4566 46.0319 17.9018 45.8581 17.3806C45.6844 16.8594 45.3904 16.3865 45 16Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M45.7002 17H50.3002" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconMoodSmile({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 20:
+        return (
+          <>
+          <g>
+          <path d="M7.5 8.33333H7.50833M12.5 8.33333H12.5083M7.91667 12.5C8.18823 12.7772 8.51237 12.9974 8.87011 13.1477C9.22784 13.298 9.61197 13.3754 10 13.3754C10.388 13.3754 10.7722 13.298 11.1299 13.1477C11.4876 12.9974 11.8118 12.7772 12.0833 12.5M2.5 10C2.5 10.9849 2.69399 11.9602 3.0709 12.8701C3.44781 13.7801 4.00026 14.6069 4.6967 15.3033C5.39314 15.9997 6.21993 16.5522 7.12987 16.9291C8.03982 17.306 9.01509 17.5 10 17.5C10.9849 17.5 11.9602 17.306 12.8701 16.9291C13.7801 16.5522 14.6069 15.9997 15.3033 15.3033C15.9997 14.6069 16.5522 13.7801 16.9291 12.8701C17.306 11.9602 17.5 10.9849 17.5 10C17.5 9.01509 17.306 8.03982 16.9291 7.12987C16.5522 6.21993 15.9997 5.39314 15.3033 4.6967C14.6069 4.00026 13.7801 3.44781 12.8701 3.0709C11.9602 2.69399 10.9849 2.5 10 2.5C9.01509 2.5 8.03982 2.69399 7.12987 3.0709C6.21993 3.44781 5.39314 4.00026 4.6967 4.6967C4.00026 5.39314 3.44781 6.21993 3.0709 7.12987C2.69399 8.03982 2.5 9.01509 2.5 10Z" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M7.5 8.33333H7.50833M12.5 8.33333H12.5083M7.91667 12.5C8.18823 12.7772 8.51237 12.9974 8.87011 13.1477C9.22784 13.298 9.61197 13.3754 10 13.3754C10.388 13.3754 10.7722 13.298 11.1299 13.1477C11.4876 12.9974 11.8118 12.7772 12.0833 12.5M2.5 10C2.5 10.9849 2.69399 11.9602 3.0709 12.8701C3.44781 13.7801 4.00026 14.6069 4.6967 15.3033C5.39314 15.9997 6.21993 16.5522 7.12987 16.9291C8.03982 17.306 9.01509 17.5 10 17.5C10.9849 17.5 11.9602 17.306 12.8701 16.9291C13.7801 16.5522 14.6069 15.9997 15.3033 15.3033C15.9997 14.6069 16.5522 13.7801 16.9291 12.8701C17.306 11.9602 17.5 10.9849 17.5 10C17.5 9.01509 17.306 8.03982 16.9291 7.12987C16.5522 6.21993 15.9997 5.39314 15.3033 4.6967C14.6069 4.00026 13.7801 3.44781 12.8701 3.0709C11.9602 2.69399 10.9849 2.5 10 2.5C9.01509 2.5 8.03982 2.69399 7.12987 3.0709C6.21993 3.44781 5.39314 4.00026 4.6967 4.6967C4.00026 5.39314 3.44781 6.21993 3.0709 7.12987C2.69399 8.03982 2.5 9.01509 2.5 10Z" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
             </g>
           </>
         );
@@ -3495,6 +4027,43 @@ export function IconOtherApps({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconPaperclip({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 20:
+        return (
+          <>
+          <g>
+          <path d="M12.5 5.8333L7.08333 11.25C6.75181 11.5815 6.56556 12.0311 6.56556 12.5C6.56556 12.9688 6.75181 13.4185 7.08333 13.75C7.41485 14.0815 7.86449 14.2677 8.33333 14.2677C8.80217 14.2677 9.25181 14.0815 9.58333 13.75L15 8.3333C15.663 7.67026 16.0355 6.77099 16.0355 5.8333C16.0355 4.89562 15.663 3.99635 15 3.3333C14.337 2.67026 13.4377 2.29777 12.5 2.29777C11.5623 2.29777 10.663 2.67026 9.99999 3.3333L4.58333 8.74997C3.58877 9.74453 3.03003 11.0934 3.03003 12.5C3.03003 13.9065 3.58877 15.2554 4.58333 16.25C5.57789 17.2445 6.9268 17.8033 8.33333 17.8033C9.73985 17.8033 11.0888 17.2445 12.0833 16.25L17.5 10.8333" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M12.5 5.8333L7.08333 11.25C6.75181 11.5815 6.56556 12.0311 6.56556 12.5C6.56556 12.9688 6.75181 13.4185 7.08333 13.75C7.41485 14.0815 7.86449 14.2677 8.33333 14.2677C8.80217 14.2677 9.25181 14.0815 9.58333 13.75L15 8.3333C15.663 7.67026 16.0355 6.77099 16.0355 5.8333C16.0355 4.89562 15.663 3.99635 15 3.3333C14.337 2.67026 13.4377 2.29777 12.5 2.29777C11.5623 2.29777 10.663 2.67026 9.99999 3.3333L4.58333 8.74997C3.58877 9.74453 3.03003 11.0934 3.03003 12.5C3.03003 13.9065 3.58877 15.2554 4.58333 16.25C5.57789 17.2445 6.9268 17.8033 8.33333 17.8033C9.73985 17.8033 11.0888 17.2445 12.0833 16.25L17.5 10.8333" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconPencil({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -3613,6 +4182,47 @@ export function IconPhone({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconPhoneIncoming({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 20:
+        return (
+          <>
+          <g>
+          <path d="M4.16667 3.33333H7.5L9.16667 7.5L7.08333 8.75C7.9758 10.5596 9.44039 12.0242 11.25 12.9167L12.5 10.8333L16.6667 12.5V15.8333C16.6667 16.2754 16.4911 16.6993 16.1785 17.0118C15.866 17.3244 15.442 17.5 15 17.5C11.7494 17.3025 8.68346 15.9221 6.38069 13.6193C4.07792 11.3165 2.69754 8.25061 2.5 5C2.5 4.55797 2.67559 4.13405 2.98816 3.82149C3.30072 3.50893 3.72464 3.33333 4.16667 3.33333Z" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          <path d="M12.5 7.5L16.6667 3.33333" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          <path d="M12.5 4.16667V7.5H15.8333" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M4.16667 3.33333H7.5L9.16667 7.5L7.08333 8.75C7.9758 10.5596 9.44039 12.0242 11.25 12.9167L12.5 10.8333L16.6667 12.5V15.8333C16.6667 16.2754 16.4911 16.6993 16.1785 17.0118C15.866 17.3244 15.442 17.5 15 17.5C11.7494 17.3025 8.68346 15.9221 6.38069 13.6193C4.07792 11.3165 2.69754 8.25061 2.5 5C2.5 4.55797 2.67559 4.13405 2.98816 3.82149C3.30072 3.50893 3.72464 3.33333 4.16667 3.33333Z" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            <path d="M12.5 7.5L16.6667 3.33333" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            <path d="M12.5 4.16667V7.5H15.8333" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconPhoneNumber({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -3699,6 +4309,82 @@ export function IconPhoneNumbers({ size = 24, ...props }: IconProps) {
             <g transform="translate(-36 0)">
             <path d="M41 4H45L47 9L44.5 10.5C45.571 12.6715 47.3285 14.429 49.5 15.5L51 13L56 15V19C56 19.5304 55.7893 20.0391 55.4142 20.4142C55.0391 20.7893 54.5304 21 54 21C50.0993 20.763 46.4202 19.1065 43.6568 16.3432C40.8935 13.5798 39.237 9.90074 39 6C39 5.46957 39.2107 4.96086 39.5858 4.58579C39.9609 4.21071 40.4696 4 41 4Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconPhoneOutgoing({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 20:
+        return (
+          <>
+          <g>
+          <path d="M12.5 7.5L16.6667 3.33333M16.6667 6.66667V3.33333H13.3333M4.16667 3.33333H7.5L9.16667 7.5L7.08333 8.75C7.9758 10.5596 9.44039 12.0242 11.25 12.9167L12.5 10.8333L16.6667 12.5V15.8333C16.6667 16.2754 16.4911 16.6993 16.1785 17.0118C15.866 17.3244 15.442 17.5 15 17.5C11.7494 17.3025 8.68346 15.9221 6.38069 13.6193C4.07792 11.3165 2.69754 8.25061 2.5 5C2.5 4.55797 2.67559 4.13405 2.98816 3.82149C3.30072 3.50893 3.72464 3.33333 4.16667 3.33333Z" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M12.5 7.5L16.6667 3.33333M16.6667 6.66667V3.33333H13.3333M4.16667 3.33333H7.5L9.16667 7.5L7.08333 8.75C7.9758 10.5596 9.44039 12.0242 11.25 12.9167L12.5 10.8333L16.6667 12.5V15.8333C16.6667 16.2754 16.4911 16.6993 16.1785 17.0118C15.866 17.3244 15.442 17.5 15 17.5C11.7494 17.3025 8.68346 15.9221 6.38069 13.6193C4.07792 11.3165 2.69754 8.25061 2.5 5C2.5 4.55797 2.67559 4.13405 2.98816 3.82149C3.30072 3.50893 3.72464 3.33333 4.16667 3.33333Z" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconPlayerPlay({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <path d="M4.66699 3.33301V12.6663L12.667 7.99967L4.66699 3.33301Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <path d="M5.83398 4.16602V15.8327L15.834 9.99935L5.83398 4.16602Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      default:
+        return (
+          <>
+            <path d="M5.83398 4.16602V15.8327L15.834 9.99935L5.83398 4.16602Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
           </>
         );
     }
@@ -3914,6 +4600,43 @@ export function IconQueue({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconReload({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M13.2887 8.69403C13.1628 9.654 12.778 10.5616 12.1755 11.3195C11.573 12.0774 10.7755 12.6569 9.86868 12.996C8.96182 13.3352 7.97976 13.421 7.02781 13.2444C6.07587 13.0678 5.18995 12.6354 4.46508 11.9936C3.7402 11.3517 3.20372 10.5247 2.91316 9.60113C2.62259 8.67757 2.58892 7.69233 2.81574 6.75109C3.04257 5.80984 3.52133 4.9481 4.20069 4.25827C4.88005 3.56844 5.73437 3.07655 6.67204 2.83536C9.27137 2.1687 11.962 3.5067 12.9554 6.00003M13.3333 2.66667V6H10" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M13.2887 8.69403C13.1628 9.654 12.778 10.5616 12.1755 11.3195C11.573 12.0774 10.7755 12.6569 9.86868 12.996C8.96182 13.3352 7.97976 13.421 7.02781 13.2444C6.07587 13.0678 5.18995 12.6354 4.46508 11.9936C3.7402 11.3517 3.20372 10.5247 2.91316 9.60113C2.62259 8.67757 2.58892 7.69233 2.81574 6.75109C3.04257 5.80984 3.52133 4.9481 4.20069 4.25827C4.88005 3.56844 5.73437 3.07655 6.67204 2.83536C9.27137 2.1687 11.962 3.5067 12.9554 6.00003M13.3333 2.66667V6H10" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconRinging({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -3955,6 +4678,39 @@ export function IconRinging({ size = 24, ...props }: IconProps) {
             <path d="M53.7386 8.54405C53.7921 8.15049 53.7672 7.75026 53.6654 7.36635C53.5636 6.98244 53.387 6.62243 53.1456 6.30701C52.9052 5.99092 52.6046 5.72547 52.2612 5.52593C51.9178 5.32638 51.5383 5.19667 51.1447 5.14424M56.7353 8.94661C56.8421 8.1595 56.7923 7.35903 56.5888 6.59121C56.3853 5.82339 56.032 5.10337 55.5493 4.47253C54.5363 3.14488 53.0811 2.35352 51.5476 2.14734" stroke="#12B76A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M49.7852 7.63672C50.2173 7.67625 50.6161 7.88585 50.8938 8.21941C51.1714 8.55296 51.3052 8.98315 51.2657 9.41534" stroke="#12B76A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconRotateClockwise({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <path d="M3.36621 8.66667C3.52798 9.84082 4.0732 10.9286 4.91821 11.7625C5.76321 12.5963 6.86033 13.1298 8.03956 13.2803C9.21879 13.4308 10.4146 13.19 11.4433 12.5946C12.472 11.9993 13.276 11.0827 13.7313 9.98611C14.1866 8.88952 14.2681 7.67347 13.9631 6.52609C13.6581 5.37871 12.9837 4.36386 12.0438 3.63778C11.1038 2.9117 9.95064 2.51476 8.76281 2.50817C7.57497 2.50158 6.41749 2.88572 5.46955 3.6011M5.33288 1.33301V3.99967H7.99955" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      default:
+        return (
+          <>
+            <path d="M3.36621 8.66667C3.52798 9.84082 4.0732 10.9286 4.91821 11.7625C5.76321 12.5963 6.86033 13.1298 8.03956 13.2803C9.21879 13.4308 10.4146 13.19 11.4433 12.5946C12.472 11.9993 13.276 11.0827 13.7313 9.98611C14.1866 8.88952 14.2681 7.67347 13.9631 6.52609C13.6581 5.37871 12.9837 4.36386 12.0438 3.63778C11.1038 2.9117 9.95064 2.51476 8.76281 2.50817C7.57497 2.50158 6.41749 2.88572 5.46955 3.6011M5.33288 1.33301V3.99967H7.99955" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
           </>
         );
     }
@@ -4309,6 +5065,88 @@ export function IconSearch({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconSelectAll({ size = 24, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <path d="M6 5.3333H10A0.6667 0.6667 0 0 1 10.6667 6V10A0.6667 0.6667 0 0 1 10 10.6667H6A0.6667 0.6667 0 0 1 5.3333 10V6A0.6667 0.6667 0 0 1 6 5.3333ZM8 13.3333V13.3433M10.6667 13.3333V13.3433M5.3333 13.3333V13.3433M2.6667 13.3333V13.3433M2.6667 10.6667V10.6767M2.6667 8V8.01M2.6667 5.3333V5.3433M2.6667 2.6667V2.6767M5.3333 2.6667V2.6767M8 2.6667V2.6767M10.6667 2.6667V2.6767M13.3333 2.6667V2.6767M13.3333 5.3333V5.3433M13.3333 8V8.01M13.3333 10.6667V10.6767M13.3333 13.3333V13.3433" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <path d="M7.5 6.6667H12.5A0.8333 0.8333 0 0 1 13.3333 7.5V12.5A0.8333 0.8333 0 0 1 12.5 13.3333H7.5A0.8333 0.8333 0 0 1 6.6667 12.5V7.5A0.8333 0.8333 0 0 1 7.5 6.6667ZM10 16.6667V16.6767M13.3333 16.6667V16.6767M6.6667 16.6667V16.6767M3.3333 16.6667V16.6767M3.3333 13.3333V13.3433M3.3333 10V10.01M3.3333 6.6667V6.6767M3.3333 3.3333V3.3433M6.6667 3.3333V3.3433M10 3.3333V3.3433M13.3333 3.3333V3.3433M16.6667 3.3333V3.3433M16.6667 6.6667V6.6767M16.6667 10V10.01M16.6667 13.3333V13.3433M16.6667 16.6667V16.6767" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      case 24:
+        return (
+          <>
+          <path d="M9 8H15A1 1 0 0 1 16 9V15A1 1 0 0 1 15 16H9A1 1 0 0 1 8 15V9A1 1 0 0 1 9 8ZM12 20V20.01M16 20V20.01M8 20V20.01M4 20V20.01M4 16V16.01M4 12V12.01M4 8V8.01M4 4V4.01M8 4V4.01M12 4V4.01M16 4V4.01M20 4V4.01M20 8V8.01M20 12V12.01M20 16V16.01M20 20V20.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      default:
+        return (
+          <>
+            <path d="M9 8H15A1 1 0 0 1 16 9V15A1 1 0 0 1 15 16H9A1 1 0 0 1 8 15V9A1 1 0 0 1 9 8ZM12 20V20.01M16 20V20.01M8 20V20.01M4 20V20.01M4 16V16.01M4 12V12.01M4 8V8.01M4 4V4.01M8 4V4.01M12 4V4.01M16 4V4.01M20 4V4.01M20 8V8.01M20 12V12.01M20 16V16.01M20 20V20.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconSend({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M6.66667 9.33333L14 2M14 2L2 6.33333C1.93617 6.36258 1.88208 6.40954 1.84416 6.46863C1.80624 6.52772 1.78608 6.59646 1.78608 6.66667C1.78608 6.73688 1.80624 6.80561 1.84416 6.8647C1.88208 6.92379 1.93617 6.97075 2 7L6.66667 9.33333L9 14C9.02925 14.0638 9.07621 14.1179 9.13529 14.1558C9.19438 14.1938 9.26312 14.2139 9.33333 14.2139C9.40354 14.2139 9.47227 14.1938 9.53136 14.1558C9.59045 14.1179 9.63741 14.0638 9.66666 14L14 2Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M6.66667 9.33333L14 2M14 2L2 6.33333C1.93617 6.36258 1.88208 6.40954 1.84416 6.46863C1.80624 6.52772 1.78608 6.59646 1.78608 6.66667C1.78608 6.73688 1.80624 6.80561 1.84416 6.8647C1.88208 6.92379 1.93617 6.97075 2 7L6.66667 9.33333L9 14C9.02925 14.0638 9.07621 14.1179 9.13529 14.1558C9.19438 14.1938 9.26312 14.2139 9.33333 14.2139C9.40354 14.2139 9.47227 14.1938 9.53136 14.1558C9.59045 14.1179 9.63741 14.0638 9.66666 14L14 2Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconSidebar({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -4493,6 +5331,43 @@ export function IconSparkles({ size = 24, ...props }: IconProps) {
   );
 }
 
+export function IconTag({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 20:
+        return (
+          <>
+          <g>
+          <path d="M7.91667 7.08333C7.91667 7.54357 7.54357 7.91667 7.08333 7.91667C6.6231 7.91667 6.25 7.54357 6.25 7.08333C6.25 6.6231 6.6231 6.25 7.08333 6.25C7.54357 6.25 7.91667 6.6231 7.91667 7.08333ZM3.33333 5.83333V9.04917C3.33333 9.49667 3.51083 9.92583 3.8275 10.2425L10.5908 17.0058C10.7475 17.1626 10.9336 17.2869 11.1383 17.3717C11.3431 17.4565 11.5625 17.5002 11.7842 17.5002C12.0058 17.5002 12.2253 17.4565 12.43 17.3717C12.6348 17.2869 12.8208 17.1626 12.9775 17.0058L17.0058 12.9775C17.1626 12.8208 17.2869 12.6348 17.3717 12.43C17.4565 12.2253 17.5002 12.0058 17.5002 11.7842C17.5002 11.5625 17.4565 11.3431 17.3717 11.1383C17.2869 10.9336 17.1626 10.7475 17.0058 10.5908L10.2417 3.8275C9.92537 3.51125 9.49645 3.33351 9.04917 3.33333H5.83333C5.17029 3.33333 4.53441 3.59673 4.06557 4.06557C3.59673 4.53441 3.33333 5.17029 3.33333 5.83333Z" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M7.91667 7.08333C7.91667 7.54357 7.54357 7.91667 7.08333 7.91667C6.6231 7.91667 6.25 7.54357 6.25 7.08333C6.25 6.6231 6.6231 6.25 7.08333 6.25C7.54357 6.25 7.91667 6.6231 7.91667 7.08333ZM3.33333 5.83333V9.04917C3.33333 9.49667 3.51083 9.92583 3.8275 10.2425L10.5908 17.0058C10.7475 17.1626 10.9336 17.2869 11.1383 17.3717C11.3431 17.4565 11.5625 17.5002 11.7842 17.5002C12.0058 17.5002 12.2253 17.4565 12.43 17.3717C12.6348 17.2869 12.8208 17.1626 12.9775 17.0058L17.0058 12.9775C17.1626 12.8208 17.2869 12.6348 17.3717 12.43C17.4565 12.2253 17.5002 12.0058 17.5002 11.7842C17.5002 11.5625 17.4565 11.3431 17.3717 11.1383C17.2869 10.9336 17.1626 10.7475 17.0058 10.5908L10.2417 3.8275C9.92537 3.51125 9.49645 3.33351 9.04917 3.33333H5.83333C5.17029 3.33333 4.53441 3.59673 4.06557 4.06557C3.59673 4.53441 3.33333 5.17029 3.33333 5.83333Z" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconTeamManagement({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -4538,6 +5413,51 @@ export function IconTeamManagement({ size = 24, ...props }: IconProps) {
             <path d="M52 3.12988C52.8604 3.35018 53.623 3.85058 54.1676 4.55219C54.7122 5.2538 55.0078 6.11671 55.0078 7.00488C55.0078 7.89305 54.7122 8.75596 54.1676 9.45757C53.623 10.1592 52.8604 10.6596 52 10.8799" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M57 21.0004V19.0004C56.9949 18.1175 56.6979 17.2612 56.1553 16.5648C55.6126 15.8684 54.8548 15.3711 54 15.1504" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconTrash({ size = 24, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <path d="M2.6667 4.6667H13.3333M6.6667 7.3333V11.3333M9.3333 7.3333V11.3333M3.3333 4.6667L4 12.6667A1.3333 1.3333 0 0 0 5.3333 14H10.6667A1.3333 1.3333 0 0 0 12 12.6667L12.6667 4.6667M6 4.6667V2.6667A0.6667 0.6667 0 0 1 6.6667 2H9.3333A0.6667 0.6667 0 0 1 10 2.6667V4.6667" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <path d="M3.3333 5.8333H16.6667M8.3333 9.1667V14.1667M11.6667 9.1667V14.1667M4.1667 5.8333L5 15.8333A1.6667 1.6667 0 0 0 6.6667 17.5H13.3333A1.6667 1.6667 0 0 0 15 15.8333L15.8333 5.8333M7.5 5.8333V3.3333A0.8333 0.8333 0 0 1 8.3333 2.5H11.6667A0.8333 0.8333 0 0 1 12.5 3.3333V5.8333" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      case 24:
+        return (
+          <>
+          <path d="M4 7H20M10 11V17M14 11V17M5 7L6 19A2 2 0 0 0 8 21H16A2 2 0 0 0 18 19L19 7M9 7V4A1 1 0 0 1 10 3H14A1 1 0 0 1 15 4V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      default:
+        return (
+          <>
+            <path d="M4 7H20M10 11V17M14 11V17M5 7L6 19A2 2 0 0 0 8 21H16A2 2 0 0 0 18 19L19 7M9 7V4A1 1 0 0 1 10 3H14A1 1 0 0 1 15 4V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </>
         );
     }
@@ -4610,6 +5530,117 @@ export function IconUnavailabilityReason({ size = 24, ...props }: IconProps) {
             <path d="M45.5 15C46.158 15.64 47.06 16 48 16C48.194 16 48.386 15.985 48.574 15.955" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M57.5 21.5L52.5 16.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M52.5 21.5L57.5 16.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconUser({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M4 14V12.6667C4 11.9594 4.28095 11.2811 4.78105 10.781C5.28115 10.281 5.95942 10 6.66667 10H9.33333C10.0406 10 10.7189 10.281 11.219 10.781C11.719 11.2811 12 11.9594 12 12.6667V14M5.33333 4.66667C5.33333 5.37391 5.61428 6.05219 6.11438 6.55229C6.61448 7.05238 7.29276 7.33333 8 7.33333C8.70724 7.33333 9.38552 7.05238 9.88562 6.55229C10.3857 6.05219 10.6667 5.37391 10.6667 4.66667C10.6667 3.95942 10.3857 3.28115 9.88562 2.78105C9.38552 2.28095 8.70724 2 8 2C7.29276 2 6.61448 2.28095 6.11438 2.78105C5.61428 3.28115 5.33333 3.95942 5.33333 4.66667Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M4 14V12.6667C4 11.9594 4.28095 11.2811 4.78105 10.781C5.28115 10.281 5.95942 10 6.66667 10H9.33333C10.0406 10 10.7189 10.281 11.219 10.781C11.719 11.2811 12 11.9594 12 12.6667V14M5.33333 4.66667C5.33333 5.37391 5.61428 6.05219 6.11438 6.55229C6.61448 7.05238 7.29276 7.33333 8 7.33333C8.70724 7.33333 9.38552 7.05238 9.88562 6.55229C10.3857 6.05219 10.6667 5.37391 10.6667 4.66667C10.6667 3.95942 10.3857 3.28115 9.88562 2.78105C9.38552 2.28095 8.70724 2 8 2C7.29276 2 6.61448 2.28095 6.11438 2.78105C5.61428 3.28115 5.33333 3.95942 5.33333 4.66667Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconUserX({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M4 14V12.6667C4 11.9594 4.28095 11.2811 4.78105 10.781C5.28115 10.281 5.95942 10 6.66667 10H9M14.6667 14.6667L11.3333 11.3333M11.3333 14.6667L14.6667 11.3333M5.33333 4.66667C5.33333 5.37391 5.61428 6.05219 6.11438 6.55229C6.61448 7.05238 7.29276 7.33333 8 7.33333C8.70724 7.33333 9.38552 7.05238 9.88562 6.55229C10.3857 6.05219 10.6667 5.37391 10.6667 4.66667C10.6667 3.95942 10.3857 3.28115 9.88562 2.78105C9.38552 2.28095 8.70724 2 8 2C7.29276 2 6.61448 2.28095 6.11438 2.78105C5.61428 3.28115 5.33333 3.95942 5.33333 4.66667Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M4 14V12.6667C4 11.9594 4.28095 11.2811 4.78105 10.781C5.28115 10.281 5.95942 10 6.66667 10H9M14.6667 14.6667L11.3333 11.3333M11.3333 14.6667L14.6667 11.3333M5.33333 4.66667C5.33333 5.37391 5.61428 6.05219 6.11438 6.55229C6.61448 7.05238 7.29276 7.33333 8 7.33333C8.70724 7.33333 9.38552 7.05238 9.88562 6.55229C10.3857 6.05219 10.6667 5.37391 10.6667 4.66667C10.6667 3.95942 10.3857 3.28115 9.88562 2.78105C9.38552 2.28095 8.70724 2 8 2C7.29276 2 6.61448 2.28095 6.11438 2.78105C5.61428 3.28115 5.33333 3.95942 5.33333 4.66667Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+            </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconUsersGroup({ size = 16, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g>
+          <path d="M5.33333 14V13.3333C5.33333 12.9797 5.47381 12.6406 5.72386 12.3905C5.97391 12.1405 6.31304 12 6.66667 12H9.33333C9.68696 12 10.0261 12.1405 10.2761 12.3905C10.5262 12.6406 10.6667 12.9797 10.6667 13.3333V14M11.3333 6.66667H12.6667C13.0203 6.66667 13.3594 6.80714 13.6095 7.05719C13.8595 7.30724 14 7.64638 14 8V8.66667M2 8.66667V8C2 7.64638 2.14048 7.30724 2.39052 7.05719C2.64057 6.80714 2.97971 6.66667 3.33333 6.66667H4.66667M6.66667 8.66667C6.66667 9.02029 6.80714 9.35943 7.05719 9.60948C7.30724 9.85952 7.64638 10 8 10C8.35362 10 8.69276 9.85952 8.94281 9.60948C9.19286 9.35943 9.33333 9.02029 9.33333 8.66667C9.33333 8.31304 9.19286 7.97391 8.94281 7.72386C8.69276 7.47381 8.35362 7.33333 8 7.33333C7.64638 7.33333 7.30724 7.47381 7.05719 7.72386C6.80714 7.97391 6.66667 8.31304 6.66667 8.66667ZM10 3.33333C10 3.68696 10.1405 4.02609 10.3905 4.27614C10.6406 4.52619 10.9797 4.66667 11.3333 4.66667C11.687 4.66667 12.0261 4.52619 12.2761 4.27614C12.5262 4.02609 12.6667 3.68696 12.6667 3.33333C12.6667 2.97971 12.5262 2.64057 12.2761 2.39052C12.0261 2.14048 11.687 2 11.3333 2C10.9797 2 10.6406 2.14048 10.3905 2.39052C10.1405 2.64057 10 2.97971 10 3.33333ZM3.33333 3.33333C3.33333 3.68696 3.47381 4.02609 3.72386 4.27614C3.97391 4.52619 4.31304 4.66667 4.66667 4.66667C5.02029 4.66667 5.35943 4.52619 5.60948 4.27614C5.85952 4.02609 6 3.68696 6 3.33333C6 2.97971 5.85952 2.64057 5.60948 2.39052C5.35943 2.14048 5.02029 2 4.66667 2C4.31304 2 3.97391 2.14048 3.72386 2.39052C3.47381 2.64057 3.33333 2.97971 3.33333 3.33333Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
+          </g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g>
+            <path d="M5.33333 14V13.3333C5.33333 12.9797 5.47381 12.6406 5.72386 12.3905C5.97391 12.1405 6.31304 12 6.66667 12H9.33333C9.68696 12 10.0261 12.1405 10.2761 12.3905C10.5262 12.6406 10.6667 12.9797 10.6667 13.3333V14M11.3333 6.66667H12.6667C13.0203 6.66667 13.3594 6.80714 13.6095 7.05719C13.8595 7.30724 14 7.64638 14 8V8.66667M2 8.66667V8C2 7.64638 2.14048 7.30724 2.39052 7.05719C2.64057 6.80714 2.97971 6.66667 3.33333 6.66667H4.66667M6.66667 8.66667C6.66667 9.02029 6.80714 9.35943 7.05719 9.60948C7.30724 9.85952 7.64638 10 8 10C8.35362 10 8.69276 9.85952 8.94281 9.60948C9.19286 9.35943 9.33333 9.02029 9.33333 8.66667C9.33333 8.31304 9.19286 7.97391 8.94281 7.72386C8.69276 7.47381 8.35362 7.33333 8 7.33333C7.64638 7.33333 7.30724 7.47381 7.05719 7.72386C6.80714 7.97391 6.66667 8.31304 6.66667 8.66667ZM10 3.33333C10 3.68696 10.1405 4.02609 10.3905 4.27614C10.6406 4.52619 10.9797 4.66667 11.3333 4.66667C11.687 4.66667 12.0261 4.52619 12.2761 4.27614C12.5262 4.02609 12.6667 3.68696 12.6667 3.33333C12.6667 2.97971 12.5262 2.64057 12.2761 2.39052C12.0261 2.14048 11.687 2 11.3333 2C10.9797 2 10.6406 2.14048 10.3905 2.39052C10.1405 2.64057 10 2.97971 10 3.33333ZM3.33333 3.33333C3.33333 3.68696 3.47381 4.02609 3.72386 4.27614C3.97391 4.52619 4.31304 4.66667 4.66667 4.66667C5.02029 4.66667 5.35943 4.52619 5.60948 4.27614C5.85952 4.02609 6 3.68696 6 3.33333C6 2.97971 5.85952 2.64057 5.60948 2.39052C5.35943 2.14048 5.02029 2 4.66667 2C4.31304 2 3.97391 2.14048 3.72386 2.39052C3.47381 2.64057 3.33333 2.97971 3.33333 3.33333Z" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/>
             </g>
           </>
         );
