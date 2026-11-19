@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { GlobalHeader } from "@/components/GlobalHeader";
+import { GlobalHeader, type GlobalHeaderProps } from "@/components/GlobalHeader";
 import { Button, buttonVariants } from "@/components/Button";
 import {
   IconInfoCircleFilled,
@@ -9,7 +9,7 @@ import {
   IconInfoCircle,
   IconDotsVertical,
 } from "@/components/Icon";
-import { ProfileMenu } from "@/components/ProfileMenu";
+import { ProfileMenu, type ProfileMenuProps } from "@/components/ProfileMenu";
 import { IconCalendarTime, IconMailShare } from "@/components/Icon";
 import { DialerPanel } from "./DialerPanel";
 import { type AgentAssistScope } from "./agentAssistScope";
@@ -264,6 +264,10 @@ export interface DashboardProps {
   showLiveMonitoringBanner?: boolean;
   /** Profile menu › Billing. Omit and the item stays inert, as before. */
   onBillingClick?: () => void;
+  /** The license can't call: the Dialer stays visible but locked, with this reason. */
+  dialerLocked?: GlobalHeaderProps["dialerLocked"];
+  /** Profile menu rows the license blocks, by label — see ProfileMenu `itemLocks`. */
+  profileMenuLocks?: ProfileMenuProps["itemLocks"];
 }
 
 export function Dashboard({
@@ -272,6 +276,8 @@ export function Dashboard({
   assistConfigured = true,
   showLiveMonitoringBanner = true,
   onBillingClick,
+  dialerLocked,
+  profileMenuLocks,
 }: DashboardProps) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [dialerOpen, setDialerOpen] = useState(false);
@@ -291,6 +297,7 @@ export function Dashboard({
       <GlobalHeader
         title={dialerOpen ? "Dialer" : "Dashboard"}
         dialerOpen={dialerOpen}
+        dialerLocked={dialerLocked}
         onDialerClick={() => {
           setProfileMenuOpen(false);
           if (poppedOut) {
@@ -307,6 +314,7 @@ export function Dashboard({
         profileMenuPanel={
           <ProfileMenu
             userName={profileName}
+            itemLocks={profileMenuLocks}
             onBillingClick={
               onBillingClick &&
               (() => {

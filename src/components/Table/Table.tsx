@@ -482,8 +482,9 @@ export function TableBulkBar({
       {...props}
     >
       <div className="flex items-center gap-2 text-white">
-        <span className="inline-flex size-6 items-center justify-center rounded-full bg-white text-label-sm text-gray-800">
-          {count}
+        {/* A pill, not a circle: "Select All" can put a four-digit count here. */}
+        <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-1.5 text-label-sm text-gray-800 tabular-nums">
+          {count.toLocaleString("en-US")}
         </span>
         <span className="text-label-md whitespace-nowrap">{label}</span>
       </div>

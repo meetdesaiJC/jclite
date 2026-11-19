@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Sidenav, type SidenavItemsTransition } from "@/components/Sidenav";
 import { Dashboard } from "./Dashboard";
 import { DialerPanel } from "./DialerPanel";
@@ -15,6 +15,36 @@ import { PrototypeLauncher } from "./PrototypeLauncher";
 import { TeamMembersPage } from "./TeamMembersPage";
 import { BillingPage, BILLING_NAV_ITEMS } from "./BillingPage";
 import { AddMembersFlow } from "./AddMembersFlow";
+import { cn } from "@/lib/utils";
+import { EditMemberPage } from "./EditMemberPage";
+import { InboxPage } from "./InboxPage";
+import { ContactsPage } from "./ContactsPage";
+import { AppIntegrationsPage } from "./AppIntegrationsPage";
+import { CallLogsPage } from "./CallLogsPage";
+import { WorkflowsPage } from "./WorkflowsPage";
+import { BulkSmsPage } from "./BulkSmsPage";
+import { PhoneNumbersPage } from "./PhoneNumbersPage";
+import { LiveMonitoringPage } from "./LiveMonitoringPage";
+import { CampaignsPage, SALES_DIALER_NAV_ITEMS } from "./CampaignsPage";
+import { Button } from "@/components/Button";
+import { LockedControl } from "@/components/LockedControl";
+import { IconAddPlus } from "@/components/Icon";
+import { salesDialerLocks } from "./licenseLocks";
+import {
+  billingLocks,
+  bulkSmsLocks,
+  callLogsLocks,
+  contactsLocks,
+  dialerLock,
+  appIntegrationLocks,
+  inboxLocks,
+  liveMonitoringLocks,
+  phoneNumberLocks,
+  teamMemberLocks,
+  workflowsLocks,
+  type License,
+} from "./licenseLocks";
+import { type TeamMember } from "./teamMembersData";
 import { CrmInCallPrototype } from "./CrmInCallPrototype";
 import { type AgentAssistScope } from "./agentAssistScope";
 import {
@@ -185,19 +215,190 @@ function InCallFlow({
  * three render the same shell for now; `experience` is the seam where Lite,
  * View-only and the admin's license management start to differ.
  */
-type LicensePage = "dashboard" | "team-members" | "billing";
+type LicensePage =
+  | "dashboard"
+  | "team-members"
+  | "billing"
+  | "inbox"
+  | "phone-numbers"
+  | "live-monitoring"
+  | "campaigns"
+  | "contacts"
+  | "integrations"
+  | "call-logs"
+  | "workflows"
+  | "bulk-sms";
+
+/** Pages reached straight from a sidenav key, with their header titles. */
+const NAV_PAGES: Partial<Record<LicensePage, string>> = {
+  contacts: "Contacts",
+  integrations: "Integrations",
+  "call-logs": "Call Logs",
+  workflows: "Workflows",
+  "bulk-sms": "Bulk SMS/MMS",
+};
+
+/**
+ * Prototype control, not product UI: floats above the app so a reviewer can
+ * flip the same screen between Lite and View-only and see what each locks.
+ * Starts top-centre; drag it by its frame to clear whatever it covers. The
+ * spot is remembered per browser (a convenience — it renders fine without).
+ */
+const SWITCH_POSITION_KEY = "jclite:license-switch-position-v2";
+
+function readSwitchPosition(): { x: number; y: number } | null {
+  try {
+    const raw = window.localStorage.getItem(SWITCH_POSITION_KEY);
+    return raw ? (JSON.parse(raw) as { x: number; y: number }) : null;
+  } catch {
+    return null;
+  }
+}
+
+function LicenseSwitch({
+  value,
+  onChange,
+}: {
+  value: License;
+  onChange: (license: License) => void;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  // null = the default bottom-right spot, until someone drags it.
+  const [position, setPosition] = useState(readSwitchPosition);
+
+  const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    // The buttons are for switching, not dragging.
+    if ((event.target as HTMLElement).closest("button")) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    event.preventDefault();
+    const rect = panel.getBoundingClientRect();
+    const offsetX = event.clientX - rect.left;
+    const offsetY = event.clientY - rect.top;
+    let last = { x: rect.left, y: rect.top };
+    const move = (e: PointerEvent) => {
+      // Clamped so it can't be lost off-screen.
+      last = {
+        x: Math.min(Math.max(0, e.clientX - offsetX), window.innerWidth - rect.width),
+        y: Math.min(Math.max(0, e.clientY - offsetY), window.innerHeight - rect.height),
+      };
+      setPosition(last);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      try {
+        window.localStorage.setItem(SWITCH_POSITION_KEY, JSON.stringify(last));
+      } catch {
+        /* storage unavailable — the spot just won't survive a reload */
+      }
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  const options: { key: License; label: string }[] = [
+    { key: "lite", label: "Lite" },
+    { key: "view-only", label: "View-only" },
+  ];
+
+  // One thumb that slides between the options, rather than each button
+  // painting its own background — that swap is what made the switch blink.
+  // The labels differ in width, so the thumb is measured, not a fixed half.
+  const optionRefs = useRef(new Map<License, HTMLButtonElement>());
+  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
+  // No slide on first paint: the thumb should only move between options,
+  // never fly in from the panel's edge.
+  const [canAnimate, setCanAnimate] = useState(false);
+
+  useLayoutEffect(() => {
+    const button = optionRefs.current.get(value);
+    if (!button) return;
+    setThumb({ left: button.offsetLeft, width: button.offsetWidth });
+  }, [value]);
+
+  useEffect(() => {
+    if (!thumb || canAnimate) return;
+    const frame = requestAnimationFrame(() => setCanAnimate(true));
+    return () => cancelAnimationFrame(frame);
+  }, [thumb, canAnimate]);
+
+  // Dark on purpose: it's a prototype control, so it reads as sitting on top
+  // of the product rather than being part of it.
+  return (
+    <div
+      ref={panelRef}
+      onPointerDown={startDrag}
+      role="radiogroup"
+      aria-label="License"
+      style={position ? { left: position.x, top: position.y } : undefined}
+      className={cn(
+        "fixed z-50 isolate flex cursor-grab touch-none items-center gap-0.5 rounded-full bg-tooltip-dark-bg p-1 shadow-400 select-none active:cursor-grabbing",
+        !position && "top-3 left-1/2 -translate-x-1/2"
+      )}
+    >
+      {thumb && (
+        <span
+          aria-hidden
+          // Absolutely positioned, so travelling it reflows nothing. Moving in
+          // place, hence ease-standard; ~80px of travel sits at `moderate`.
+          className={cn(
+            "pointer-events-none absolute inset-y-1 left-0 -z-10 rounded-full bg-white motion-reduce:transition-none",
+            canAnimate && "transition-[transform,width] duration-moderate ease-standard"
+          )}
+          style={{ width: thumb.width, transform: `translateX(${thumb.left}px)` }}
+        />
+      )}
+      {options.map((option) => {
+        const selected = option.key === value;
+        return (
+          <button
+            key={option.key}
+            ref={(node) => {
+              if (node) optionRefs.current.set(option.key, node);
+              else optionRefs.current.delete(option.key);
+            }}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(option.key)}
+            className={cn(
+              // Label colour crossfades on the thumb's clock so the text and
+              // the pill arrive together.
+              "cursor-pointer rounded-full px-3 py-1 text-label-sm transition-colors duration-moderate ease-standard outline-none focus-visible:ring-2 focus-visible:ring-white/40",
+              selected
+                ? "text-foreground"
+                : "text-tooltip-dark-muted hover:text-tooltip-dark-fg"
+            )}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function LicenseFlow({
   experience,
   onHome,
+  onLicenseChange,
 }: {
   experience: LicenseExperience;
   onHome: () => void;
+  /** Switches between Lite and View-only; the admin flow has no switch. */
+  onLicenseChange?: (license: License) => void;
 }) {
   const [page, setPage] = useState<LicensePage>("dashboard");
+  // The admin experience has no license limits; Lite and View-only get the
+  // locks from licenseLocks.ts, so every screen follows the same rule.
+  const license: License | undefined =
+    experience === "license-admin" ? undefined : experience;
   // Add Members takes over the page body rather than opening a modal: it is a
   // three-step flow, and the list behind it has nothing to say meanwhile.
   const [addingMembers, setAddingMembers] = useState(false);
+  // Edit Member also takes over the body; it holds the member being edited.
+  const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   // How many were just invited — the confirmation waits for the list, so the
   // admin reads it on the page where the new people now appear.
   // `count` outlives `open` so the title doesn't change while the toast exits.
@@ -209,6 +410,7 @@ function LicenseFlow({
   const openBilling = useCallback(() => {
     setProfileMenuOpen(false);
     setAddingMembers(false);
+    setEditingMember(null);
     setNavTransition("forward");
     setPage("billing");
   }, []);
@@ -219,6 +421,40 @@ function LicenseFlow({
   const billingBackLink = useMemo(
     () => ({ label: "Back to Dashboard", onClick: closeBilling }),
     [closeBilling]
+  );
+  // Sales Dialer is its own product inside JustCall: it swaps in its own nav
+  // with the same slide as Billing, and lands on Campaigns.
+  const openSalesDialer = useCallback(() => {
+    setAddingMembers(false);
+    setEditingMember(null);
+    setNavTransition("forward");
+    setPage("campaigns");
+  }, []);
+  const closeSalesDialer = useCallback(() => {
+    setNavTransition("back");
+    setPage("dashboard");
+  }, []);
+  const salesDialerBackLink = useMemo(
+    () => ({ label: "Go To JustCall", onClick: closeSalesDialer }),
+    [closeSalesDialer]
+  );
+  const campaignLocks = salesDialerLocks(license);
+  // On the dark nav a locked button can't take Button's white-surface muted
+  // palette, so it dims against the navy instead.
+  const createCampaignAction = (
+    <LockedControl
+      locked={Boolean(campaignLocks.createCampaign)}
+      placement="right"
+      triggerClassName="flex w-full"
+    >
+      <Button
+        size="md"
+        leftIcon={<IconAddPlus size={20} />}
+        className="w-full data-[locked=true]:bg-white/10 data-[locked=true]:text-disabled-fg"
+      >
+        Create Campaign
+      </Button>
+    </LockedControl>
   );
   const closeInvitedToast = useCallback(
     () => setInvited((current) => ({ ...current, open: false })),
@@ -232,20 +468,51 @@ function LicenseFlow({
     >
       <Sidenav
         onLogoClick={onHome}
-        activeKey={page === "billing" ? "overview" : page}
-        items={page === "billing" ? BILLING_NAV_ITEMS : undefined}
-        itemsKey={page === "billing" ? "billing" : "product"}
+        activeKey={page === "billing" ? "overview" : page === "inbox" ? "sms-inbox" : page}
+        items={
+          page === "billing"
+            ? BILLING_NAV_ITEMS
+            : page === "campaigns"
+              ? SALES_DIALER_NAV_ITEMS
+              : undefined
+        }
+        itemsKey={page === "billing" ? "billing" : page === "campaigns" ? "sales-dialer" : "product"}
         itemsTransition={navTransition}
-        backLink={page === "billing" ? billingBackLink : undefined}
+        backLink={
+          page === "billing"
+            ? billingBackLink
+            : page === "campaigns"
+              ? salesDialerBackLink
+              : undefined
+        }
+        action={page === "campaigns" ? createCampaignAction : undefined}
         onItemSelect={(key) => {
-          if (key === "dashboard" || key === "team-members") {
-            setPage(key);
+          if (key === "sales-dialer") {
+            openSalesDialer();
+            return;
+          }
+          if (
+            key === "dashboard" ||
+            key === "team-members" ||
+            key === "sms-inbox" ||
+            key === "phone-numbers" ||
+            key === "live-monitoring" ||
+            key in NAV_PAGES
+          ) {
+            setPage(key === "sms-inbox" ? "inbox" : (key as LicensePage));
             setAddingMembers(false);
+            setEditingMember(null);
           }
         }}
       />
       <div className="relative flex min-w-0 flex-1 flex-col">
-        {page === "team-members" || page === "billing" ? (
+        {page === "team-members" ||
+        page === "billing" ||
+        page === "inbox" ||
+        page === "phone-numbers" ||
+        page === "live-monitoring" ||
+        page === "campaigns" ||
+        page in NAV_PAGES ? (
           <>
             {profileMenuOpen ? (
               // Click-away layer below the header, as on the Dashboard.
@@ -255,15 +522,56 @@ function LicenseFlow({
               />
             ) : null}
             <GlobalHeader
-              title={page === "billing" ? "Billing" : "Team Members"}
+              title={
+                page === "billing"
+                  ? "Billing"
+                  : page === "inbox"
+                    ? "Inbox"
+                    : page === "phone-numbers"
+                      ? "Phone Numbers"
+                      : page === "live-monitoring"
+                        ? "Live Monitoring"
+                        : page === "campaigns"
+                          ? "Campaigns"
+                          : NAV_PAGES[page] ?? "Team Members"
+              }
+              dialerLocked={dialerLock(license)}
               profileMenuOpen={profileMenuOpen}
               onProfileClick={() => setProfileMenuOpen((open) => !open)}
               profileMenuPanel={
-                <ProfileMenu userName="Sarah Johnson" onBillingClick={openBilling} />
+                <ProfileMenu
+                  userName="Sarah Johnson"
+                  onBillingClick={openBilling}
+                />
               }
             />
             {page === "billing" ? (
-              <BillingPage />
+              <BillingPage locks={billingLocks(license)} />
+            ) : page === "campaigns" ? (
+              <CampaignsPage locks={campaignLocks} />
+            ) : page === "contacts" ? (
+              <ContactsPage locks={contactsLocks(license)} />
+            ) : page === "integrations" ? (
+              <AppIntegrationsPage locks={appIntegrationLocks(license)} />
+            ) : page === "call-logs" ? (
+              <CallLogsPage locks={callLogsLocks(license)} />
+            ) : page === "workflows" ? (
+              <WorkflowsPage locks={workflowsLocks(license)} />
+            ) : page === "bulk-sms" ? (
+              <BulkSmsPage locks={bulkSmsLocks(license)} />
+            ) : page === "inbox" ? (
+              <InboxPage locks={inboxLocks(license)} />
+            ) : page === "phone-numbers" ? (
+              <PhoneNumbersPage locks={phoneNumberLocks(license)} />
+            ) : page === "live-monitoring" ? (
+              // Open to every license; View-only's Monitor Call is locked.
+              <LiveMonitoringPage locks={liveMonitoringLocks(license)} />
+            ) : editingMember ? (
+              <EditMemberPage
+                key={editingMember.id}
+                member={editingMember}
+                onClose={() => setEditingMember(null)}
+              />
             ) : addingMembers ? (
               <AddMembersFlow
                 onClose={() => setAddingMembers(false)}
@@ -273,12 +581,23 @@ function LicenseFlow({
                 }}
               />
             ) : (
-              <TeamMembersPage onAddMember={() => setAddingMembers(true)} />
+              <TeamMembersPage
+                locks={teamMemberLocks(license)}
+                onAddMember={() => setAddingMembers(true)}
+                onEditMember={setEditingMember}
+              />
             )}
           </>
         ) : (
-          <Dashboard showLiveMonitoringBanner={false} onBillingClick={openBilling} />
+          <Dashboard
+            showLiveMonitoringBanner={false}
+            onBillingClick={openBilling}
+            dialerLocked={dialerLock(license)}
+          />
         )}
+        {license && onLicenseChange ? (
+          <LicenseSwitch value={license} onChange={onLicenseChange} />
+        ) : null}
         <Toast
           open={invited.open}
           onClose={closeInvitedToast}
@@ -355,15 +674,26 @@ export default function App() {
   if (view === "launcher") {
     return (
       <PrototypeLauncher
-        onStartLite={() => openView("lite")}
-        onStartViewOnly={() => openView("view-only")}
+        onStartLicenseExperience={() => openView("lite")}
         onStartLicenseManagement={() => openView("license-admin")}
       />
     );
   }
 
   if (view === "lite" || view === "view-only" || view === "license-admin") {
-    return <LicenseFlow experience={view} onHome={goHome} />;
+    // Lite and View-only are one prototype: same element, same position, so
+    // switching license keeps whatever page the reviewer is on. The switch
+    // swaps the hash in place (no new history entry) so a reload keeps it.
+    return (
+      <LicenseFlow
+        experience={view}
+        onHome={goHome}
+        onLicenseChange={(next) => {
+          window.history.replaceState(window.history.state, "", `#${next}`);
+          setView(next);
+        }}
+      />
+    );
   }
 
   if (view === "in-call" || view === "v1-in-call") {

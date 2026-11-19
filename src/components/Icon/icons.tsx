@@ -7,10 +7,13 @@
  *
  * Pair CSS box with variant: size-4↔16, size-5↔20, size-6↔24.
  */
-import type { IconProps } from "./icons.generated";
-
 export type { IconProps, IconSize } from "./icons.generated";
 export * from "./icons.generated";
+
+/* ── Hand-made icons ─────────────────────────────────────────────────────
+   Not in the Figma set. `npm run icons:generate` keeps everything from this
+   marker down; anything above it is regenerated. */
+import type { IconProps } from "./icons.generated";
 
 /**
  * Outlined circular speech bubble — Design System `message-circle-2`.

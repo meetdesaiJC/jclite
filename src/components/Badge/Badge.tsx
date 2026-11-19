@@ -11,7 +11,8 @@ import premiumIcon from "./assets/premium.svg";
  *
  * Figma properties:
  *   State     → `variant` (Primary / Primary-inverted / Success / Error /
- *                Error-Inverted / Warning / Blue-grey / Grey-Inverted,
+ *                Error-Inverted / Warning / Blue-grey / Grey-Inverted /
+ *                Primary-outline / Purple,
  *                plus special New / Beta / Owner)
  *   Icon      → optional leading `icon` slot (16px)
  *   Indicator → optional 6px status dot (`indicator`)
@@ -41,6 +42,13 @@ const badgeVariants = cva(
         // Lowest emphasis — white + grey outline.
         "grey-inverted":
           "border border-line bg-white px-2 py-0.5 text-foreground",
+        // Brand label on the grey outline — an active, in-progress state that
+        // should read as live without shouting like the solid primary.
+        "primary-outline":
+          "border border-line bg-white px-2 py-0.5 text-brand",
+        // Accent purple — a transient state (ringing, playing IVR) that is
+        // neither success nor warning.
+        purple: "bg-avatar-purple-bg px-2 py-0.5 text-avatar-purple-fg",
         // Special: pink outline "New".
         new: "border border-badge-pink bg-white px-2 py-0.5 text-badge-pink",
         // Special: dark "Beta".
@@ -68,6 +76,8 @@ const indicatorColor: Record<
   warning: "bg-warning-text",
   "blue-grey": "bg-badge-bluegrey-fg",
   "grey-inverted": "bg-muted-foreground",
+  "primary-outline": "bg-brand",
+  purple: "bg-avatar-purple-fg",
 };
 
 const SPECIAL_DEFAULTS: Partial<Record<BadgeVariant, string>> = {
