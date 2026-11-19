@@ -36,6 +36,12 @@
   --text-paragraph-sm--font-weight: 400;
 
   /* Label — Inter Medium (500) / SemiBold (600) */
+  /* heading-xl's size at Medium: a dialog title that should read as a
+     notice rather than a headline, e.g. the "Additional charges" confirm. */
+  --text-label-xl: 1.125rem; /* 18 / 26 — Medium */
+  --text-label-xl--line-height: 1.625rem;
+  --text-label-xl--font-weight: 500;
+
   /* A section title inside a form: the size of heading-lg so it still
      outranks the 14px fields under it, at Medium so it doesn't shout. */
   --text-label-lg: 1rem; /* 16 / 24 — Medium */

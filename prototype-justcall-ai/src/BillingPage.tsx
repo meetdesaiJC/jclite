@@ -142,7 +142,12 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
                             {/* Each type's name on its own line, so the two
                                 rules scan as a pair rather than a paragraph. */}
                             <span className="flex flex-col">
-                              <span className="font-medium">Standard</span>
+                              {/* The limit's direction sits beside the name: Standard is a
+                                  floor, the other two are a ceiling, and "sets a
+                                  limit" alone didn't say which. */}
+                              <span className="font-medium">
+                                Standard <span className="text-tooltip-dark-muted">· Minimum</span>
+                              </span>
                               {/* Body in the tooltip's secondary text, so the
                                   type names above carry the scan. */}
                               <span className="text-tooltip-dark-muted">
@@ -150,8 +155,10 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
                               </span>
                             </span>
                             <span className="flex flex-col">
-                              <span className="font-medium">Lite and View-only</span>
-                              <span className="text-tooltip-dark-muted">Your contract sets a limit for each license type. Contact your CSM to increase it.</span>
+                              <span className="font-medium">
+                                Lite and View-only <span className="text-tooltip-dark-muted">· Maximum</span>
+                              </span>
+                              <span className="text-tooltip-dark-muted">Your contract sets a maximum for each license type. Contact your CSM to increase it.</span>
                             </span>
                           </span>
                         </Tooltip>

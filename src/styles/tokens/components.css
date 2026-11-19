@@ -190,6 +190,18 @@
      when the role it points at is overridden, so the palette check in §3 goes
      quiet on it while --color-error's own dependents still move. */
 
+  /* ---------------------------------------------------------------- */
+  /* CALL MONITOR TOKENS                                               */
+  /* Figma "Unified analytics" › monitor widget (4714:367107): the     */
+  /* inverse panel that floats over Live Monitoring while a supervisor  */
+  /* listens in. Figma's Inverse/Layer scale, so it sits on primitives. */
+  /* ---------------------------------------------------------------- */
+  --color-monitor-surface: var(--color-gray-900); /* Inverse/Layer/03 */
+  --color-monitor-line: var(--color-gray-700); /* Inverse/Layer/02 */
+  --color-monitor-banner: var(--color-gray-600); /* Inverse/Layer/disabled — "monitoring silently" strip */
+  /* Same Figma style as the dark tooltip's CTA (Inverse/Button-primary). */
+  --color-monitor-action: var(--color-tooltip-dark-action);
+
   /* Radius */
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;

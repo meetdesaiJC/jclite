@@ -54,7 +54,8 @@ export interface BulkSmsLocks {
   followUp?: Lock;
   /** Deleting a campaign — no entry point in this frame yet. */
   delete?: Lock;
-  /** SMS Segments — where segments are bought. */
+  /** Buying segments inside the SMS Segments popover — no entry point in this
+   *  frame yet. The SMS Segments button itself only opens the popover. */
   payment?: Lock;
   /** SMS settings edits — no entry point in this frame yet. */
   smsSettings?: Lock;
@@ -312,11 +313,11 @@ export function BulkSmsPage({ locks }: { locks?: BulkSmsLocks } = {}) {
                   <IconDownload size={20} />
                 </button>
               </TooltipTrigger>
-              <Gate lock={locks?.payment}>
-                <Button variant="primary-outline" size="sm" className="px-4">
-                  SMS Segments
-                </Button>
-              </Gate>
+              {/* Opens the segments popover — reading a balance isn't an
+                  action, so it stays open for every license. */}
+              <Button variant="primary-outline" size="sm" className="px-4">
+                SMS Segments
+              </Button>
               <Gate lock={locks?.create}>
                 <Button size="sm" className="px-4">
                   Create Campaign

@@ -90,10 +90,14 @@ export const VIEW_ONLY_PRICE = 10;
 /**
  * Allowances without special approval: Lite up to 50% of Full licenses,
  * View-only 1 per every 10 Full. The flow shows what's left of each.
+ *
+ * View-only is raised past that rule for the demo — at 1 of 1 the card
+ * reads "0 licenses left" and the license can't be picked. Three allowed
+ * with one in use leaves two, alongside Lite's three.
  */
 export const LICENSE_SEATS = {
   lite: { total: Math.floor(ACCOUNT_PLAN.fullLicenses * 0.5), used: 2 },
-  "view-only": { total: Math.floor(ACCOUNT_PLAN.fullLicenses / 10), used: 1 },
+  "view-only": { total: 3, used: 1 },
 } as const;
 
 /** Numbers already on the account, offered when an invite shares numbers. */
@@ -215,4 +219,27 @@ export const PLAN_CHARGE_KEYS = Object.keys(PLAN_CHARGES) as PlanChargeKey[];
 
 export function planChargeTotal(key: PlanChargeKey): number {
   return PLAN_CHARGES[key].rows.reduce((sum, row) => sum + row.monthly, 0);
+}
+
+/**
+ * A member's license, read off the billed team-member rows so the members
+ * table, Edit Member and Billing can never disagree. Anyone not billed
+ * (invited, locked) is Standard.
+ */
+export function memberLicense(id: string): NonNullable<PlanChargeRow["license"]> {
+  return PLAN_CHARGES["team-members"].rows.find((row) => row.id === id)?.license ?? "Standard";
+}
+
+/** The account's user groups, for the Team Members filter. */
+export const USER_GROUPS = ["Sales", "Support", "Onboarding", "Collections"];
+
+/**
+ * Which group a member sits in. Derived from the id rather than stored on
+ * every row, so the 211 fixtures stay one line each and always land in the
+ * same group between reloads.
+ */
+export function memberGroup(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) % 9973;
+  return USER_GROUPS[hash % USER_GROUPS.length];
 }
