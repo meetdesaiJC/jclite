@@ -84,12 +84,8 @@ export function PrototypeLauncher({
       <main className="flex flex-col items-start gap-10 px-6 pb-[42px] pt-[42px] md:px-[75px]">
         <div className="flex flex-col items-start gap-2">
           <h1 className="text-heading-xxxl text-foreground">
-            JustCall Lite &amp; View-only
+            Non Calling Licenses - JC Lite and View-only
           </h1>
-          <p className="text-paragraph-md text-muted-foreground">
-            Non-calling licenses for people who need access to JustCall but
-            don&rsquo;t make calls or send texts.
-          </p>
         </div>
 
         {/* More air between the groups than between a group's own cards, so
