@@ -425,6 +425,17 @@ function LicenseFlow({
     setNavTransition("forward");
     setPage("billing");
   }, []);
+  // The header's SMS Inbox icon is a shortcut to the same page as the nav
+  // item, so it lands exactly as picking "SMS Inbox" in the sidenav would.
+  // From Billing or Sales Dialer that means leaving their nav, so it slides
+  // back the way their own back links do.
+  const openInbox = useCallback(() => {
+    setNavTransition("back");
+    setProfileMenuOpen(false);
+    setAddingMembers(false);
+    setEditingMember(null);
+    setPage("inbox");
+  }, []);
   const closeBilling = useCallback(() => {
     setNavTransition("back");
     setPage("dashboard");
@@ -547,6 +558,7 @@ function LicenseFlow({
                           : NAV_PAGES[page] ?? "Team Members"
               }
               dialerLocked={dialerLock(license)}
+              onMessagesClick={openInbox}
               profileMenuOpen={profileMenuOpen}
               onProfileClick={() => setProfileMenuOpen((open) => !open)}
               profileMenuPanel={
@@ -606,6 +618,7 @@ function LicenseFlow({
           <Dashboard
             showLiveMonitoringBanner={false}
             onBillingClick={openBilling}
+            onMessagesClick={openInbox}
             dialerLocked={dialerLock(license)}
           />
         )}
