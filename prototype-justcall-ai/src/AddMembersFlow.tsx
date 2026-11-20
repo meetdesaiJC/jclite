@@ -455,7 +455,7 @@ export function SeatCount({ license }: { license: License }) {
   const seats = seatsLeft(license);
   if (!seats) return null;
   return (
-    <Tag size="sm" color="grey">
+    <Tag size="sm" color="blue-grey">
       {seats.left} {seats.left === 1 ? "license" : "licenses"} left
     </Tag>
   );
