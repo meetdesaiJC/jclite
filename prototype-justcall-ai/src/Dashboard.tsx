@@ -264,6 +264,8 @@ export interface DashboardProps {
   showLiveMonitoringBanner?: boolean;
   /** Profile menu › Billing. Omit and the item stays inert, as before. */
   onBillingClick?: () => void;
+  /** Header › SMS Inbox. Omit and the icon stays inert, as before. */
+  onMessagesClick?: () => void;
   /** The license can't call: the Dialer stays visible but locked, with this reason. */
   dialerLocked?: GlobalHeaderProps["dialerLocked"];
   /** Profile menu rows the license blocks, by label — see ProfileMenu `itemLocks`. */
@@ -276,6 +278,7 @@ export function Dashboard({
   assistConfigured = true,
   showLiveMonitoringBanner = true,
   onBillingClick,
+  onMessagesClick,
   dialerLocked,
   profileMenuLocks,
 }: DashboardProps) {
@@ -306,6 +309,14 @@ export function Dashboard({
           }
           setDialerOpen((open) => !open);
         }}
+        onMessagesClick={
+          onMessagesClick &&
+          (() => {
+            setProfileMenuOpen(false);
+            setDialerOpen(false);
+            onMessagesClick();
+          })
+        }
         profileMenuOpen={profileMenuOpen}
         onProfileClick={() => {
           setDialerOpen(false);
