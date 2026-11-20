@@ -32,7 +32,7 @@ export const WithBadge: Story = {
   args: {
     name: "single",
     title: "Lite",
-    badge: <Tag size="sm" color="grey">3 licenses left</Tag>,
+    badge: <Tag size="sm" color="blue-grey">3 licenses left</Tag>,
     description: "For people who set up and manage. No dialer, SMS, or campaigns.",
   },
   decorators: Default.decorators,
@@ -44,7 +44,7 @@ export const Disabled: Story = {
     title: "View-only",
     icon: <IconEye size={24} />,
     disabled: true,
-    badge: <Tag size="sm" color="grey">0 licenses left</Tag>,
+    badge: <Tag size="sm" color="blue-grey">0 licenses left</Tag>,
     description: "View team activity and export reports. Editing is disabled.",
   },
   decorators: Default.decorators,
