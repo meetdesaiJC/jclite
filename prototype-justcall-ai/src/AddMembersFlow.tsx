@@ -66,7 +66,7 @@ export const LICENSE_OPTIONS: {
     label: "View-only",
     icon: <IconEye size={24} />,
     description:
-      "For analysts and stakeholders who view activity and export reports. No editing access.",
+      "For stakeholders who view activity and export reports.",
   },
 ];
 
