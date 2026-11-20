@@ -27,8 +27,9 @@ import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
  * same words everywhere teach people the pattern, and they never have to
  * parse which license unlocks which feature from a tooltip.
  */
-export const LICENSE_LOCK_REASON = "Unavailable with your current license";
-export const LICENSE_LOCK_HINT = "Contact your admin to request access.";
+export const LICENSE_LOCK_REASON = "Not available with your license";
+export const LICENSE_LOCK_HINT =
+  "This action isn’t included in your current license. Contact your admin for access.";
 
 /**
  * A lock on one control. Usually empty — `{}` means "locked, with the default

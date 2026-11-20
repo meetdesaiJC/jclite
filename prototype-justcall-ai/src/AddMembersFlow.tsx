@@ -58,13 +58,13 @@ export const LICENSE_OPTIONS: {
     label: "Lite",
     icon: <IconAdjustmentsHorizontal size={24} />,
     description:
-      "Manage team operations and review activity. No calling or SMS.",
+      "Manage team members, settings, and integrations. View calls and reports. No calling or SMS.",
   },
   {
     key: "view-only",
     label: "View-only",
     icon: <IconEye size={24} />,
-    description: "View team activity and export reports. Editing is disabled.",
+    description: "View activity and export reports. No editing access.",
   },
 ];
 
@@ -479,6 +479,30 @@ export function FixedAccess() {
   );
 }
 
+/** "one member" / "2 members" — how many invitees to drop to fit the pool. */
+function overBy(inviteeCount: number | null, left: number) {
+  const n = (inviteeCount ?? 1) - left;
+  return n === 1 ? "one member" : `${n} members`;
+}
+
+// Sits under the license cards whatever is picked: the doubt it answers
+// ("which one?") comes before a choice, not after. Same grey note as
+// FixedAccess, which it replaces in this flow — two pointers to the
+// contract one above the other would just repeat themselves.
+function LicenseHelp({ className }: { className?: string }) {
+  return (
+    <Alert
+      variant="info"
+      aria-label="Choosing a license"
+      className={cn("border-line bg-secondary-bg shadow-none", className)}
+      icon={<IconInfoCircle size={20} className="shrink-0 text-muted-foreground" aria-hidden="true" />}
+    >
+      Not sure which license to assign? Check your contract or contact your CSM
+      at <CsmEmail tone="light" />.
+    </Alert>
+  );
+}
+
 function SetAccessStep({
   invitees,
   inviteeCount,
@@ -549,11 +573,11 @@ function SetAccessStep({
                           </>
                         ) : (
                           <>
-                            You're inviting {inviteeCount} members, but only{" "}
-                            {seats.left} {option.label}{" "}
-                            {seats.left === 1 ? "license is" : "licenses are"} left.
-                            Invite fewer people, or to add more, contact your CSM
-                            at <CsmEmail tone="dark" />.
+                            Only {seats.left} {option.label}{" "}
+                            {seats.left === 1 ? "license" : "licenses"} available
+                            for {inviteeCount} invites. Remove{" "}
+                            {overBy(inviteeCount, seats.left)} or contact your
+                            CSM at <CsmEmail tone="dark" /> for more.
                           </>
                         )
                       }
@@ -578,11 +602,10 @@ function SetAccessStep({
             );
           })}
         </div>
+        {/* Inside the cards' group, not a section below it, so it reads as
+            part of the choice rather than as the start of Role. */}
+        <LicenseHelp className="mt-2" />
       </div>
-
-      {license === "lite" || license === "view-only" ? (
-        <FixedAccess />
-      ) : null}
 
       {license === "standard" ? (
         <div className="flex flex-col gap-4">
