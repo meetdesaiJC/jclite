@@ -314,6 +314,9 @@ function AnswerRateInsight({ lock }: { lock?: Lock }) {
 /* ------------------------------------------------------------------ */
 
 export function CampaignsPage({ locks }: { locks?: CampaignLocks }) {
+  // Archive is the only bulk action (Select All just widens the selection),
+  // so when it's locked the selection column goes entirely.
+  const bulk = !locks?.archive;
   const [tab, setTab] = useState<CampaignStatus>("active");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -446,14 +449,16 @@ export function CampaignsPage({ locks }: { locks?: CampaignLocks }) {
             <Table className="min-w-[1140px] table-fixed">
               <TableHeader className="[&_tr]:border-b-0">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="sticky top-0 z-10 w-11">
-                    <Checkbox
-                      aria-label="Select all campaigns on this page"
-                      checked={allSelected}
-                      indeterminate={someSelected}
-                      onCheckedChange={toggleAll}
-                    />
-                  </TableHead>
+                  {bulk ? (
+                    <TableHead className="sticky top-0 z-10 w-11">
+                      <Checkbox
+                        aria-label="Select all campaigns on this page"
+                        checked={allSelected}
+                        indeterminate={someSelected}
+                        onCheckedChange={toggleAll}
+                      />
+                    </TableHead>
+                  ) : null}
                   <TableHead className="sticky top-0 z-10">Name</TableHead>
                   <TableHead className="sticky top-0 z-10 w-[204px]">
                     <HeadWithInfo
@@ -481,7 +486,7 @@ export function CampaignsPage({ locks }: { locks?: CampaignLocks }) {
               <TableBody className="[&_tr]:border-b-0">
                 {visible.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={9} className="text-paragraph-md text-muted-foreground">
+                    <TableCell colSpan={bulk ? 9 : 8} className="text-paragraph-md text-muted-foreground">
                       {searching ? "No matching campaigns" : `No ${tab} campaigns`}
                     </TableCell>
                   </TableRow>
@@ -494,13 +499,15 @@ export function CampaignsPage({ locks }: { locks?: CampaignLocks }) {
                         state={isSelected ? "selected" : "default"}
                         className="group"
                       >
-                        <TableCell>
-                          <Checkbox
-                            aria-label={`Select ${campaign.name}`}
-                            checked={isSelected}
-                            onCheckedChange={(checked) => toggleOne(campaign.id, checked)}
-                          />
-                        </TableCell>
+                        {bulk ? (
+                          <TableCell>
+                            <Checkbox
+                              aria-label={`Select ${campaign.name}`}
+                              checked={isSelected}
+                              onCheckedChange={(checked) => toggleOne(campaign.id, checked)}
+                            />
+                          </TableCell>
+                        ) : null}
                         <TableCell className="py-4">
                           <div className="flex min-w-0 flex-col">
                             <span className="truncate text-label-md text-foreground">{campaign.name}</span>

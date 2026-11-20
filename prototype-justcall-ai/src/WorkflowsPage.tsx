@@ -10,6 +10,7 @@ import {
   IconFilter,
   IconPencil,
   IconSearch,
+  IconSelectAll,
   IconSend,
   IconTrash,
 } from "@/components/Icon";
@@ -20,6 +21,7 @@ import {
   TableBody,
   TableCell,
   TableHead,
+  TableBulkBar,
   TableHeader,
   TablePagination,
   TableRow,
@@ -84,7 +86,6 @@ function Gate({
  * 1162px table), so every cell's 12px inset lines up under its header label.
  */
 const COLUMNS = [36, 218.64, 163.98, 218.64, 185.84, 174.91, 163.99];
-const TABLE_WIDTH = COLUMNS.reduce((sum, w) => sum + w, 0);
 
 /* The frame's rows are 66px: a 42px action group with 12px above and below. */
 const CELL = "h-[66px] py-0";
@@ -222,6 +223,11 @@ function NumberCell({ number }: { number?: Workflow["number"] }) {
 }
 
 export function WorkflowsPage({ locks }: { locks?: WorkflowsLocks } = {}) {
+  // Delete is the bulk action Lite keeps on Voice workflows. Without it the
+  // selection column goes entirely, and the rest share its 36px.
+  const bulk = !locks?.deleteVoice;
+  const columns = bulk ? COLUMNS : COLUMNS.slice(1);
+  const tableWidth = columns.reduce((sum, w) => sum + w, 0);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [page, setPage] = useState(1);
@@ -250,7 +256,8 @@ export function WorkflowsPage({ locks }: { locks?: WorkflowsLocks } = {}) {
   const last = Math.min(page * pageSize, total);
 
   return (
-    <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+    // Relative so the bulk bar can float over the table, above the pager.
+    <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
       <div className="mb-px flex h-[60px] shrink-0 items-center justify-between px-6">
         <div className="flex items-center gap-3">
           <label className="flex h-9 w-[230px] items-center rounded-[4px] border border-line bg-white pl-3 focus-within:border-brand">
@@ -286,25 +293,27 @@ export function WorkflowsPage({ locks }: { locks?: WorkflowsLocks } = {}) {
       <div className="min-h-0 flex-1 overflow-y-auto px-6">
         <Table className="table-fixed">
           <colgroup>
-            {COLUMNS.map((width, i) => (
+            {columns.map((width, i) => (
               // Kept as shares of the frame's table, so the columns hold their
               // proportions when the sidenav leaves a little less room.
-              <col key={i} style={{ width: `${(width / TABLE_WIDTH) * 100}%` }} />
+              <col key={i} style={{ width: `${(width / tableWidth) * 100}%` }} />
             ))}
           </colgroup>
           <TableHeader className="[&_tr]:border-0">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="h-12">
-                <span className="flex">
-                  <Checkbox
-                    size="sm"
-                    aria-label="Select all workflows"
-                    checked={allSelected}
-                    indeterminate={someSelected && !allSelected}
-                    onChange={toggleAll}
-                  />
-                </span>
-              </TableHead>
+              {bulk ? (
+                <TableHead className="h-12">
+                  <span className="flex">
+                    <Checkbox
+                      size="sm"
+                      aria-label="Select all workflows"
+                      checked={allSelected}
+                      indeterminate={someSelected && !allSelected}
+                      onChange={toggleAll}
+                    />
+                  </span>
+                </TableHead>
+              ) : null}
               {["Workflow name", "Status", "Assigned phone number", "Last updated", "Created by", "Actions"].map(
                 (label) => (
                   <TableHead key={label} className="h-12 text-label-sm">
@@ -321,17 +330,19 @@ export function WorkflowsPage({ locks }: { locks?: WorkflowsLocks } = {}) {
                 state={selected.has(w.id) ? "selected" : "default"}
                 className="border-0"
               >
-                <TableCell className={CELL}>
-                  <span className="flex">
-                    <Checkbox
-                      size="sm"
-                      aria-label={`Select ${w.name}`}
-                      disabled={w.viewOnly}
-                      checked={selected.has(w.id)}
-                      onChange={() => toggle(w.id)}
-                    />
-                  </span>
-                </TableCell>
+                {bulk ? (
+                  <TableCell className={CELL}>
+                    <span className="flex">
+                      <Checkbox
+                        size="sm"
+                        aria-label={`Select ${w.name}`}
+                        disabled={w.viewOnly}
+                        checked={selected.has(w.id)}
+                        onChange={() => toggle(w.id)}
+                      />
+                    </span>
+                  </TableCell>
+                ) : null}
                 <TableCell className={CELL}>
                   <span className="flex items-center gap-1.5">
                     <span title={w.name} className="max-w-[157px] truncate text-label-md text-foreground">
@@ -383,6 +394,38 @@ export function WorkflowsPage({ locks }: { locks?: WorkflowsLocks } = {}) {
           rangeLabel={`${first}-${last} of ${total} items`}
         />
       </div>
+
+      {/* Remove is the one bulk verb, so the bar only exists where delete is
+          allowed — `bulk` already hides the checkboxes everywhere else. */}
+      {bulk ? (
+        <TableBulkBar
+          count={selected.size}
+          label={selected.size === 1 ? "Item Selected" : "Items Selected"}
+          actions={
+            <>
+              {allSelected ? null : (
+                <Button
+                  variant="grey-outline"
+                  size="sm"
+                  className="bg-white"
+                  leftIcon={<IconSelectAll size={16} />}
+                  onClick={() => setSelected(new Set(selectable.map((w) => w.id)))}
+                >
+                  Select All
+                </Button>
+              )}
+              <Button
+                variant="error"
+                size="sm"
+                leftIcon={<IconTrash size={16} />}
+                onClick={() => setSelected(new Set())}
+              >
+                Remove
+              </Button>
+            </>
+          }
+        />
+      ) : null}
 
       {openWorkflow ? (
         <WorkflowEditor

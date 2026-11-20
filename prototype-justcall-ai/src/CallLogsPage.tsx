@@ -14,6 +14,7 @@ import {
   IconPhoneIncoming,
   IconPhoneOutgoing,
   IconPlayerPlay,
+  IconSelectAll,
 } from "@/components/Icon";
 import { LockedControl, type Lock } from "@/components/LockedControl";
 import {
@@ -187,23 +188,28 @@ function LogRow({
   selected,
   onToggle,
   locks,
+  selectable,
 }: {
   log: CallLog;
   selected: boolean;
   onToggle: (checked: boolean) => void;
   locks?: CallLogsLocks;
+  /** False when the license has no bulk action, so the checkbox cell goes. */
+  selectable: boolean;
 }) {
   const Direction = log.direction === "incoming" ? IconPhoneIncoming : IconPhoneOutgoing;
   return (
     <TableRow state={selected ? "selected" : "default"} className="group/row border-b-0">
-      <TableCell className="w-9 pr-2 pl-3">
-        <Checkbox
-          size="sm"
-          checked={selected}
-          onCheckedChange={onToggle}
-          aria-label={`Select call with ${log.contactName ?? log.contactNumber}`}
-        />
-      </TableCell>
+      {selectable ? (
+        <TableCell className="w-9 pr-2 pl-3">
+          <Checkbox
+            size="sm"
+            checked={selected}
+            onCheckedChange={onToggle}
+            aria-label={`Select call with ${log.contactName ?? log.contactNumber}`}
+          />
+        </TableCell>
+      ) : null}
       <TableCell className="px-2.5">
         <Direction
           size={20}
@@ -261,6 +267,9 @@ function LogRow({
 }
 
 export function CallLogsPage({ locks }: { locks?: CallLogsLocks } = {}) {
+  // Archive is the one bulk verb (Select All only widens the selection), so
+  // when it's locked the checkbox column and the bar go entirely.
+  const bulk = !locks?.archive;
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -341,7 +350,7 @@ export function CallLogsPage({ locks }: { locks?: CallLogsLocks } = {}) {
           className="min-h-0 flex-1 [&>table]:min-w-[1446px] [&>table]:table-fixed"
         >
           <colgroup>
-            <col className="w-9" />
+            {bulk ? <col className="w-9" /> : null}
             <col className="w-10" />
             <col className="w-[160px]" />
             <col className="w-[180px]" />
@@ -355,17 +364,19 @@ export function CallLogsPage({ locks }: { locks?: CallLogsLocks } = {}) {
           </colgroup>
           <TableHeader className="sticky top-0 z-[2]">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="h-12 w-9 pr-2 pl-3">
-                <Checkbox
-                  size="sm"
-                  checked={allSelected}
-                  indeterminate={someSelected && !allSelected}
-                  onCheckedChange={(checked) =>
-                    setSelected(checked ? new Set(rows.map((log) => log.id)) : new Set())
-                  }
-                  aria-label="Select all calls"
-                />
-              </TableHead>
+              {bulk ? (
+                <TableHead className="h-12 w-9 pr-2 pl-3">
+                  <Checkbox
+                    size="sm"
+                    checked={allSelected}
+                    indeterminate={someSelected && !allSelected}
+                    onCheckedChange={(checked) =>
+                      setSelected(checked ? new Set(rows.map((log) => log.id)) : new Set())
+                    }
+                    aria-label="Select all calls"
+                  />
+                </TableHead>
+              ) : null}
               <TableHead className="h-12" aria-label="Direction" />
               <TableHead className="h-12">Contact</TableHead>
               <TableHead className="h-12">JustCall Number</TableHead>
@@ -390,6 +401,7 @@ export function CallLogsPage({ locks }: { locks?: CallLogsLocks } = {}) {
                 selected={selected.has(log.id)}
                 onToggle={(checked) => toggle(log.id, checked)}
                 locks={locks}
+                selectable={bulk}
               />
             ))}
           </TableBody>
@@ -410,22 +422,35 @@ export function CallLogsPage({ locks }: { locks?: CallLogsLocks } = {}) {
           className="shrink-0 rounded-none border-t border-line"
         />
 
-        <TableBulkBar
-          count={selected.size}
-          label="Calls selected"
-          actions={
-            <>
-              <Button variant="grey-outline" size="sm" className="bg-white" leftIcon={<IconDownload size={16} />}>
-                Export
-              </Button>
-              <Gate lock={locks?.archive} placement="top">
-                <Button variant="grey-outline" size="sm" className="bg-white" leftIcon={<IconArchive size={16} />}>
+        {bulk ? (
+          <TableBulkBar
+            count={selected.size}
+            label={selected.size === 1 ? "Item Selected" : "Items Selected"}
+            actions={
+              <>
+                {allSelected ? null : (
+                  <Button
+                    variant="grey-outline"
+                    size="sm"
+                    className="bg-white"
+                    leftIcon={<IconSelectAll size={16} />}
+                    onClick={() => setSelected(new Set(rows.map((log) => log.id)))}
+                  >
+                    Select All
+                  </Button>
+                )}
+                <Button
+                  variant="error"
+                  size="sm"
+                  leftIcon={<IconArchive size={16} />}
+                  onClick={() => setSelected(new Set())}
+                >
                   Archive
                 </Button>
-              </Gate>
-            </>
-          }
-        />
+              </>
+            }
+          />
+        ) : null}
       </div>
     </main>
   );

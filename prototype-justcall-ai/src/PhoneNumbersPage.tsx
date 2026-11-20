@@ -240,6 +240,9 @@ export function PhoneNumbersPage({
   /** Pending SMS / MMS tooltips link to A2P 10DLC registration (Lite). */
   registrationCta?: boolean;
 }) {
+  // Bulk actions on numbers are number management (edit, delete). With both
+  // locked there is nothing to select for, so the column goes entirely.
+  const bulk = !(locks?.edit && locks?.remove);
   const [tab, setTab] = useState<NumbersTab>("active");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<TableSortDirection>(false);
@@ -343,22 +346,24 @@ export function PhoneNumbersPage({
             <Table className="table-fixed">
               <TableHeader className="[&_tr]:border-b-0">
                 <TableRow>
-                  <TableHead className="sticky top-0 z-10 w-12">
-                    <Checkbox
-                      aria-label="Select all on this page"
-                      checked={allVisibleSelected}
-                      indeterminate={someVisibleSelected && !allVisibleSelected}
-                      onCheckedChange={() =>
-                        setSelected((prev) => {
-                          const next = new Set(prev);
-                          visible.forEach((row) =>
-                            allVisibleSelected ? next.delete(row.id) : next.add(row.id)
-                          );
-                          return next;
-                        })
-                      }
-                    />
-                  </TableHead>
+                  {bulk ? (
+                    <TableHead className="sticky top-0 z-10 w-12">
+                      <Checkbox
+                        aria-label="Select all on this page"
+                        checked={allVisibleSelected}
+                        indeterminate={someVisibleSelected && !allVisibleSelected}
+                        onCheckedChange={() =>
+                          setSelected((prev) => {
+                            const next = new Set(prev);
+                            visible.forEach((row) =>
+                              allVisibleSelected ? next.delete(row.id) : next.add(row.id)
+                            );
+                            return next;
+                          })
+                        }
+                      />
+                    </TableHead>
+                  ) : null}
                   <TableHead className="sticky top-0 z-10">
                     <TableSortLabel
                       direction={sort}
@@ -377,20 +382,22 @@ export function PhoneNumbersPage({
               <TableBody className="[&_tr]:border-b-0">
                 {visible.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={7} className="text-paragraph-md text-muted-foreground">
+                    <TableCell colSpan={bulk ? 7 : 6} className="text-paragraph-md text-muted-foreground">
                       {tab === "active" ? "No matching numbers" : `No ${tab} numbers to show in this prototype`}
                     </TableCell>
                   </TableRow>
                 ) : (
                   visible.map((row) => (
                     <TableRow key={row.id} state={selected.has(row.id) ? "selected" : undefined}>
-                      <TableCell>
-                        <Checkbox
-                          aria-label={`Select ${row.label ?? row.number}`}
-                          checked={selected.has(row.id)}
-                          onCheckedChange={() => toggle(row.id)}
-                        />
-                      </TableCell>
+                      {bulk ? (
+                        <TableCell>
+                          <Checkbox
+                            aria-label={`Select ${row.label ?? row.number}`}
+                            checked={selected.has(row.id)}
+                            onCheckedChange={() => toggle(row.id)}
+                          />
+                        </TableCell>
+                      ) : null}
                       <TableCell className="py-4">
                         <NumberCell row={row} />
                       </TableCell>
