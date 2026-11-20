@@ -195,7 +195,10 @@ export function BillingPage() {
                         <button
                           type="button"
                           onClick={() => openBreakdown(key)}
-                          className="rounded-[2px] text-left outline-none hover:underline focus-visible:ring-4 focus-visible:ring-brand/24"
+                          // align-top: a button is inline-block, so by default it
+                          // sits on its last line's baseline and the bullet drops
+                          // to the second line when a charge wraps.
+                          className="rounded-[2px] text-left align-top outline-none hover:underline focus-visible:ring-4 focus-visible:ring-brand/24"
                         >
                           {PLAN_CHARGES[key].label}: {money.format(planChargeTotal(key))}
                         </button>
