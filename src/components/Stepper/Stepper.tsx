@@ -5,7 +5,7 @@ import { IconCircleCheckFilled, IconCircleDashed } from "@/components/Icon";
 
 /**
  * Stepper — the vertical progress rail beside a multi-step setup flow
- * (Add Members: Invite → Assign Roles → Assign Numbers).
+ * (Add Members: Invite → Assign Roles → Assign Phone Numbers).
  *
  * Each step is one of three states, derived from `current`:
  *   complete → filled green check, label in foreground, revisitable via `onStepSelect`

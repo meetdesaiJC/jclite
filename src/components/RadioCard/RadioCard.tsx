@@ -81,12 +81,14 @@ export const RadioCard = React.forwardRef<HTMLInputElement, RadioCardProps>(
       // Pointer handlers go on the card, not the input: the input is visually
       // hidden, so the card is the thing being hovered. This is also what lets
       // a wrapping TooltipTrigger explain why a disabled card can't be picked.
+      // rounded-sm (6px) matches the existing selectable card in Phone Number
+      // Settings › Incoming Call Routing, so the two read as one component.
       <label
         htmlFor={inputId}
         onMouseEnter={onMouseEnter as React.MouseEventHandler<HTMLLabelElement> | undefined}
         onMouseLeave={onMouseLeave as React.MouseEventHandler<HTMLLabelElement> | undefined}
         className={cn(
-          "group flex h-full cursor-pointer flex-col gap-2 rounded-md border border-line bg-white p-4 transition-colors",
+          "group flex h-full cursor-pointer flex-col gap-2 rounded-sm border border-line bg-white p-4 transition-colors",
           "hover:border-control-border",
           "has-[:checked]:border-brand has-[:checked]:bg-brand-subtle",
           "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand/24",

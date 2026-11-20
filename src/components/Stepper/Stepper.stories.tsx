@@ -6,7 +6,7 @@ import { Stepper, type StepperStep } from "./Stepper";
 const ADD_MEMBERS_STEPS: StepperStep[] = [
   { key: "invite", label: "Invite Member" },
   { key: "roles", label: "Assign Roles" },
-  { key: "numbers", label: "Assign Numbers" },
+  { key: "numbers", label: "Assign Phone Numbers" },
 ];
 
 const meta: Meta<typeof Stepper> = {
@@ -67,7 +67,7 @@ export const WithSkippedStep: Story = {
     steps: [
       { key: "invite", label: "Invite Member" },
       { key: "roles", label: "License Type & Role" },
-      { key: "numbers", label: "Assign Numbers", skipped: true },
+      { key: "numbers", label: "Assign Phone Numbers", skipped: true },
     ],
   },
 };
