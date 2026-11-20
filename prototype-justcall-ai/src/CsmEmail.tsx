@@ -14,7 +14,7 @@ export function CsmEmail({ tone }: { tone: "dark" | "light" }) {
       href={`mailto:${BILLING.csm.email}`}
       className={cn(
         "hover:underline",
-        tone === "dark" ? "text-tooltip-dark-action" : "text-brand"
+        tone === "dark" ? "text-tooltip-dark-link" : "text-brand"
       )}
     >
       {BILLING.csm.email}

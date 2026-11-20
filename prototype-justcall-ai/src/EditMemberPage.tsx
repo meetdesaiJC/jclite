@@ -239,8 +239,8 @@ export function EditMemberPage({
                           // blue: the whole bubble is the message, as in Figma.
                           description={
                             <span className="text-tooltip-dark-fg">
-                              You can't change this member's license here. To request a
-                              change, contact your CSM at <CsmEmail tone="dark" />.
+                              License changes are handled by your CSM. Contact{" "}
+                              <CsmEmail tone="dark" /> to request one.
                             </span>
                           }
                         />

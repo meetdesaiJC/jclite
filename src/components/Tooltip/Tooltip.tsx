@@ -202,7 +202,7 @@ export const Tooltip = React.forwardRef<HTMLDivElement, TooltipProps>(
         ? "text-tooltip-dark-muted"
         : "text-muted-foreground";
     const actionColor =
-      resolvedTheme === "dark" ? "text-tooltip-dark-action" : "text-brand";
+      resolvedTheme === "dark" ? "text-tooltip-dark-link" : "text-brand";
     const closeColor =
       resolvedTheme === "dark"
         ? "text-tooltip-dark-fg hover:opacity-80"

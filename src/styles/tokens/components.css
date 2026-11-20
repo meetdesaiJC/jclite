@@ -63,6 +63,10 @@
   --color-tooltip-dark-fg: var(--color-white);
   --color-tooltip-dark-muted: var(--color-disabled-fg); /* text/placeholder #98A2B3 */
   --color-tooltip-dark-action: #4d8bff; /* Inverse/Button-primary */
+  /* Text links on the dark surface. The action blue is tuned as a button
+     fill under white text, so as body-sized link text it sinks into gray-900;
+     blue-400 holds ~8:1 against it and still reads as a link, not a label. */
+  --color-tooltip-dark-link: var(--color-blue-400);
 
   /* ---------------------------------------------------------------- */
   /* AI TOKENS                                                         */

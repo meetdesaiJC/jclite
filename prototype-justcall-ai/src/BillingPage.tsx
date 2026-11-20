@@ -9,9 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/Table";
-import { IconCircleCheck, IconDotsVertical, IconInfoCircle } from "@/components/Icon";
+import { IconCircleCheck, IconInfoCircle } from "@/components/Icon";
 import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
-import { LockedControl, type Lock } from "@/components/LockedControl";
 import {
   IconInvoiceDoc,
   IconOverviewEye,
@@ -19,7 +18,6 @@ import {
   IconUsageBalanceBars,
   type SidenavItem,
 } from "@/components/Sidenav";
-import cardVisa from "./assets/card-visa.svg";
 import {
   ACCOUNT_PLAN,
   BILLING,
@@ -73,27 +71,7 @@ function CardHeading({ title, subtitle }: { title: React.ReactNode; subtitle?: R
   );
 }
 
-/** Billing actions the signed-in license can't take; omit for full access. */
-export interface BillingLocks {
-  addCard?: Lock;
-  cardActions?: Lock;
-}
-
-/** Locks one control when `lock` is set; renders it untouched otherwise. */
-function Gate({ lock, children }: { lock?: Lock; children: React.ReactElement<Record<string, unknown>> }) {
-  return (
-    <LockedControl
-      locked={Boolean(lock)}
-      reason={lock?.reason}
-      hint={lock?.hint}
-      triggerClassName="shrink-0"
-    >
-      {children}
-    </LockedControl>
-  );
-}
-
-export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
+export function BillingPage() {
   const full = ACCOUNT_PLAN.fullLicenses;
   const total = PLAN_CHARGE_KEYS.reduce((sum, key) => sum + planChargeTotal(key), 0);
   // The modal remembers its last tab while closed so the exit animation
@@ -176,8 +154,9 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
                           className="max-w-[280px]"
                         >
                           <span className="block whitespace-normal px-1 py-2 text-tooltip-dark-fg">
-                            License counts are set by your contract. To change them,
-                            contact your CSM at <CsmEmail tone="dark" />.
+                            Lite and View-only license counts are set in your
+                            contract. Contact your CSM at <CsmEmail tone="dark" /> to
+                            increase/change them.
                           </span>
                         </Tooltip>
                       }
@@ -227,8 +206,11 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
                 <TableCell>
                   {/* Each type reads used / contracted. For Standard the
                       denominator is the contract minimum, not a cap — the
-                      tooltip on the header says so. */}
-                  <dl className="grid grid-cols-[auto_auto] justify-start gap-x-6 gap-y-1 text-paragraph-md">
+                      tooltip on the header says so. Counts sit right-aligned
+                      in tabular figures with a floor on their width, so 2/5
+                      and 10/10 end on the same edge and the column scans
+                      straight down whatever this account's numbers are. */}
+                  <dl className="grid grid-cols-[auto_minmax(5ch,auto)] justify-start gap-x-6 gap-y-1 text-paragraph-md [&_dd]:text-right [&_dd]:tabular-nums">
                     <dt className="text-muted-foreground">Standard</dt>
                     <dd className="text-label-md text-foreground">
                       {full}/{ACCOUNT_PLAN.fullLicenses}
@@ -269,66 +251,16 @@ export function BillingPage({ locks }: { locks?: BillingLocks } = {}) {
         </Card>
 
         <Card>
+          {/* A custom contract is paid by wire transfer, so there is no card
+              on file to list or manage — the card says how payment happens
+              instead of offering an Add Card that leads nowhere. */}
           <div className="flex items-center gap-6">
-            <CardHeading
-              title="Payment Method"
-              subtitle="Manage your saved cards to keep billing seamless."
-            />
-            <Gate lock={locks?.addCard}>
-              <Button variant="grey-outline" size="md" className="shrink-0">
-                Add Card
-              </Button>
-            </Gate>
+            <CardHeading title="Payment Method" />
+            <p className="flex shrink-0 items-center gap-2 text-paragraph-md text-muted-foreground">
+              <IconPricingCard className="size-5 shrink-0" />
+              Your payments are handled via wire transfer
+            </p>
           </div>
-          {/* Same table treatment as Plan Details (Figma 40003082:102894),
-              so every card with records on this page reads one way. */}
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-label-md">Card</TableHead>
-                <TableHead className="w-[480px] text-label-md">Name on card</TableHead>
-                <TableHead className="w-[160px] text-center text-label-md">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow className="hover:bg-transparent">
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <img src={cardVisa} alt={BILLING.card.brand} width={35} height={24} className="shrink-0" />
-                    <div className="flex items-start gap-3">
-                      <div className="flex flex-col">
-                        <span className="text-label-md text-foreground">
-                          **** **** **** {BILLING.card.last4}
-                        </span>
-                        <span className="text-paragraph-sm text-muted-foreground">
-                          Expires {BILLING.card.expires.replace("-", "/")}
-                        </span>
-                      </div>
-                      <Tag size="sm" color="grey">
-                        Default
-                      </Tag>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-paragraph-md text-muted-foreground">
-                  {BILLING.card.nameOnCard}
-                </TableCell>
-                <TableCell className="text-center">
-                  <Gate lock={locks?.cardActions}>
-                    <Button
-                      variant="grey-outline"
-                      size="sm"
-                      iconOnly
-                      aria-label="Card actions"
-                      className="mx-auto"
-                    >
-                      <IconDotsVertical size={20} />
-                    </Button>
-                  </Gate>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
         </Card>
       </div>
       <PlanDetailsModal

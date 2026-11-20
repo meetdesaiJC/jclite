@@ -126,7 +126,7 @@ function CapabilityTags({ row, registrationCta }: { row: PhoneNumber; registrati
                   <a
                     href="#"
                     onClick={(event) => event.preventDefault()}
-                    className="text-tooltip-dark-action underline underline-offset-2 hover:opacity-80"
+                    className="text-tooltip-dark-link underline underline-offset-2 hover:opacity-80"
                   >
                     A2P 10DLC Registration
                   </a>{" "}

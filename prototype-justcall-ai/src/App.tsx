@@ -31,7 +31,6 @@ import { LockedControl } from "@/components/LockedControl";
 import { IconAddPlus } from "@/components/Icon";
 import { salesDialerLocks } from "./licenseLocks";
 import {
-  billingLocks,
   bulkSmsLocks,
   callLogsLocks,
   contactsLocks,
@@ -558,7 +557,7 @@ function LicenseFlow({
               }
             />
             {page === "billing" ? (
-              <BillingPage locks={billingLocks(license)} />
+              <BillingPage />
             ) : page === "campaigns" ? (
               <CampaignsPage locks={campaignLocks} />
             ) : page === "contacts" ? (

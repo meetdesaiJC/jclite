@@ -3,9 +3,9 @@ import type { Lock } from "@/components/LockedControl";
 /**
  * What the non-calling licenses can't do, in one place. Every screen asks
  * here rather than deciding for itself, so the rule stays one rule: a blocked
- * entry point stays visible, muted, and shows "Unavailable with your current
- * license / Contact your admin to request access." on hover / focus / tap
- * (LockedControl's defaults).
+ * entry point stays visible, muted, and shows "Not available with your
+ * license / This action isn’t included in your current license. Contact your
+ * admin for access." on hover / focus / tap (LockedControl's defaults).
  *
  * Locks are on actions, never on pages. View-only is read access: someone
  * with it should still be able to open AI Voice Agent, Salesfloor or the
@@ -44,14 +44,6 @@ export function dialerLock(license?: License) {
 export function teamMemberLocks(license?: License) {
   const manage = forViewOnly(license);
   return { addMember: manage, duplicate: manage, edit: manage };
-}
-
-/** Billing actions. */
-export function billingLocks(license?: License) {
-  return {
-    addCard: forViewOnly(license),
-    cardActions: forViewOnly(license),
-  };
 }
 
 /**
