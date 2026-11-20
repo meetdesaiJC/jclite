@@ -228,6 +228,10 @@ function ThreadList({
   onSelect: (id: string) => void;
   locks?: InboxLocks;
 }) {
+  // Bulk actions on threads (archive, delete, mark read, assign) are
+  // conversation management — the ⋮ menu's verbs. When those are locked the
+  // checkbox goes, and the preview line drops the indent that sat under it.
+  const bulk = !locks?.more;
   const [search, setSearch] = useState("");
   const q = search.trim().toLowerCase();
   const threads = q
@@ -301,14 +305,16 @@ function ThreadList({
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-2">
-                    <span onClick={(event) => event.stopPropagation()} className="flex">
-                      <Checkbox size="sm" aria-label={`Select ${t.name}`} />
-                    </span>
+                    {bulk ? (
+                      <span onClick={(event) => event.stopPropagation()} className="flex">
+                        <Checkbox size="sm" aria-label={`Select ${t.name}`} />
+                      </span>
+                    ) : null}
                     <span className="truncate text-label-md text-foreground">{t.name}</span>
                   </span>
                   <span className="shrink-0 text-paragraph-sm text-muted-foreground">{t.time}</span>
                 </div>
-                <div className="flex items-center gap-1 pl-6">
+                <div className={cn("flex items-center gap-1", bulk && "pl-6")}>
                   <span className="min-w-0 flex-1 truncate text-paragraph-sm text-muted-foreground">
                     {last.text}
                   </span>

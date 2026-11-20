@@ -4,16 +4,19 @@ import { Avatar, initialsFromName } from "@/components/Avatar";
 import { Button } from "@/components/Button";
 import { Checkbox } from "@/components/Checkbox";
 import {
+  IconDotsVertical,
   IconDownload,
   IconMessage2,
   IconPhone,
   IconSearch,
+  IconSelectAll,
 } from "@/components/Icon";
 import { InputField } from "@/components/InputField";
 import { LockedControl, type Lock } from "@/components/LockedControl";
 import {
   Table,
   TableBody,
+  TableBulkBar,
   TableCell,
   TableHead,
   TableHeader,
@@ -115,6 +118,9 @@ function RowActions({
 }
 
 export function ContactsPage({ locks }: { locks?: ContactsLocks } = {}) {
+  // Every bulk action on contacts edits them, so when editing is locked the
+  // selection column goes entirely — a checkbox that leads nowhere is noise.
+  const bulk = !locks?.editContact;
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -148,7 +154,8 @@ export function ContactsPage({ locks }: { locks?: ContactsLocks } = {}) {
     });
 
   return (
-    <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+    // Relative so the bulk bar can float over the table, above the pager.
+    <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
       <div className="flex h-11 shrink-0 items-end gap-8 border-b border-line px-6">
         <Tabs items={TABS} value={tab} onValueChange={setTab} />
         {/* Not a tab: it leaves Contacts for the Sales Dialer product, so it
@@ -204,23 +211,25 @@ export function ContactsPage({ locks }: { locks?: ContactsLocks } = {}) {
           <Table className="table-fixed">
             <TableHeader className="[&_tr]:border-b-0">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="sticky top-0 z-10 w-11 border-b border-line">
-                  {/* A flex box, not inline: inline-flex sits on the 16px text
-                      baseline and grows the 44px header row. */}
-                  <div className="flex">
-                    <Checkbox
-                      size="md"
-                      aria-label="Select all contacts"
-                      checked={allSelected}
-                      indeterminate={someSelected && !allSelected}
-                      onCheckedChange={(on) =>
-                        setSelected(
-                          on ? new Set(rows.map((c) => c.id)) : new Set(),
-                        )
-                      }
-                    />
-                  </div>
-                </TableHead>
+                {bulk ? (
+                  <TableHead className="sticky top-0 z-10 w-11 border-b border-line">
+                    {/* A flex box, not inline: inline-flex sits on the 16px text
+                        baseline and grows the 44px header row. */}
+                    <div className="flex">
+                      <Checkbox
+                        size="md"
+                        aria-label="Select all contacts"
+                        checked={allSelected}
+                        indeterminate={someSelected && !allSelected}
+                        onCheckedChange={(on) =>
+                          setSelected(
+                            on ? new Set(rows.map((c) => c.id)) : new Set(),
+                          )
+                        }
+                      />
+                    </div>
+                  </TableHead>
+                ) : null}
                 {["Name", "Phone number", "Email"].map((label) => (
                   <TableHead
                     key={label}
@@ -238,7 +247,7 @@ export function ContactsPage({ locks }: { locks?: ContactsLocks } = {}) {
               {rows.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
                   <TableCell
-                    colSpan={5}
+                    colSpan={bulk ? 5 : 4}
                     className="text-paragraph-md text-muted-foreground"
                   >
                     {tab === "restricted"
@@ -254,16 +263,18 @@ export function ContactsPage({ locks }: { locks?: ContactsLocks } = {}) {
                       key={contact.id}
                       state={isSelected ? "selected" : "default"}
                     >
-                      <TableCell>
-                        <div className="flex">
-                          <Checkbox
-                            size="md"
-                            aria-label={`Select ${contact.name}`}
-                            checked={isSelected}
-                            onCheckedChange={(on) => toggle(contact.id, on)}
-                          />
-                        </div>
-                      </TableCell>
+                      {bulk ? (
+                        <TableCell>
+                          <div className="flex">
+                            <Checkbox
+                              size="md"
+                              aria-label={`Select ${contact.name}`}
+                              checked={isSelected}
+                              onCheckedChange={(on) => toggle(contact.id, on)}
+                            />
+                          </div>
+                        </TableCell>
+                      ) : null}
                       <TableCell>
                         <div className="flex min-w-0 items-center gap-3">
                           <Avatar
@@ -303,6 +314,42 @@ export function ContactsPage({ locks }: { locks?: ContactsLocks } = {}) {
           rangeLabel={`1-25 of ${CONTACTS_TOTAL} items`}
         />
       </div>
+
+      {/* Every verb here edits contacts, so the bar only exists where the
+          checkboxes do — `bulk` already hides both for View-only. */}
+      {bulk ? (
+        <TableBulkBar
+          count={selected.size}
+          label={selected.size === 1 ? "Item Selected" : "Items Selected"}
+          actions={
+            <>
+              {allSelected ? null : (
+                <Button
+                  variant="grey-outline"
+                  size="sm"
+                  className="bg-white"
+                  leftIcon={<IconSelectAll size={16} />}
+                  onClick={() => setSelected(new Set(rows.map((c) => c.id)))}
+                >
+                  Select all
+                </Button>
+              )}
+              <Button variant="error" size="sm" onClick={() => setSelected(new Set())}>
+                Delete
+              </Button>
+              <Button
+                variant="grey-outline"
+                size="sm"
+                iconOnly
+                aria-label="More bulk actions"
+                className="bg-white"
+              >
+                <IconDotsVertical size={16} />
+              </Button>
+            </>
+          }
+        />
+      ) : null}
     </main>
   );
 }
