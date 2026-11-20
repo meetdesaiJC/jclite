@@ -156,7 +156,7 @@ export function BillingPage() {
                           <span className="block whitespace-normal px-1 py-2 text-tooltip-dark-fg">
                             Lite and View-only license counts are set in your
                             contract. Contact your CSM at <CsmEmail tone="dark" /> to
-                            increase/change them.
+                            modify them.
                           </span>
                         </Tooltip>
                       }

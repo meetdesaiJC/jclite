@@ -16,7 +16,7 @@ import {
   IconEye,
   IconInfoCircle,
   IconPhone,
-  IconAdjustmentsHorizontal,
+  IconAdjustments,
 } from "@/components/Icon";
 import {
   ACCOUNT_NUMBERS,
@@ -51,20 +51,22 @@ export const LICENSE_OPTIONS: {
     key: "standard",
     label: "Standard",
     icon: <IconPhone size={24} />,
-    description: "Make and receive calls, send SMS, and run campaigns.",
+    description:
+      "For sales and support agents who make and receive calls, send SMS, and run campaigns.",
   },
   {
     key: "lite",
     label: "Lite",
-    icon: <IconAdjustmentsHorizontal size={24} />,
+    icon: <IconAdjustments size={24} />,
     description:
-      "Manage team members, settings, and integrations. View calls and reports. No calling or SMS.",
+      "For managers and team leads who manage team members, settings, and integrations and view calls and reports. No calling or SMS.",
   },
   {
     key: "view-only",
     label: "View-only",
     icon: <IconEye size={24} />,
-    description: "View activity and export reports. No editing access.",
+    description:
+      "For analysts and stakeholders who view activity and export reports. No editing access.",
   },
 ];
 
@@ -479,14 +481,11 @@ export function FixedAccess() {
   );
 }
 
-/** "one member" / "2 members" — how many invitees to drop to fit the pool. */
-function overBy(inviteeCount: number | null, left: number) {
-  const n = (inviteeCount ?? 1) - left;
-  return n === 1 ? "one member" : `${n} members`;
-}
 
-// Sits under the license cards whatever is picked: the doubt it answers
-// ("which one?") comes before a choice, not after. Same grey note as
+// Sits under the license cards once Lite or View-only is picked: those are
+// the fixed-access licenses whose scope lives in the contract, so that is
+// when "which one?" needs a pointer. Standard leads straight into Role, and
+// a note there would only push the role list down. Same grey note as
 // FixedAccess, which it replaces in this flow — two pointers to the
 // contract one above the other would just repeat themselves.
 function LicenseHelp({ className }: { className?: string }) {
@@ -497,8 +496,8 @@ function LicenseHelp({ className }: { className?: string }) {
       className={cn("border-line bg-secondary-bg shadow-none", className)}
       icon={<IconInfoCircle size={20} className="shrink-0 text-muted-foreground" aria-hidden="true" />}
     >
-      Not sure which license to assign? Check your contract or contact your CSM
-      at <CsmEmail tone="light" />.
+      What this license includes is set in your contract. For details, contact
+      your CSM at <CsmEmail tone="light" />.
     </Alert>
   );
 }
@@ -575,9 +574,8 @@ function SetAccessStep({
                           <>
                             Only {seats.left} {option.label}{" "}
                             {seats.left === 1 ? "license" : "licenses"} available
-                            for {inviteeCount} invites. Remove{" "}
-                            {overBy(inviteeCount, seats.left)} or contact your
-                            CSM at <CsmEmail tone="dark" /> for more.
+                            for {inviteeCount} invites. Contact your CSM at{" "}
+                            <CsmEmail tone="dark" /> for more.
                           </>
                         )
                       }
@@ -604,7 +602,9 @@ function SetAccessStep({
         </div>
         {/* Inside the cards' group, not a section below it, so it reads as
             part of the choice rather than as the start of Role. */}
-        <LicenseHelp className="mt-2" />
+        {license === "lite" || license === "view-only" ? (
+          <LicenseHelp className="mt-2" />
+        ) : null}
       </div>
 
       {license === "standard" ? (
@@ -726,9 +726,9 @@ function AssignNumbersStep({
       {shareOnly ? (
         <div className="flex flex-col gap-6">
           <header className="flex flex-col gap-2">
-            <h2 className="text-heading-xl text-foreground">Assign Numbers</h2>
+            <h2 className="text-heading-xl text-foreground">Assign Phone Numbers</h2>
             <p className="text-paragraph-md text-muted-foreground">
-              Assign phone numbers to newly added members
+              Choose which phone numbers to assign to each new team member.
             </p>
           </header>
           {numberPicker}
@@ -736,9 +736,9 @@ function AssignNumbersStep({
       ) : (
         <>
         <header className="flex flex-col gap-2">
-          <h2 className="text-heading-xl text-foreground">Assign Numbers</h2>
+          <h2 className="text-heading-xl text-foreground">Assign Phone Numbers</h2>
           <p className="text-paragraph-md text-muted-foreground">
-            Assign phone numbers to newly added members
+            Choose which phone numbers to assign to each new team member.
           </p>
         </header>
         <div role="radiogroup" aria-label="Number assignment" className="flex flex-col gap-5">
@@ -860,7 +860,7 @@ export function AddMembersFlow({
     { key: "invite", label: "Invite Member" },
     { key: "access", label: "License Type & Role" },
     // "Assign" for every license — View-only still only gets existing numbers.
-    { key: "numbers", label: "Assign Numbers" },
+    { key: "numbers", label: "Assign Phone Numbers" },
   ];
 
   const inviteReady =
