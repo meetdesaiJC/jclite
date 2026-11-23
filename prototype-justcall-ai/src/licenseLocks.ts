@@ -180,3 +180,95 @@ export function callLogsLocks(license?: License) {
   const viewOnly = forViewOnly(license);
   return { archive: viewOnly, deleteTranscript: viewOnly };
 }
+
+/**
+ * Desktop app — the member's dialer window. It has no admin surfaces at all,
+ * so this is only what the permissions sheet lists for "Desktop App": call
+ * logs and recordings, contacts (view and filter), inbox threads, and the
+ * member's own profile. Everything else on it is calling or sending.
+ *
+ * - Calling and composing lock for both: the keypad and Call via, call-back
+ *   and SMS on log and contact rows, New Message, the reply composer.
+ * - Creating or editing a contact is web-app only even for Lite, so the
+ *   desktop's add-contact entry points lock for both.
+ * - The conversation actions the desktop has (close, delete, mark as
+ *   unread) stay open for Lite; View-only reads threads only.
+ * - An opened call log reads for both. Rating, disposition and notes edit
+ *   the record, and Block / Add to DNC are the DNM / DND / blacklist row —
+ *   all open for Lite, locked for View-only.
+ */
+export function desktopAppLocks(license?: License) {
+  const both = forBoth(license);
+  const viewOnly = forViewOnly(license);
+  return {
+    dialer: both,
+    call: both,
+    sms: both,
+    newMessage: both,
+    composer: both,
+    addContact: both,
+    conversation: viewOnly,
+    logDetails: viewOnly,
+    blockNumber: viewOnly,
+  };
+}
+
+export type DesktopAppLocks = ReturnType<typeof desktopAppLocks>;
+
+/**
+ * Mobile app — the member's phone. Same idea as the desktop: no admin
+ * surface, so only what the permissions sheet lists for "Mobile App" opens —
+ * recents and recordings, contacts (view and filter), SMS threads, profile.
+ *
+ * - Calling and composing lock for both: the keypad, every call and SMS
+ *   shortcut, New message (+), the composer and its tools.
+ * - Adding or editing a contact, and archiving calls, are web app only —
+ *   locked for both here.
+ * - The conversation actions the sheet puts on mobile — assign, close,
+ *   archive, mark unread, DNM, DND, blacklist, tags — stay open for Lite.
+ *   View-only reads threads only.
+ * - An opened call reads for both, recording included. Disposition, rating
+ *   and notes edit the record — Lite keeps them, as on desktop. Transcripts
+ *   are web app only on the sheet, so View call transcript locks for both.
+ */
+export function mobileAppLocks(license?: License) {
+  const both = forBoth(license);
+  const viewOnly = forViewOnly(license);
+  return {
+    dialer: both,
+    call: both,
+    sms: both,
+    newMessage: both,
+    composer: both,
+    addContact: both,
+    archiveCalls: both,
+    conversation: viewOnly,
+    logDetails: viewOnly,
+    transcript: both,
+  };
+}
+
+export type MobileAppLocks = ReturnType<typeof mobileAppLocks>;
+
+/**
+ * AI Voice Agent — Agents and Knowledge Base. The permissions sheet gives
+ * Lite full access to both (subject to AIVA being on for the account) and
+ * View-only none, so this is one switch: View-only can open both lists, see
+ * every agent's numbers, status and analytics, and every knowledge base's
+ * assignments — and nothing that creates, changes, tests or buys.
+ *
+ * Testing an agent counts as acting rather than reading: it spends the
+ * account's AIVA minutes like a live call does.
+ */
+export function aiVoiceAgentLocks(license?: License) {
+  const manage = forViewOnly(license);
+  return {
+    create: manage,
+    edit: manage,
+    toggleStatus: manage,
+    test: manage,
+    buyMinutes: manage,
+  };
+}
+
+export type AiVoiceAgentLocks = ReturnType<typeof aiVoiceAgentLocks>;

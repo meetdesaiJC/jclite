@@ -11,6 +11,8 @@ import { IconArrowRight } from "@/components/Icon";
 type PrototypeLauncherProps = {
   onStartLicenseExperience?: () => void;
   onStartLicenseManagement?: () => void;
+  onStartDesktopApp?: () => void;
+  onStartMobileApp?: () => void;
 };
 
 function PrototypeCard({
@@ -78,6 +80,8 @@ function PrototypeGroup({
 export function PrototypeLauncher({
   onStartLicenseExperience,
   onStartLicenseManagement,
+  onStartDesktopApp,
+  onStartMobileApp,
 }: PrototypeLauncherProps) {
   return (
     <div className="h-screen overflow-y-auto bg-white">
@@ -104,9 +108,14 @@ export function PrototypeLauncher({
           <PrototypeGroup label="License experience">
             <PrototypeCard
               index="02"
-              title="JustCall Lite & View-only"
+              title="Web"
               onClick={onStartLicenseExperience}
             />
+            {/* Mobile and desktop are member-side only: license management
+                lives on the web app, so these show what's locked for a Lite
+                or View-only user, never an admin view. */}
+            <PrototypeCard index="03" title="Mobile app" onClick={onStartMobileApp} />
+            <PrototypeCard index="04" title="Desktop app" onClick={onStartDesktopApp} />
           </PrototypeGroup>
         </div>
       </main>
