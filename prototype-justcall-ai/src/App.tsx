@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Sidenav, type SidenavItemsTransition } from "@/components/Sidenav";
+import { Sidenav, SIDENAV_DEFAULT_ITEMS, type SidenavItemsTransition } from "@/components/Sidenav";
 import { Dashboard } from "./Dashboard";
 import { DialerPanel } from "./DialerPanel";
 import {
@@ -12,6 +12,8 @@ import { GlobalHeader } from "@/components/GlobalHeader";
 import { Toast } from "@/components/Toast";
 import { ProfileMenu } from "@/components/ProfileMenu";
 import { PrototypeLauncher } from "./PrototypeLauncher";
+import { DesktopAppPrototype } from "./DesktopAppPrototype";
+import { MobileAppPrototype } from "./MobileAppPrototype";
 import { TeamMembersPage } from "./TeamMembersPage";
 import { BillingPage, BILLING_NAV_ITEMS } from "./BillingPage";
 import { AddMembersFlow } from "./AddMembersFlow";
@@ -26,11 +28,13 @@ import { BulkSmsPage } from "./BulkSmsPage";
 import { PhoneNumbersPage } from "./PhoneNumbersPage";
 import { LiveMonitoringPage } from "./LiveMonitoringPage";
 import { CampaignsPage, SALES_DIALER_NAV_ITEMS } from "./CampaignsPage";
+import { AgentsPage, KnowledgeBasePage } from "./AiVoiceAgentPages";
 import { Button } from "@/components/Button";
 import { LockedControl } from "@/components/LockedControl";
 import { IconAddPlus } from "@/components/Icon";
 import { salesDialerLocks } from "./licenseLocks";
 import {
+  aiVoiceAgentLocks,
   bulkSmsLocks,
   callLogsLocks,
   contactsLocks,
@@ -69,7 +73,12 @@ type AppView =
   /* Non-calling licenses: one key per experience in the PRD. */
   | "lite"
   | "view-only"
-  | "license-admin";
+  | "license-admin"
+  /* The member's desktop and mobile apps, per license. */
+  | "desktop-lite"
+  | "desktop-view-only"
+  | "mobile-lite"
+  | "mobile-view-only";
 
 const APP_VIEWS: readonly AppView[] = [
   "launcher",
@@ -83,6 +92,10 @@ const APP_VIEWS: readonly AppView[] = [
   "lite",
   "view-only",
   "license-admin",
+  "desktop-lite",
+  "desktop-view-only",
+  "mobile-lite",
+  "mobile-view-only",
 ];
 
 /**
@@ -238,7 +251,9 @@ type LicensePage =
   | "integrations"
   | "call-logs"
   | "workflows"
-  | "bulk-sms";
+  | "bulk-sms"
+  | "ai-agents"
+  | "ai-knowledge-base";
 
 /** Pages reached straight from a sidenav key, with their header titles. */
 const NAV_PAGES: Partial<Record<LicensePage, string>> = {
@@ -247,7 +262,26 @@ const NAV_PAGES: Partial<Record<LicensePage, string>> = {
   "call-logs": "Call Logs",
   workflows: "Workflows",
   "bulk-sms": "Bulk SMS/MMS",
+  "ai-agents": "AI Voice Agent",
+  "ai-knowledge-base": "Knowledge Base",
 };
+
+/**
+ * The product nav with AI Voice Agent opened up into its two pages, as the
+ * web app has it. Only this flow routes them, so the default nav other
+ * prototypes draw is left as it is.
+ */
+const LICENSE_NAV_ITEMS = SIDENAV_DEFAULT_ITEMS.map((item) =>
+  item.key === "ai-voice-agent"
+    ? {
+        ...item,
+        subItems: [
+          { key: "ai-agents", label: "Agents" },
+          { key: "ai-knowledge-base", label: "Knowledge Base" },
+        ],
+      }
+    : item
+);
 
 /**
  * Prototype control, not product UI: floats above the app so a reviewer can
@@ -257,9 +291,9 @@ const NAV_PAGES: Partial<Record<LicensePage, string>> = {
  */
 const SWITCH_POSITION_KEY = "jclite:license-switch-position-v2";
 
-function readSwitchPosition(): { x: number; y: number } | null {
+function readSwitchPosition(key: string): { x: number; y: number } | null {
   try {
-    const raw = window.localStorage.getItem(SWITCH_POSITION_KEY);
+    const raw = window.localStorage.getItem(key);
     return raw ? (JSON.parse(raw) as { x: number; y: number }) : null;
   } catch {
     return null;
@@ -269,13 +303,21 @@ function readSwitchPosition(): { x: number; y: number } | null {
 function LicenseSwitch({
   value,
   onChange,
+  anchor = "top",
 }: {
   value: License;
   onChange: (license: License) => void;
+  /**
+   * Where it starts. The desktop prototype has a menu bar and a title bar up
+   * top, so it starts bottom-centre there instead — and remembers its own
+   * dragged spot, since a spot chosen over the web app means nothing on it.
+   */
+  anchor?: "top" | "bottom";
 }) {
+  const storageKey = anchor === "bottom" ? `${SWITCH_POSITION_KEY}:bottom` : SWITCH_POSITION_KEY;
   const panelRef = useRef<HTMLDivElement>(null);
-  // null = the default bottom-right spot, until someone drags it.
-  const [position, setPosition] = useState(readSwitchPosition);
+  // null = the default spot, until someone drags it.
+  const [position, setPosition] = useState(() => readSwitchPosition(storageKey));
 
   const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     // The buttons are for switching, not dragging.
@@ -299,7 +341,7 @@ function LicenseSwitch({
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       try {
-        window.localStorage.setItem(SWITCH_POSITION_KEY, JSON.stringify(last));
+        window.localStorage.setItem(storageKey, JSON.stringify(last));
       } catch {
         /* storage unavailable — the spot just won't survive a reload */
       }
@@ -345,7 +387,8 @@ function LicenseSwitch({
       style={position ? { left: position.x, top: position.y } : undefined}
       className={cn(
         "fixed z-50 isolate flex cursor-grab touch-none items-center gap-0.5 rounded-full bg-tooltip-dark-bg p-1 shadow-400 select-none active:cursor-grabbing",
-        !position && "top-3 left-1/2 -translate-x-1/2"
+        !position && "left-1/2 -translate-x-1/2",
+        !position && (anchor === "bottom" ? "bottom-3" : "top-3")
       )}
     >
       {thumb && (
@@ -496,7 +539,7 @@ function LicenseFlow({
             ? BILLING_NAV_ITEMS
             : page === "campaigns"
               ? SALES_DIALER_NAV_ITEMS
-              : undefined
+              : LICENSE_NAV_ITEMS
         }
         itemsKey={page === "billing" ? "billing" : page === "campaigns" ? "sales-dialer" : "product"}
         itemsTransition={navTransition}
@@ -582,6 +625,10 @@ function LicenseFlow({
               <WorkflowsPage locks={workflowsLocks(license)} />
             ) : page === "bulk-sms" ? (
               <BulkSmsPage locks={bulkSmsLocks(license)} />
+            ) : page === "ai-agents" ? (
+              <AgentsPage locks={aiVoiceAgentLocks(license)} />
+            ) : page === "ai-knowledge-base" ? (
+              <KnowledgeBasePage locks={aiVoiceAgentLocks(license)} />
             ) : page === "inbox" ? (
               <InboxPage locks={inboxLocks(license)} />
             ) : page === "phone-numbers" ? (
@@ -703,6 +750,8 @@ export default function App() {
       <PrototypeLauncher
         onStartLicenseExperience={() => openView("lite")}
         onStartLicenseManagement={() => openView("license-admin")}
+        onStartDesktopApp={() => openView("desktop-lite")}
+        onStartMobileApp={() => openView("mobile-lite")}
       />
     );
   }
@@ -721,6 +770,44 @@ export default function App() {
           setView(next);
         }}
       />
+    );
+  }
+
+  if (view === "desktop-lite" || view === "desktop-view-only") {
+    const license: License = view === "desktop-lite" ? "lite" : "view-only";
+    // Same switch as the web experience, swapping the hash in place so Back
+    // still leads to the launcher and the open tab survives the switch.
+    return (
+      <>
+        <DesktopAppPrototype license={license} onHome={goHome} />
+        <LicenseSwitch
+          anchor="bottom"
+          value={license}
+          onChange={(next) => {
+            const key: AppView = next === "lite" ? "desktop-lite" : "desktop-view-only";
+            window.history.replaceState(window.history.state, "", `#${key}`);
+            setView(key);
+          }}
+        />
+      </>
+    );
+  }
+
+  if (view === "mobile-lite" || view === "mobile-view-only") {
+    const license: License = view === "mobile-lite" ? "lite" : "view-only";
+    return (
+      <>
+        <MobileAppPrototype license={license} />
+        <LicenseSwitch
+          anchor="bottom"
+          value={license}
+          onChange={(next) => {
+            const key: AppView = next === "lite" ? "mobile-lite" : "mobile-view-only";
+            window.history.replaceState(window.history.state, "", `#${key}`);
+            setView(key);
+          }}
+        />
+      </>
     );
   }
 

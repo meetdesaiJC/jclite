@@ -118,6 +118,13 @@ const DEFAULT_ITEMS: SidenavItem[] = [
   { key: "fax", label: "Fax", icon: <IconFax /> },
 ];
 
+/**
+ * The product nav as the sidenav draws it by default — exported so a
+ * prototype can extend one item (e.g. give it sub-items) without re-typing
+ * the rest of the list and drifting from it.
+ */
+export const SIDENAV_DEFAULT_ITEMS: readonly SidenavItem[] = DEFAULT_ITEMS;
+
 export type SidenavItemsTransition = "forward" | "back";
 
 export interface SidenavProps extends Omit<React.HTMLAttributes<HTMLElement>, "onSelect"> {

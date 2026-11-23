@@ -1,5 +1,6 @@
 export {
   Sidenav,
+  SIDENAV_DEFAULT_ITEMS,
   type SidenavProps,
   type SidenavItem,
   type SidenavBackLink,
