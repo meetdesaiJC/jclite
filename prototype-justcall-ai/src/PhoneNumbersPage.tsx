@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Avatar, initialsFromName, type AvatarColor } from "@/components/Avatar";
 import { Button } from "@/components/Button";
-import { Checkbox } from "@/components/Checkbox";
 import { InputField } from "@/components/InputField";
 import { LockedControl, type Lock } from "@/components/LockedControl";
 import { Tabs } from "@/components/Tabs";
@@ -11,6 +10,7 @@ import { Tooltip, TooltipTrigger } from "@/components/Tooltip";
 import {
   Table,
   TableBody,
+  TableBulkBar,
   TableCell,
   TableHead,
   TableHeader,
@@ -26,9 +26,11 @@ import {
   IconInfoCircle,
   IconPencil,
   IconSearch,
+  IconSelectAll,
   IconTrash,
   IconUsersGroup,
 } from "@/components/Icon";
+import { LockedCheckbox } from "./LockedCheckbox";
 import flagUk from "./assets/flag-uk.svg";
 import flagUs from "./assets/dialer/us-flag.svg";
 import { RowAction } from "./TeamMembersPage";
@@ -240,9 +242,6 @@ export function PhoneNumbersPage({
   /** Pending SMS / MMS tooltips link to A2P 10DLC registration (Lite). */
   registrationCta?: boolean;
 }) {
-  // Bulk actions on numbers are number management (edit, delete). With both
-  // locked there is nothing to select for, so the column goes entirely.
-  const bulk = !(locks?.edit && locks?.remove);
   const [tab, setTab] = useState<NumbersTab>("active");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<TableSortDirection>(false);
@@ -286,7 +285,8 @@ export function PhoneNumbersPage({
     });
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+    // Relative so the bulk bar can float over the table, above the pager.
+    <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
       <div className="border-b border-line px-6">
         <Tabs
           items={TABS}
@@ -346,24 +346,23 @@ export function PhoneNumbersPage({
             <Table className="table-fixed">
               <TableHeader className="[&_tr]:border-b-0">
                 <TableRow>
-                  {bulk ? (
-                    <TableHead className="sticky top-0 z-10 w-12">
-                      <Checkbox
-                        aria-label="Select all on this page"
-                        checked={allVisibleSelected}
-                        indeterminate={someVisibleSelected && !allVisibleSelected}
-                        onCheckedChange={() =>
-                          setSelected((prev) => {
-                            const next = new Set(prev);
-                            visible.forEach((row) =>
-                              allVisibleSelected ? next.delete(row.id) : next.add(row.id)
-                            );
-                            return next;
-                          })
-                        }
-                      />
-                    </TableHead>
-                  ) : null}
+                  <TableHead className="sticky top-0 z-10 w-12">
+                    <LockedCheckbox
+                      lock={locks?.remove}
+                      aria-label="Select all on this page"
+                      checked={allVisibleSelected}
+                      indeterminate={someVisibleSelected && !allVisibleSelected}
+                      onCheckedChange={() =>
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          visible.forEach((row) =>
+                            allVisibleSelected ? next.delete(row.id) : next.add(row.id)
+                          );
+                          return next;
+                        })
+                      }
+                    />
+                  </TableHead>
                   <TableHead className="sticky top-0 z-10">
                     <TableSortLabel
                       direction={sort}
@@ -382,22 +381,21 @@ export function PhoneNumbersPage({
               <TableBody className="[&_tr]:border-b-0">
                 {visible.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={bulk ? 7 : 6} className="text-paragraph-md text-muted-foreground">
+                    <TableCell colSpan={7} className="text-paragraph-md text-muted-foreground">
                       {tab === "active" ? "No matching numbers" : `No ${tab} numbers to show in this prototype`}
                     </TableCell>
                   </TableRow>
                 ) : (
                   visible.map((row) => (
                     <TableRow key={row.id} state={selected.has(row.id) ? "selected" : undefined}>
-                      {bulk ? (
-                        <TableCell>
-                          <Checkbox
-                            aria-label={`Select ${row.label ?? row.number}`}
-                            checked={selected.has(row.id)}
-                            onCheckedChange={() => toggle(row.id)}
-                          />
-                        </TableCell>
-                      ) : null}
+                      <TableCell>
+                        <LockedCheckbox
+                          lock={locks?.remove}
+                          aria-label={`Select ${row.label ?? row.number}`}
+                          checked={selected.has(row.id)}
+                          onCheckedChange={() => toggle(row.id)}
+                        />
+                      </TableCell>
                       <TableCell className="py-4">
                         <NumberCell row={row} />
                       </TableCell>
@@ -436,6 +434,34 @@ export function PhoneNumbersPage({
           </div>
         </div>
       </div>
+
+      <TableBulkBar
+        count={selected.size}
+        label={selected.size === 1 ? "Item Selected" : "Items Selected"}
+        actions={
+          <>
+            {filtered.every((row) => selected.has(row.id)) ? null : (
+              <Button
+                variant="grey-outline"
+                size="sm"
+                className="bg-white"
+                leftIcon={<IconSelectAll size={16} />}
+                onClick={() => setSelected(new Set(filtered.map((row) => row.id)))}
+              >
+                Select All
+              </Button>
+            )}
+            <Button
+              variant="error"
+              size="sm"
+              leftIcon={<IconTrash size={16} />}
+              onClick={() => setSelected(new Set())}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      />
     </main>
   );
 }

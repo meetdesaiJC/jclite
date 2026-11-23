@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Avatar, initialsFromName } from "@/components/Avatar";
 import { Button } from "@/components/Button";
-import { Checkbox } from "@/components/Checkbox";
 import {
   IconDotsVertical,
   IconDownload,
@@ -24,6 +23,7 @@ import {
   TableRow,
 } from "@/components/Table";
 import { Tabs } from "@/components/Tabs";
+import { LockedCheckbox } from "./LockedCheckbox";
 import dialerFavicon from "./assets/dialer-favicon.svg";
 import {
   CONTACTS,
@@ -118,9 +118,6 @@ function RowActions({
 }
 
 export function ContactsPage({ locks }: { locks?: ContactsLocks } = {}) {
-  // Every bulk action on contacts edits them, so when editing is locked the
-  // selection column goes entirely — a checkbox that leads nowhere is noise.
-  const bulk = !locks?.editContact;
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -211,25 +208,24 @@ export function ContactsPage({ locks }: { locks?: ContactsLocks } = {}) {
           <Table className="table-fixed">
             <TableHeader className="[&_tr]:border-b-0">
               <TableRow className="hover:bg-transparent">
-                {bulk ? (
-                  <TableHead className="sticky top-0 z-10 w-11 border-b border-line">
-                    {/* A flex box, not inline: inline-flex sits on the 16px text
-                        baseline and grows the 44px header row. */}
-                    <div className="flex">
-                      <Checkbox
-                        size="md"
-                        aria-label="Select all contacts"
-                        checked={allSelected}
-                        indeterminate={someSelected && !allSelected}
-                        onCheckedChange={(on) =>
-                          setSelected(
-                            on ? new Set(rows.map((c) => c.id)) : new Set(),
-                          )
-                        }
-                      />
-                    </div>
-                  </TableHead>
-                ) : null}
+                <TableHead className="sticky top-0 z-10 w-11 border-b border-line">
+                  {/* A flex box, not inline: inline-flex sits on the 16px text
+                      baseline and grows the 44px header row. */}
+                  <div className="flex">
+                    <LockedCheckbox
+                      lock={locks?.editContact}
+                      size="md"
+                      aria-label="Select all contacts"
+                      checked={allSelected}
+                      indeterminate={someSelected && !allSelected}
+                      onCheckedChange={(on) =>
+                        setSelected(
+                          on ? new Set(rows.map((c) => c.id)) : new Set(),
+                        )
+                      }
+                    />
+                  </div>
+                </TableHead>
                 {["Name", "Phone number", "Email"].map((label) => (
                   <TableHead
                     key={label}
@@ -247,7 +243,7 @@ export function ContactsPage({ locks }: { locks?: ContactsLocks } = {}) {
               {rows.length === 0 ? (
                 <TableRow className="hover:bg-transparent">
                   <TableCell
-                    colSpan={bulk ? 5 : 4}
+                    colSpan={5}
                     className="text-paragraph-md text-muted-foreground"
                   >
                     {tab === "restricted"
@@ -263,18 +259,17 @@ export function ContactsPage({ locks }: { locks?: ContactsLocks } = {}) {
                       key={contact.id}
                       state={isSelected ? "selected" : "default"}
                     >
-                      {bulk ? (
-                        <TableCell>
-                          <div className="flex">
-                            <Checkbox
-                              size="md"
-                              aria-label={`Select ${contact.name}`}
-                              checked={isSelected}
-                              onCheckedChange={(on) => toggle(contact.id, on)}
-                            />
-                          </div>
-                        </TableCell>
-                      ) : null}
+                      <TableCell>
+                        <div className="flex">
+                          <LockedCheckbox
+                            lock={locks?.editContact}
+                            size="md"
+                            aria-label={`Select ${contact.name}`}
+                            checked={isSelected}
+                            onCheckedChange={(on) => toggle(contact.id, on)}
+                          />
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex min-w-0 items-center gap-3">
                           <Avatar
@@ -315,41 +310,39 @@ export function ContactsPage({ locks }: { locks?: ContactsLocks } = {}) {
         />
       </div>
 
-      {/* Every verb here edits contacts, so the bar only exists where the
-          checkboxes do — `bulk` already hides both for View-only. */}
-      {bulk ? (
-        <TableBulkBar
-          count={selected.size}
-          label={selected.size === 1 ? "Item Selected" : "Items Selected"}
-          actions={
-            <>
-              {allSelected ? null : (
-                <Button
-                  variant="grey-outline"
-                  size="sm"
-                  className="bg-white"
-                  leftIcon={<IconSelectAll size={16} />}
-                  onClick={() => setSelected(new Set(rows.map((c) => c.id)))}
-                >
-                  Select all
-                </Button>
-              )}
-              <Button variant="error" size="sm" onClick={() => setSelected(new Set())}>
-                Delete
-              </Button>
+      {/* Every verb here edits contacts, so the checkboxes follow the edit
+          lock — disabled for View-only, and this bar never opens there. */}
+      <TableBulkBar
+        count={selected.size}
+        label={selected.size === 1 ? "Item Selected" : "Items Selected"}
+        actions={
+          <>
+            {allSelected ? null : (
               <Button
                 variant="grey-outline"
                 size="sm"
-                iconOnly
-                aria-label="More bulk actions"
                 className="bg-white"
+                leftIcon={<IconSelectAll size={16} />}
+                onClick={() => setSelected(new Set(rows.map((c) => c.id)))}
               >
-                <IconDotsVertical size={16} />
+                Select all
               </Button>
-            </>
-          }
-        />
-      ) : null}
+            )}
+            <Button variant="error" size="sm" onClick={() => setSelected(new Set())}>
+              Delete
+            </Button>
+            <Button
+              variant="grey-outline"
+              size="sm"
+              iconOnly
+              aria-label="More bulk actions"
+              className="bg-white"
+            >
+              <IconDotsVertical size={16} />
+            </Button>
+          </>
+        }
+      />
     </main>
   );
 }
