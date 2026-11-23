@@ -2,7 +2,6 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Avatar, initialsFromName } from "@/components/Avatar";
 import { Button } from "@/components/Button";
-import { Checkbox } from "@/components/Checkbox";
 import {
   IconAddPlus,
   IconArchive,
@@ -23,15 +22,19 @@ import {
   IconMoodSmile,
   IconPaperclip,
   IconSearch,
+  IconSelectAll,
   IconSend,
   IconSparkles,
   IconTag,
+  IconTrash,
   IconUser,
   IconUserX,
   IconUsersGroup,
 } from "@/components/Icon";
 import { LockedControl, type Lock } from "@/components/LockedControl";
+import { TableBulkBar } from "@/components/Table";
 import { Tag } from "@/components/Tag";
+import { LockedCheckbox } from "./LockedCheckbox";
 import flagUk from "./assets/flag-uk.svg";
 import {
   INBOX_NUMBER,
@@ -228,11 +231,18 @@ function ThreadList({
   onSelect: (id: string) => void;
   locks?: InboxLocks;
 }) {
-  // Bulk actions on threads (archive, delete, mark read, assign) are
-  // conversation management — the ⋮ menu's verbs. When those are locked the
-  // checkbox goes, and the preview line drops the indent that sat under it.
-  const bulk = !locks?.more;
+  // Bulk actions on threads (mark read, archive, delete) are conversation
+  // management — the ⋮ menu's verbs — so the checkboxes follow its lock:
+  // disabled with the license reason for View-only.
   const [search, setSearch] = useState("");
+  const [checked, setChecked] = useState<Set<string>>(() => new Set());
+  const toggle = (id: string, on: boolean) =>
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   const q = search.trim().toLowerCase();
   const threads = q
     ? INBOX_THREADS.filter(
@@ -305,16 +315,20 @@ function ThreadList({
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-2">
-                    {bulk ? (
-                      <span onClick={(event) => event.stopPropagation()} className="flex">
-                        <Checkbox size="sm" aria-label={`Select ${t.name}`} />
-                      </span>
-                    ) : null}
+                    <span onClick={(event) => event.stopPropagation()} className="flex">
+                      <LockedCheckbox
+                        lock={locks?.more}
+                        size="sm"
+                        aria-label={`Select ${t.name}`}
+                        checked={checked.has(t.id)}
+                        onCheckedChange={(on) => toggle(t.id, on)}
+                      />
+                    </span>
                     <span className="truncate text-label-md text-foreground">{t.name}</span>
                   </span>
                   <span className="shrink-0 text-paragraph-sm text-muted-foreground">{t.time}</span>
                 </div>
-                <div className={cn("flex items-center gap-1", bulk && "pl-6")}>
+                <div className={"flex items-center gap-1 pl-6"}>
                   <span className="min-w-0 flex-1 truncate text-paragraph-sm text-muted-foreground">
                     {last.text}
                   </span>
@@ -329,6 +343,54 @@ function ThreadList({
           );
         })}
       </ul>
+
+      {/* Absolute against <main>, not this 360px column: the bar is wider
+          than the list, so it centres over the whole inbox like a table's. */}
+      <TableBulkBar
+        count={checked.size}
+        label={checked.size === 1 ? "Item Selected" : "Items Selected"}
+        actions={
+          <>
+            {threads.every((t) => checked.has(t.id)) ? null : (
+              <Button
+                variant="grey-outline"
+                size="sm"
+                className="bg-white"
+                leftIcon={<IconSelectAll size={16} />}
+                onClick={() => setChecked(new Set(threads.map((t) => t.id)))}
+              >
+                Select All
+              </Button>
+            )}
+            <Button
+              variant="grey-outline"
+              size="sm"
+              className="bg-white"
+              leftIcon={<IconChecks size={16} />}
+              onClick={() => setChecked(new Set())}
+            >
+              Mark as read
+            </Button>
+            <Button
+              variant="grey-outline"
+              size="sm"
+              className="bg-white"
+              leftIcon={<IconArchive size={16} />}
+              onClick={() => setChecked(new Set())}
+            >
+              Archive
+            </Button>
+            <Button
+              variant="error"
+              size="sm"
+              leftIcon={<IconTrash size={16} />}
+              onClick={() => setChecked(new Set())}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      />
     </section>
   );
 }
@@ -505,7 +567,8 @@ export function InboxPage({ locks }: { locks?: InboxLocks } = {}) {
   const [selectedId, setSelectedId] = useState(INBOX_THREADS[0].id);
   const thread = INBOX_THREADS.find((t) => t.id === selectedId) ?? INBOX_THREADS[0];
   return (
-    <main className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
+    // Relative so the thread list's bulk bar centres over the whole inbox.
+    <main className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
       <FolderRail />
       <ThreadList selectedId={selectedId} onSelect={setSelectedId} locks={locks} />
       <Conversation thread={thread} locks={locks} />
