@@ -116,8 +116,9 @@ export function PrototypeLauncher({
               onClick={onStartLicenseExperience}
             />
             {/* Desktop and mobile are member-side only: license management
-                lives on the web app, so these show what's locked for a Lite
-                or View-only user, never an admin view. */}
+                lives on the web app, so these show what a Lite or View-only
+                user meets — refused at desktop and Sales Dialer sign-in,
+                locked verbs on the JustCall mobile app — never an admin view. */}
             <PrototypeCard index="03" title="Desktop app" onClick={onStartDesktopApp} />
             <PrototypeCard index="04" title="JustCall mobile app" onClick={onStartMobileApp} />
             {/* Sales Dialer ships its own mobile app, separate from
