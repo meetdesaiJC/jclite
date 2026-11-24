@@ -2,7 +2,13 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { DURATION } from "@/lib/motion";
 import { usePresence } from "@/lib/usePresence";
-import { LockedControl, NO_ACTIONS_LOCK, type Lock } from "@/components/LockedControl";
+import {
+  LICENSE_LOCK_HINT,
+  LICENSE_LOCK_REASON,
+  NO_ACTIONS_LOCK,
+  type Lock,
+} from "@/components/LockedControl";
+import { Toast } from "@/components/Toast";
 import { Checkbox } from "@/components/Checkbox";
 import {
   IconArchive,
@@ -55,18 +61,20 @@ import {
 import usFlag from "./assets/dialer/us-flag.svg";
 
 /**
- * Mobile app, as a Lite or View-only member sees it. Like the desktop app it
- * has no admin surface, so the license only shows up as locked verbs: every
- * list and record opens, and calling and sending stay visible, muted, and say
- * why on tap (LockedControl opens its reason on click — touch has no hover).
+ * Mobile app, as a Lite or View-only member sees it. It has no admin
+ * surface, so the license only shows up as locked verbs: every
+ * list and record opens, and calling and sending stay visible and muted.
+ * Tapping one raises an error toast at the top of the screen, as the app
+ * reports every other failed action — not a tooltip, which a phone has no
+ * hover to discover and a thumb covers the moment it opens.
  *
  * The mobile app already ships on the new design language (the "Mobile UI DS
- * Migration" Figma), so unlike the desktop prototype it is drawn straight
+ * Migration" Figma), so unlike the older-looking apps it is drawn straight
  * from DS tokens: Heading 1 is text-heading-xxl, names are text-label-md,
  * body is text-paragraph-md / -sm.
  *
- * It opens on Recents for the same reason the desktop opens on Call Logs:
- * the dialer is the one screen where nothing works for these licenses.
+ * It opens on Recents rather than the dialer: the dialer is the one screen
+ * where nothing works for these licenses.
  */
 type MobileTab = "contacts" | "recents" | "dialer" | "sms";
 
@@ -87,27 +95,37 @@ function useFullScreen() {
   }, [set]);
 }
 
+/** Raises the lock toast; provided once by the phone frame. */
+const LockToastContext = React.createContext<(lock: Lock) => void>(() => {});
+
+/**
+ * The mobile take on LockedControl: the same muted, aria-disabled control,
+ * but the tap reports through the screen's toast instead of a tooltip. The
+ * wrapper matches LockedControl's, so layouts built around it don't shift.
+ */
 function Gate({
   lock,
-  placement,
   triggerClassName,
   children,
 }: {
   lock?: Lock;
-  placement?: "top" | "bottom" | "left" | "right";
   triggerClassName?: string;
   children: React.ReactElement<Record<string, unknown>>;
 }) {
+  const showLock = React.useContext(LockToastContext);
+  if (!lock) return children;
   return (
-    <LockedControl
-      locked={Boolean(lock)}
-      reason={lock?.reason}
-      hint={lock?.hint}
-      placement={placement}
-      triggerClassName={triggerClassName}
-    >
-      {children}
-    </LockedControl>
+    <span className={cn("relative inline-flex", triggerClassName)}>
+      {React.cloneElement(children, {
+        "aria-disabled": true,
+        "data-locked": "true",
+        onClick: (event: React.MouseEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+          showLock(lock);
+        },
+      })}
+    </span>
   );
 }
 
@@ -1106,7 +1124,7 @@ function DialerScreen({ locks }: { locks: MobileAppLocks }) {
             ))}
           </div>
         </Gate>
-        <Gate lock={locks.dialer} placement="top">
+        <Gate lock={locks.dialer}>
           <button
             type="button"
             aria-label="Call"
@@ -1115,7 +1133,7 @@ function DialerScreen({ locks }: { locks: MobileAppLocks }) {
             <IconPhone size={24} />
           </button>
         </Gate>
-        <Gate lock={locks.dialer} placement="top">
+        <Gate lock={locks.dialer}>
           <button
             type="button"
             className="flex h-10 items-center gap-2 rounded-[4px] border border-line bg-white px-3 text-paragraph-md text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-brand/24 data-[locked=true]:text-disabled-fg"
@@ -1431,35 +1449,35 @@ function ThreadView({
           via <img src={usFlag} alt="" className="size-4 rounded-full object-cover" />
           <span className="text-foreground">{MOBILE_INBOX.name}</span>
         </span>
-        <Gate lock={locks.composer} placement="top" triggerClassName="flex w-full">
+        <Gate lock={locks.composer} triggerClassName="flex w-full">
           <div tabIndex={0} aria-label="Message" className="w-full py-2 text-paragraph-lg text-disabled-fg outline-none focus-visible:ring-2 focus-visible:ring-brand/24">
             Type a message
           </div>
         </Gate>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
-            <Gate lock={locks.composer} placement="top">
+            <Gate lock={locks.composer}>
               <button type="button" aria-label="Attach" className={cn(COMPOSER_TOOL, "bg-secondary-bg")}>
                 <IconPlus size={20} />
               </button>
             </Gate>
-            <Gate lock={locks.composer} placement="top">
+            <Gate lock={locks.composer}>
               <button type="button" aria-label="Saved templates" className={COMPOSER_TOOL}>
                 <IconBookmark size={20} />
               </button>
             </Gate>
-            <Gate lock={locks.composer} placement="top">
+            <Gate lock={locks.composer}>
               <button type="button" aria-label="Voice note" className={COMPOSER_TOOL}>
                 <IconMicrophone size={16} className="size-5" />
               </button>
             </Gate>
-            <Gate lock={locks.composer} placement="top">
+            <Gate lock={locks.composer}>
               <button type="button" aria-label="AI assist" className={cn(COMPOSER_TOOL, "text-ai-gradient-from")}>
                 <IconSparkles size={20} />
               </button>
             </Gate>
           </div>
-          <Gate lock={locks.composer} placement="top">
+          <Gate lock={locks.composer}>
             <button
               type="button"
               aria-label="Send"
@@ -1537,8 +1555,8 @@ function SmsGlyph() {
 }
 
 /**
- * "You" has nothing the license changes, so — like the desktop's Settings —
- * it is drawn but doesn't open (`id: null`).
+ * "You" has nothing the license changes, so it is drawn but doesn't open
+ * (`id: null`).
  */
 const NAV_ITEMS: { id: MobileTab | null; label: string; icon: React.ReactNode; badge?: string }[] = [
   { id: "contacts", label: "Contacts", icon: <IconContacts size={24} /> },
@@ -1608,27 +1626,52 @@ export function MobileAppPrototype({ license }: { license: License }) {
   const [tab, setTab] = React.useState<MobileTab>("recents");
   const [fullScreen, setFullScreen] = React.useState(false);
   const locks = mobileAppLocks(license);
+  // One toast at a time. Each tap bumps the key, so a repeat tap replays the
+  // entrance and restarts the dwell rather than being swallowed silently.
+  // Closing only flips `open`, so Toast keeps the lock mounted long enough
+  // to play its exit.
+  const [lockToast, setLockToast] = React.useState<{ lock: Lock; key: number; open: boolean } | null>(
+    null
+  );
+  const showLock = React.useCallback(
+    (lock: Lock) => setLockToast((current) => ({ lock, key: (current?.key ?? 0) + 1, open: true })),
+    []
+  );
+  const closeLockToast = React.useCallback(
+    () => setLockToast((current) => (current ? { ...current, open: false } : null)),
+    []
+  );
   return (
     // Bottom room for the license switch, which starts bottom-centre here.
     <div className="flex h-screen items-center justify-center overflow-hidden bg-secondary-bg px-6 pt-6 pb-16">
-      {/* The phone's edges are the screen's: tooltips stay inside them, and
-          open on tap only, since a touch screen has no hover. */}
-      <div
-        data-tooltip-boundary
-        data-tooltip-tap-only
-        className="relative flex h-[812px] max-h-full w-[375px] shrink-0 flex-col overflow-hidden rounded-[44px] border-[6px] border-foreground bg-white shadow-600"
-      >
+      <div className="relative flex h-[812px] max-h-full w-[375px] shrink-0 flex-col overflow-hidden rounded-[44px] border-[6px] border-foreground bg-white shadow-600">
         <StatusBar />
-        <FullScreenContext.Provider value={setFullScreen}>
-          {/* Room under every screen for the floating tab bar. */}
-          <div className={cn("flex min-h-0 flex-1 flex-col", !fullScreen && "pb-24")}>
-            {tab === "recents" && <RecentsScreen locks={locks} />}
-            {tab === "contacts" && <ContactsScreen locks={locks} />}
-            {tab === "dialer" && <DialerScreen locks={locks} />}
-            {tab === "sms" && <SmsScreen locks={locks} />}
-          </div>
-        </FullScreenContext.Provider>
+        <LockToastContext.Provider value={showLock}>
+          <FullScreenContext.Provider value={setFullScreen}>
+            {/* Room under every screen for the floating tab bar. */}
+            <div className={cn("flex min-h-0 flex-1 flex-col", !fullScreen && "pb-24")}>
+              {tab === "recents" && <RecentsScreen locks={locks} />}
+              {tab === "contacts" && <ContactsScreen locks={locks} />}
+              {tab === "dialer" && <DialerScreen locks={locks} />}
+              {tab === "sms" && <SmsScreen locks={locks} />}
+            </div>
+          </FullScreenContext.Provider>
+        </LockToastContext.Provider>
         {fullScreen ? null : <TabBar tab={tab} onTabChange={setTab} />}
+        {/* Pinned under the status bar, edge to edge with the screen's
+            margins, as the Mobile Design System's toasts sit. */}
+        {lockToast ? (
+          <Toast
+            key={lockToast.key}
+            open={lockToast.open}
+            variant="error"
+            onClose={closeLockToast}
+            title={lockToast.lock.reason ?? LICENSE_LOCK_REASON}
+            className="absolute top-12 right-3 left-3 w-auto max-w-none"
+          >
+            {lockToast.lock.hint === undefined ? LICENSE_LOCK_HINT : lockToast.lock.hint}
+          </Toast>
+        ) : null}
       </div>
     </div>
   );

@@ -785,24 +785,10 @@ export default function App() {
     );
   }
 
+  // No license switch: Lite and View-only meet the same refusal at sign-in,
+  // so there is nothing for it to change. Both hashes still resolve.
   if (view === "desktop-lite" || view === "desktop-view-only") {
-    const license: License = view === "desktop-lite" ? "lite" : "view-only";
-    // Same switch as the web experience, swapping the hash in place so Back
-    // still leads to the launcher and the open tab survives the switch.
-    return (
-      <>
-        <DesktopAppPrototype license={license} onHome={goHome} />
-        <LicenseSwitch
-          anchor="bottom"
-          value={license}
-          onChange={(next) => {
-            const key: AppView = next === "lite" ? "desktop-lite" : "desktop-view-only";
-            window.history.replaceState(window.history.state, "", `#${key}`);
-            setView(key);
-          }}
-        />
-      </>
-    );
+    return <DesktopAppPrototype onHome={goHome} />;
   }
 
   if (view === "mobile-lite" || view === "mobile-view-only") {
@@ -824,21 +810,7 @@ export default function App() {
   }
 
   if (view === "sales-dialer-lite" || view === "sales-dialer-view-only") {
-    const license: License = view === "sales-dialer-lite" ? "lite" : "view-only";
-    return (
-      <>
-        <SalesDialerAppPrototype license={license} />
-        <LicenseSwitch
-          anchor="bottom"
-          value={license}
-          onChange={(next) => {
-            const key: AppView = next === "lite" ? "sales-dialer-lite" : "sales-dialer-view-only";
-            window.history.replaceState(window.history.state, "", `#${key}`);
-            setView(key);
-          }}
-        />
-      </>
-    );
+    return <SalesDialerAppPrototype />;
   }
 
   if (view === "in-call" || view === "v1-in-call") {

@@ -148,6 +148,7 @@ export const USED_ICON_ALIASES = {
   IconWrapUpTimeSetting: "Wrap up time setting",
   IconAgentUnavailability: "Agent unavailability",
   // Status / chrome
+  IconAlertCircleFilled: "alert-circle-filled",
   IconAlertTriangleFilled: "alert-triangle-filled",
   IconInfoCircleFilled: "info-circle-filled",
   IconCircleXFilled: "circle-x-filled",

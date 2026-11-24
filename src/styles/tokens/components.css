@@ -212,23 +212,12 @@
   --radius-lg: 0.75rem;
 
   /* ---------------------------------------------------------------- */
-  /* LEGACY DIALER TOKENS                                              */
-  /* The shipping desktop app predates Design System 2.0. The Lite /   */
-  /* View-only desktop prototype mirrors it as it ships today, so its  */
-  /* colours are matched to the nearest existing primitive rather than */
-  /* re-typed — a palette change still reaches them.                   */
+  /* LEGACY LOGIN TOKENS                                               */
+  /* The shipping desktop app's sign-in predates Design System 2.0.    */
+  /* The Lite / View-only desktop prototype mirrors it as it ships     */
+  /* today, mint Login button and all.                                 */
   /* ---------------------------------------------------------------- */
-  /* Header and bottom nav, and the nav's selected tab a step darker. */
-  --color-legacy-dialer-bar: var(--color-blue-800);
-  --color-legacy-dialer-bar-active: var(--color-blue-900);
-  /* Links, outgoing bubbles, row actions, the local-time chip. */
-  --color-legacy-dialer-accent: var(--color-blue-500);
-  /* Keypad digits read lighter than the accent in production. */
-  --color-legacy-dialer-key: var(--color-blue-400);
-  /* Incoming bubbles and the number field. */
-  --color-legacy-dialer-muted: var(--color-gray-100);
-  /* Call and Send are green in the old product. */
-  --color-legacy-dialer-go: var(--color-success);
+  --color-legacy-login: var(--color-success-border);
 
   /* ---------------------------------------------------------------- */
   /* DESKTOP CHROME TOKENS                                             */
@@ -247,15 +236,8 @@
   /* The Sales Dialer mobile app ships on its own older slate look,    */
   /* not the JustCall app's DS 2.0. Matched to the nearest primitive.  */
   /* ---------------------------------------------------------------- */
-  /* Header band, bottom nav, primary buttons, the selected segment. */
+  /* The Login pill and focus rings on its sign-in screen. */
   --color-sales-dialer-bar: var(--color-gray-700);
-  /* Dashboard chart: dialled is the teal area, answered the dark line. */
-  --color-sales-dialer-chart: var(--color-teal-500);
-  --color-sales-dialer-chart-fill: var(--color-teal-50);
-  --color-sales-dialer-chart-line: var(--color-blue-800);
-  /* Stat-row glyphs that no semantic role covers. */
-  --color-sales-dialer-stat-teal: var(--color-teal-500);
-  --color-sales-dialer-stat-indigo: var(--color-indigo-400);
 
   /* Typography */
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",

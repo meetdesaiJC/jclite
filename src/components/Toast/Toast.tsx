@@ -48,7 +48,10 @@ export function Toast({
 
   React.useEffect(() => {
     if (open) {
-      setPhase("entering");
+      // Leave an already-open toast alone: mounted with `open` true, the
+      // layout effect below has moved it to "open" by the time this runs,
+      // and resetting it would strand it at "entering" — invisible.
+      setPhase((current) => (current === "open" ? current : "entering"));
       return;
     }
     setPhase((current) => (current ? "exiting" : null));
