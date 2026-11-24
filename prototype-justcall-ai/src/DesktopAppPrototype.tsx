@@ -390,9 +390,9 @@ function CallLogRow({ log, locks }: { log: DesktopCallLog; locks: DesktopAppLock
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1">
             <span className={cn("truncate text-paragraph-lg", style.tone)}>{log.name ?? log.number}</span>
-            {/* Saving or renaming a contact writes to the directory — web app
-                only, even for Lite. */}
-            <Gate lock={locks.addContact}>
+            {/* Saving a new number as a contact is web app only, even for
+                Lite; editing a saved one is open to Lite. */}
+            <Gate lock={log.name ? locks.editContact : locks.addContact}>
               <button type="button" aria-label={log.name ? "Edit contact" : "Save contact"} className={ROW_ACTION}>
                 {log.name ? <IconPencil size={16} /> : <IconUser size={16} />}
               </button>
@@ -766,7 +766,7 @@ function ContactDetail({
               <IconMessage2 size={20} />
             </button>
           </Gate>
-          <Gate lock={locks.addContact}>
+          <Gate lock={locks.editContact}>
             <button
               type="button"
               aria-label="Edit contact"
@@ -1047,7 +1047,7 @@ function ConversationMenu({ locks }: { locks: DesktopAppLocks }) {
   );
   if (locks.conversation) return <Gate lock={NO_ACTIONS_LOCK}>{trigger}</Gate>;
   const items: MenuItem[] = [
-    { key: "edit", label: "Edit Contact", locked: locks.addContact },
+    { key: "edit", label: "Edit Contact", locked: locks.editContact },
     { key: "delete", label: "Delete conversation" },
     { key: "unread", label: "Mark as unread" },
   ];

@@ -197,8 +197,9 @@ export function callLogsLocks(license?: License) {
  *
  * - Calling and composing lock for both: the keypad and Call via, call-back
  *   and SMS on log and contact rows, New Message, the reply composer.
- * - Creating or editing a contact is web-app only even for Lite, so the
- *   desktop's add-contact entry points lock for both.
+ * - Adding a contact is web-app only even for Lite, so the desktop's
+ *   add-contact entry points (+, Save contact) lock for both. Editing an
+ *   existing contact stays open for Lite; View-only can't edit.
  * - The conversation actions the desktop has (close, delete, mark as
  *   unread) stay open for Lite; View-only reads threads only.
  * - An opened call log reads for both. Rating, disposition and notes edit
@@ -215,6 +216,7 @@ export function desktopAppLocks(license?: License) {
     newMessage: both,
     composer: both,
     addContact: both,
+    editContact: viewOnly,
     conversation: viewOnly,
     logDetails: viewOnly,
     blockNumber: viewOnly,
