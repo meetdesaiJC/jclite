@@ -198,8 +198,9 @@ export function callLogsLocks(license?: License) {
  *
  * - Calling and composing lock for both: the keypad and Call via, call-back
  *   and SMS on log and contact rows, New Message, the reply composer.
- * - Creating or editing a contact is web-app only even for Lite, so the
- *   desktop's add-contact entry points lock for both.
+ * - Adding a contact is web-app only even for Lite, so the desktop's
+ *   add-contact entry points (+, Save contact) lock for both. Editing an
+ *   existing contact stays open for Lite; View-only can't edit.
  * - The conversation actions the desktop has (close, delete, mark as
  *   unread) stay open for Lite; View-only reads threads only.
  * - An opened call log reads for both. Rating, disposition and notes edit
@@ -216,6 +217,7 @@ export function desktopAppLocks(license?: License) {
     newMessage: both,
     composer: both,
     addContact: both,
+    editContact: viewOnly,
     conversation: viewOnly,
     logDetails: viewOnly,
     blockNumber: viewOnly,
@@ -231,7 +233,8 @@ export type DesktopAppLocks = ReturnType<typeof desktopAppLocks>;
  *
  * - Calling and composing lock for both: the keypad, every call and SMS
  *   shortcut, New message (+), the composer and its tools.
- * - Adding or editing a contact is web app only — locked for both here.
+ * - Adding a contact is web app only — locked for both here. Editing an
+ *   existing contact stays open for Lite, as on desktop; View-only can't.
  *   Archiving calls is web app only too, but the app has no archive action,
  *   and opening the archived list is just viewing call logs, so it stays open.
  * - The conversation actions the sheet puts on mobile — assign, close,
@@ -251,6 +254,7 @@ export function mobileAppLocks(license?: License) {
     newMessage: both,
     composer: both,
     addContact: both,
+    editContact: viewOnly,
     conversation: viewOnly,
     logDetails: viewOnly,
     transcript: both,

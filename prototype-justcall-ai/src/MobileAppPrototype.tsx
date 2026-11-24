@@ -915,7 +915,8 @@ function ContactDetail({
         <button type="button" aria-label="Back to contacts" onClick={onBack} className={PILL_BUTTON}>
           <IconChevronLeft size={24} />
         </button>
-        <Gate lock={locks.addContact}>
+        {/* Editing a saved contact is open to Lite; adding one is not. */}
+        <Gate lock={locks.editContact}>
           <button type="button" className={cn(PILL_BUTTON, "px-5 text-label-lg text-success-text")}>
             Edit
           </button>
