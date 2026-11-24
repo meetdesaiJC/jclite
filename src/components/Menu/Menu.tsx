@@ -43,6 +43,12 @@ export interface MenuProps {
   trigger: React.ReactElement<Record<string, unknown>>;
   /** Which edge of the trigger the panel lines up with. Default `end`. */
   align?: "start" | "end";
+  /**
+   * Which side of the trigger the panel opens on. Default `bottom`; use `top`
+   * for triggers pinned to the bottom of the viewport (a floating bulk bar),
+   * where a downward panel would fall off-screen.
+   */
+  side?: "top" | "bottom";
   /** Accessible name for the list. */
   label?: string;
   className?: string;
@@ -50,7 +56,14 @@ export interface MenuProps {
 
 const GAP = 4;
 
-export function Menu({ items, trigger, align = "end", label, className }: MenuProps) {
+export function Menu({
+  items,
+  trigger,
+  align = "end",
+  side = "bottom",
+  label,
+  className,
+}: MenuProps) {
   const [open, setOpen] = React.useState(false);
   const [anchor, setAnchor] = React.useState<DOMRect | null>(null);
   const triggerRef = React.useRef<HTMLElement | null>(null);
@@ -125,7 +138,9 @@ export function Menu({ items, trigger, align = "end", label, className }: MenuPr
 
   const panelStyle: React.CSSProperties | undefined = anchor
     ? {
-        top: anchor.bottom + GAP,
+        ...(side === "top"
+          ? { bottom: window.innerHeight - anchor.top + GAP }
+          : { top: anchor.bottom + GAP }),
         ...(align === "end"
           ? { right: window.innerWidth - anchor.right }
           : { left: anchor.left }),
@@ -142,11 +157,18 @@ export function Menu({ items, trigger, align = "end", label, className }: MenuPr
               role="menu"
               aria-label={label}
               data-state={state}
+              data-placement={side}
               onKeyDown={onListKeyDown}
               style={panelStyle}
               className={cn(
                 "dropdown-panel fixed z-50 flex min-w-[200px] flex-col overflow-hidden rounded-[4px] border border-line bg-white py-1 shadow-400",
-                align === "end" ? "origin-top-right" : "origin-top-left",
+                side === "top"
+                  ? align === "end"
+                    ? "origin-bottom-right"
+                    : "origin-bottom-left"
+                  : align === "end"
+                    ? "origin-top-right"
+                    : "origin-top-left",
                 className
               )}
             >

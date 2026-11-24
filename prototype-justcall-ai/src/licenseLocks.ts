@@ -68,6 +68,7 @@ export function inboxLocks(license?: License) {
     assign: manage,
     close: manage,
     more: manage,
+    buyMore: manage,
   };
 }
 
