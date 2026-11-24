@@ -57,3 +57,13 @@ export const WithLockedRows: Story = {
     />
   ),
 };
+
+/** Opens upward, for a trigger pinned to the bottom of the screen. */
+export const OpensAbove: Story = {
+  parameters: { layout: "fullscreen" },
+  render: () => (
+    <div className="flex h-[360px] items-end justify-center p-6">
+      <Menu label="Campaign actions" side="top" trigger={Trigger} items={ITEMS} />
+    </div>
+  ),
+};
