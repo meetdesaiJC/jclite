@@ -6173,6 +6173,45 @@ export function IconUser({ size = 16, ...props }: IconProps) {
   );
 }
 
+export function IconUserPlus({ size = 20, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <path d="M4 14V12.6667C4 11.1939 5.19391 10 6.66667 10H9.33333M10.6667 12.6667H14.6667M12.6667 10.6667V14.6667M5.33333 4.66667C5.33333 6.13943 6.52724 7.33333 8 7.33333C9.47276 7.33333 10.6667 6.13943 10.6667 4.66667C10.6667 3.19391 9.47276 2 8 2C6.52724 2 5.33333 3.19391 5.33333 4.66667Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <path d="M5 17.5V15.8333C5 13.9924 6.49238 12.5 8.33333 12.5H11.6667M13.3333 15.8333H18.3333M15.8333 13.3333V18.3333M6.66667 5.83333C6.66667 7.67428 8.15905 9.16667 10 9.16667C11.8409 9.16667 13.3333 7.67428 13.3333 5.83333C13.3333 3.99238 11.8409 2.5 10 2.5C8.15905 2.5 6.66667 3.99238 6.66667 5.83333Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+      default:
+        return (
+          <>
+            <path d="M5 17.5V15.8333C5 13.9924 6.49238 12.5 8.33333 12.5H11.6667M13.3333 15.8333H18.3333M15.8333 13.3333V18.3333M6.66667 5.83333C6.66667 7.67428 8.15905 9.16667 10 9.16667C11.8409 9.16667 13.3333 7.67428 13.3333 5.83333C13.3333 3.99238 11.8409 2.5 10 2.5C8.15905 2.5 6.66667 3.99238 6.66667 5.83333Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconUserX({ size = 16, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {

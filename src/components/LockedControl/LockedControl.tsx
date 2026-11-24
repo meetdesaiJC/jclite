@@ -40,6 +40,15 @@ export interface Lock {
   hint?: React.ReactNode;
 }
 
+/**
+ * The lock for a ⋮ / more-actions trigger when the license blocks every row
+ * behind it. Opening a menu of nothing but muted rows makes people hover each
+ * one to learn the same thing, so the trigger itself locks and says it once.
+ * No hint: "contact your admin" is the row-level message, and here there is
+ * no single action to ask for.
+ */
+export const NO_ACTIONS_LOCK: Lock = { reason: "No actions available", hint: null };
+
 export interface LockedControlProps {
   /** Defaults to LICENSE_LOCK_REASON; override only when a control needs more. */
   reason?: React.ReactNode;

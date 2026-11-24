@@ -13,6 +13,7 @@ type PrototypeLauncherProps = {
   onStartLicenseManagement?: () => void;
   onStartDesktopApp?: () => void;
   onStartMobileApp?: () => void;
+  onStartSalesDialerApp?: () => void;
 };
 
 function PrototypeCard({
@@ -82,6 +83,7 @@ export function PrototypeLauncher({
   onStartLicenseManagement,
   onStartDesktopApp,
   onStartMobileApp,
+  onStartSalesDialerApp,
 }: PrototypeLauncherProps) {
   return (
     <div className="h-screen overflow-y-auto bg-white">
@@ -116,6 +118,9 @@ export function PrototypeLauncher({
                 or View-only user, never an admin view. */}
             <PrototypeCard index="03" title="Mobile app" onClick={onStartMobileApp} />
             <PrototypeCard index="04" title="Desktop app" onClick={onStartDesktopApp} />
+            {/* Sales Dialer ships its own mobile app, separate from
+                JustCall's, so it gets its own card. */}
+            <PrototypeCard index="05" title="Sales Dialer mobile app" onClick={onStartSalesDialerApp} />
           </PrototypeGroup>
         </div>
       </main>

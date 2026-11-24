@@ -2,7 +2,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { useDropdownPresence } from "@/components/Dropdown";
-import { LockedControl, type Lock } from "@/components/LockedControl";
+import { LockedControl, NO_ACTIONS_LOCK, type Lock } from "@/components/LockedControl";
 
 /**
  * Menu — a list of actions opened from a trigger, usually a row's ⋮ button.
@@ -17,7 +17,9 @@ import { LockedControl, type Lock } from "@/components/LockedControl";
  * it rather than letting it drift away from its row.
  *
  * A row the license blocks stays in the list, muted, and says why on hover —
- * the LockedControl rule — instead of disappearing from the menu.
+ * the LockedControl rule — instead of disappearing from the menu. When every
+ * row is locked the menu doesn't open at all: the trigger locks with
+ * NO_ACTIONS_LOCK instead.
  */
 
 export interface MenuItem {
@@ -100,6 +102,14 @@ export function Menu({ items, trigger, align = "end", label, className }: MenuPr
     const step = event.key === "ArrowDown" ? 1 : -1;
     rows[(index + step + rows.length) % rows.length]?.focus();
   };
+
+  if (items.length > 0 && items.every((item) => item.locked)) {
+    return (
+      <LockedControl reason={NO_ACTIONS_LOCK.reason} hint={NO_ACTIONS_LOCK.hint} triggerClassName="flex">
+        {trigger}
+      </LockedControl>
+    );
+  }
 
   const triggerElement = React.cloneElement(trigger, {
     ref: (node: HTMLElement | null) => {
