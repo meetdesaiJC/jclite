@@ -119,7 +119,7 @@ export function PrototypeLauncher({
                 lives on the web app, so these show what's locked for a Lite
                 or View-only user, never an admin view. */}
             <PrototypeCard index="03" title="Desktop app" onClick={onStartDesktopApp} />
-            <PrototypeCard index="04" title="Mobile app" onClick={onStartMobileApp} />
+            <PrototypeCard index="04" title="JustCall mobile app" onClick={onStartMobileApp} />
             {/* Sales Dialer ships its own mobile app, separate from
                 JustCall's, so it gets its own card. */}
             <PrototypeCard index="05" title="Sales Dialer mobile app" onClick={onStartSalesDialerApp} />
