@@ -1,6 +1,7 @@
 export {
   Tooltip,
   TooltipTrigger,
+  TOOLTIP_BOUNDARY_ATTR,
   tooltipShellVariants,
   tooltipContentVariants,
   type TooltipProps,

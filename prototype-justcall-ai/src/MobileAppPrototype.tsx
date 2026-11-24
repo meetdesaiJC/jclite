@@ -1610,7 +1610,11 @@ export function MobileAppPrototype({ license }: { license: License }) {
   return (
     // Bottom room for the license switch, which starts bottom-centre here.
     <div className="flex h-screen items-center justify-center overflow-hidden bg-secondary-bg px-6 pt-6 pb-16">
-      <div className="relative flex h-[812px] max-h-full w-[375px] shrink-0 flex-col overflow-hidden rounded-[44px] border-[6px] border-foreground bg-white shadow-600">
+      {/* The phone's edges are the screen's: tooltips stay inside them. */}
+      <div
+        data-tooltip-boundary
+        className="relative flex h-[812px] max-h-full w-[375px] shrink-0 flex-col overflow-hidden rounded-[44px] border-[6px] border-foreground bg-white shadow-600"
+      >
         <StatusBar />
         <FullScreenContext.Provider value={setFullScreen}>
           {/* Room under every screen for the floating tab bar. */}

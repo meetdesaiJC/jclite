@@ -379,6 +379,13 @@ type TriggerPlacement =
 /** Closest a tooltip may sit to the viewport edge. */
 const VIEWPORT_MARGIN_PX = 8;
 
+/**
+ * Mark a container with this attribute and tooltips opened inside it stay
+ * within its left and right edges instead of the viewport's — a phone frame
+ * in a prototype, where a bubble spilling past the bezel reads as broken.
+ */
+export const TOOLTIP_BOUNDARY_ATTR = "data-tooltip-boundary";
+
 function getFixedStyle(
   placement: TriggerPlacement,
   trigger: DOMRect
@@ -536,20 +543,22 @@ export function TooltipTrigger({
       bubble.style.left = `${next.left}px`;
       bubble.style.transform = typeof next.transform === "string" ? next.transform : "none";
 
-      // Keep the bubble inside the viewport. A control near the edge (a ⋮ at
-      // the far right of a toolbar) would otherwise push half the bubble off
-      // screen. Shift it in, then slide the arrow back by the same amount so
-      // it still points at the trigger.
+      // Keep the bubble inside the viewport, or inside the nearest boundary
+      // container when there is one. A control near the edge (a ⋮ at the far
+      // right of a toolbar) would otherwise push half the bubble off screen.
+      // Shift it in, then slide the arrow back by the same amount so it still
+      // points at the trigger.
       const arrowEl = bubble.querySelector<HTMLElement>("[data-tooltip-arrow]");
       if (arrowEl) arrowEl.style.translate = "";
       if (placement === "left" || placement === "right") return;
       const box = bubble.getBoundingClientRect();
       const margin = VIEWPORT_MARGIN_PX;
+      const bounds = trigger.closest(`[${TOOLTIP_BOUNDARY_ATTR}]`)?.getBoundingClientRect();
+      const minX = Math.max(0, bounds?.left ?? 0) + margin;
+      const maxX = Math.min(window.innerWidth, bounds?.right ?? window.innerWidth) - margin;
       let dx = 0;
-      if (box.left < margin) dx = margin - box.left;
-      else if (box.right > window.innerWidth - margin) {
-        dx = window.innerWidth - margin - box.right;
-      }
+      if (box.left < minX) dx = minX - box.left;
+      else if (box.right > maxX) dx = maxX - box.right;
       if (dx !== 0) {
         bubble.style.left = `${Number(next.left) + dx}px`;
         if (arrowEl) arrowEl.style.translate = `${-dx}px 0`;
