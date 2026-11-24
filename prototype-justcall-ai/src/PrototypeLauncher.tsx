@@ -69,7 +69,7 @@ function PrototypeGroup({
   children: ReactNode;
 }) {
   return (
-    <div className="flex w-full flex-col items-start gap-3">
+    <div className="flex w-full flex-col items-start gap-3 sm:w-[400px]">
       <h3 className="text-label-sm uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </h3>
@@ -94,9 +94,11 @@ export function PrototypeLauncher({
           </h1>
         </div>
 
-        {/* More air between the groups than between a group's own cards, so
-            the admin flow reads as its own thing. */}
-        <div className="flex w-full flex-col items-start gap-10 sm:w-[400px]">
+        {/* Admin and the license experience sit side by side, so the one
+            admin card isn't stacked above a long column of member views.
+            More air between the groups than between a group's own cards, so
+            the admin flow reads as its own thing. Stacks on narrow screens. */}
+        <div className="flex w-full flex-col items-start gap-10 sm:flex-row">
           {/* Admin first: licenses have to be assigned before a Lite or
               View-only user has anything to experience. */}
           <PrototypeGroup label="Admin">
