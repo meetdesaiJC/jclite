@@ -232,7 +232,8 @@ export type DesktopAppLocks = ReturnType<typeof desktopAppLocks>;
  *
  * - Calling and composing lock for both: the keypad, every call and SMS
  *   shortcut, New message (+), the composer and its tools.
- * - Adding or editing a contact is web app only — locked for both here.
+ * - Adding a contact is web app only — locked for both here. Editing an
+ *   existing contact stays open for Lite, as on desktop; View-only can't.
  *   Archiving calls is web app only too, but the app has no archive action,
  *   and opening the archived list is just viewing call logs, so it stays open.
  * - The conversation actions the sheet puts on mobile — assign, close,
@@ -252,6 +253,7 @@ export function mobileAppLocks(license?: License) {
     newMessage: both,
     composer: both,
     addContact: both,
+    editContact: viewOnly,
     conversation: viewOnly,
     logDetails: viewOnly,
     transcript: both,
