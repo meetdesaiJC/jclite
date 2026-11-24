@@ -31,7 +31,7 @@ import {
   IconUserX,
   IconUsersGroup,
 } from "@/components/Icon";
-import { LockedControl, type Lock } from "@/components/LockedControl";
+import { LockedControl, NO_ACTIONS_LOCK, type Lock } from "@/components/LockedControl";
 import { TableBulkBar } from "@/components/Table";
 import { Tag } from "@/components/Tag";
 import { LockedCheckbox } from "./LockedCheckbox";
@@ -433,7 +433,7 @@ function Conversation({ thread, locks }: { thread: InboxThread; locks?: InboxLoc
               </Button>
             </Gate>
           </div>
-          <Gate lock={locks?.more}>
+          <Gate lock={locks?.more && NO_ACTIONS_LOCK}>
             <button
               type="button"
               aria-label="More actions"

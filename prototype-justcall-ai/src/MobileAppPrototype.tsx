@@ -2,7 +2,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { DURATION } from "@/lib/motion";
 import { usePresence } from "@/lib/usePresence";
-import { LockedControl, type Lock } from "@/components/LockedControl";
+import { LockedControl, NO_ACTIONS_LOCK, type Lock } from "@/components/LockedControl";
 import { Checkbox } from "@/components/Checkbox";
 import {
   IconArchive,
@@ -371,7 +371,7 @@ function CallDetail({
       <IconDotsVertical size={20} />
     </button>
   );
-  const more = locks.conversation ? <Gate lock={locks.conversation}>{moreTrigger}</Gate> : moreTrigger;
+  const more = locks.conversation ? <Gate lock={NO_ACTIONS_LOCK}>{moreTrigger}</Gate> : moreTrigger;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -787,12 +787,11 @@ function RecentsScreen({ locks }: { locks: MobileAppLocks }) {
         title="Recents"
         trailing={
           <div className="flex rounded-full border border-line bg-white shadow-100">
-            {/* Archiving calls is web app only, even for Lite. */}
-            <Gate lock={locks.archiveCalls}>
-              <button type="button" aria-label="Archived calls" className={cn(PILL_BUTTON, "border-0 shadow-none")}>
-                <IconArchive size={20} />
-              </button>
-            </Gate>
+            {/* Opens the archived list — viewing call logs, which the sheet
+                gives both licenses on mobile. Only archiving is web app only. */}
+            <button type="button" aria-label="Archived calls" className={cn(PILL_BUTTON, "border-0 shadow-none")}>
+              <IconArchive size={20} />
+            </button>
             <button type="button" aria-label="Filter" className={cn(PILL_BUTTON, "border-0 shadow-none")}>
               <IconFilter size={20} />
             </button>
@@ -1370,7 +1369,7 @@ function ThreadView({
         </Gate>
         {/* View-only can't act on a conversation, so the trigger locks rather
             than opening a sheet of nothing but locked rows. */}
-        {locks.conversation ? <Gate lock={locks.conversation}>{more}</Gate> : more}
+        {locks.conversation ? <Gate lock={NO_ACTIONS_LOCK}>{more}</Gate> : more}
       </div>
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-line bg-secondary-bg px-4">
         <Gate lock={locks.conversation}>
@@ -1611,7 +1610,13 @@ export function MobileAppPrototype({ license }: { license: License }) {
   return (
     // Bottom room for the license switch, which starts bottom-centre here.
     <div className="flex h-screen items-center justify-center overflow-hidden bg-secondary-bg px-6 pt-6 pb-16">
-      <div className="relative flex h-[812px] max-h-full w-[375px] shrink-0 flex-col overflow-hidden rounded-[44px] border-[6px] border-foreground bg-white shadow-600">
+      {/* The phone's edges are the screen's: tooltips stay inside them, and
+          open on tap only, since a touch screen has no hover. */}
+      <div
+        data-tooltip-boundary
+        data-tooltip-tap-only
+        className="relative flex h-[812px] max-h-full w-[375px] shrink-0 flex-col overflow-hidden rounded-[44px] border-[6px] border-foreground bg-white shadow-600"
+      >
         <StatusBar />
         <FullScreenContext.Provider value={setFullScreen}>
           {/* Room under every screen for the floating tab bar. */}

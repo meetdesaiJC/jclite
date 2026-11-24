@@ -2,7 +2,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/Button";
 import { IconCopy, IconDotsVertical } from "@/components/Icon";
-import { LockedControl, type Lock } from "@/components/LockedControl";
+import { LockedControl, NO_ACTIONS_LOCK, type Lock } from "@/components/LockedControl";
 import { Tabs } from "@/components/Tabs";
 import { Tag } from "@/components/Tag";
 import zapierLogo from "./assets/integrations/zapier.svg";
@@ -136,7 +136,7 @@ function IntegrationCard({
             <Tag size="sm" color={status.color}>
               {status.label}
             </Tag>
-            <Gate lock={locks.manage}>
+            <Gate lock={locks.manage && NO_ACTIONS_LOCK}>
               <button
                 type="button"
                 aria-label={`More actions for ${integration.name}`}

@@ -14,7 +14,9 @@ import { ProfileMenu } from "@/components/ProfileMenu";
 import { PrototypeLauncher } from "./PrototypeLauncher";
 import { DesktopAppPrototype } from "./DesktopAppPrototype";
 import { MobileAppPrototype } from "./MobileAppPrototype";
+import { SalesDialerAppPrototype } from "./SalesDialerAppPrototype";
 import { TeamMembersPage } from "./TeamMembersPage";
+import { RolesPage } from "./RolesPage";
 import { BillingPage, BILLING_NAV_ITEMS } from "./BillingPage";
 import { AddMembersFlow } from "./AddMembersFlow";
 import { cn } from "@/lib/utils";
@@ -39,6 +41,7 @@ import {
   callLogsLocks,
   contactsLocks,
   dialerLock,
+  rolesLocks,
   appIntegrationLocks,
   inboxLocks,
   liveMonitoringLocks,
@@ -78,7 +81,9 @@ type AppView =
   | "desktop-lite"
   | "desktop-view-only"
   | "mobile-lite"
-  | "mobile-view-only";
+  | "mobile-view-only"
+  | "sales-dialer-lite"
+  | "sales-dialer-view-only";
 
 const APP_VIEWS: readonly AppView[] = [
   "launcher",
@@ -96,6 +101,8 @@ const APP_VIEWS: readonly AppView[] = [
   "desktop-view-only",
   "mobile-lite",
   "mobile-view-only",
+  "sales-dialer-lite",
+  "sales-dialer-view-only",
 ];
 
 /**
@@ -253,7 +260,8 @@ type LicensePage =
   | "workflows"
   | "bulk-sms"
   | "ai-agents"
-  | "ai-knowledge-base";
+  | "ai-knowledge-base"
+  | "roles-permissions";
 
 /** Pages reached straight from a sidenav key, with their header titles. */
 const NAV_PAGES: Partial<Record<LicensePage, string>> = {
@@ -264,6 +272,7 @@ const NAV_PAGES: Partial<Record<LicensePage, string>> = {
   "bulk-sms": "Bulk SMS/MMS",
   "ai-agents": "AI Voice Agent",
   "ai-knowledge-base": "Knowledge Base",
+  "roles-permissions": "Roles & Permissions",
 };
 
 /**
@@ -629,6 +638,8 @@ function LicenseFlow({
               <AgentsPage locks={aiVoiceAgentLocks(license)} />
             ) : page === "ai-knowledge-base" ? (
               <KnowledgeBasePage locks={aiVoiceAgentLocks(license)} />
+            ) : page === "roles-permissions" ? (
+              <RolesPage locks={rolesLocks(license)} />
             ) : page === "inbox" ? (
               <InboxPage locks={inboxLocks(license)} />
             ) : page === "phone-numbers" ? (
@@ -752,6 +763,7 @@ export default function App() {
         onStartLicenseManagement={() => openView("license-admin")}
         onStartDesktopApp={() => openView("desktop-lite")}
         onStartMobileApp={() => openView("mobile-lite")}
+        onStartSalesDialerApp={() => openView("sales-dialer-lite")}
       />
     );
   }
@@ -803,6 +815,24 @@ export default function App() {
           value={license}
           onChange={(next) => {
             const key: AppView = next === "lite" ? "mobile-lite" : "mobile-view-only";
+            window.history.replaceState(window.history.state, "", `#${key}`);
+            setView(key);
+          }}
+        />
+      </>
+    );
+  }
+
+  if (view === "sales-dialer-lite" || view === "sales-dialer-view-only") {
+    const license: License = view === "sales-dialer-lite" ? "lite" : "view-only";
+    return (
+      <>
+        <SalesDialerAppPrototype license={license} />
+        <LicenseSwitch
+          anchor="bottom"
+          value={license}
+          onChange={(next) => {
+            const key: AppView = next === "lite" ? "sales-dialer-lite" : "sales-dialer-view-only";
             window.history.replaceState(window.history.state, "", `#${key}`);
             setView(key);
           }}

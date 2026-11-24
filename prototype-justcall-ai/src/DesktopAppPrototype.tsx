@@ -1,6 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { LockedControl, type Lock } from "@/components/LockedControl";
+import { LockedControl, NO_ACTIONS_LOCK, type Lock } from "@/components/LockedControl";
 import { Menu, type MenuItem } from "@/components/Menu";
 import {
   IconArrowBackUp,
@@ -1045,7 +1045,7 @@ function ConversationMenu({ locks }: { locks: DesktopAppLocks }) {
       <IconMore size={20} />
     </button>
   );
-  if (locks.conversation) return <Gate lock={locks.conversation}>{trigger}</Gate>;
+  if (locks.conversation) return <Gate lock={NO_ACTIONS_LOCK}>{trigger}</Gate>;
   const items: MenuItem[] = [
     { key: "edit", label: "Edit Contact", locked: locks.addContact },
     { key: "delete", label: "Delete conversation" },

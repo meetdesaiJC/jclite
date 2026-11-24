@@ -47,6 +47,14 @@ export function teamMemberLocks(license?: License) {
 }
 
 /**
+ * Roles & Permissions: Lite manages roles; View-only can read them.
+ */
+export function rolesLocks(license?: License) {
+  const manage = forViewOnly(license);
+  return { create: manage, assign: manage, edit: manage, duplicate: manage, delete: manage };
+}
+
+/**
  * SMS Inbox. Neither license sends: new message and the reply composer (send
  * and schedule included) are locked for both. View-only also can't manage a
  * conversation — assign, close, and the ⋮ menu (archive, delete, download,
@@ -222,8 +230,9 @@ export type DesktopAppLocks = ReturnType<typeof desktopAppLocks>;
  *
  * - Calling and composing lock for both: the keypad, every call and SMS
  *   shortcut, New message (+), the composer and its tools.
- * - Adding or editing a contact, and archiving calls, are web app only —
- *   locked for both here.
+ * - Adding or editing a contact is web app only — locked for both here.
+ *   Archiving calls is web app only too, but the app has no archive action,
+ *   and opening the archived list is just viewing call logs, so it stays open.
  * - The conversation actions the sheet puts on mobile — assign, close,
  *   archive, mark unread, DNM, DND, blacklist, tags — stay open for Lite.
  *   View-only reads threads only.
@@ -241,7 +250,6 @@ export function mobileAppLocks(license?: License) {
     newMessage: both,
     composer: both,
     addContact: both,
-    archiveCalls: both,
     conversation: viewOnly,
     logDetails: viewOnly,
     transcript: both,
@@ -272,3 +280,37 @@ export function aiVoiceAgentLocks(license?: License) {
 }
 
 export type AiVoiceAgentLocks = ReturnType<typeof aiVoiceAgentLocks>;
+
+/**
+ * Sales Dialer mobile app — a separate app from JustCall's, built around
+ * running campaigns. The permissions sheet's Sales Dialer rows put only the
+ * campaign list and campaign analytics on mobile, and keep creating, editing,
+ * launching and managing a campaign's contacts from both licenses. So almost
+ * everything that acts here locks for both, and the two licenses differ only
+ * on an opened call.
+ *
+ * - Start / Resume / Re-run launch a campaign: locked for both.
+ * - Campaign Settings and Contacts Lists are where a campaign is edited and
+ *   its contacts managed: locked for both. Archive changes the campaign, as
+ *   on the web's Sales Dialer page: locked for both.
+ * - Analytics, the dashboard and the call list read: open to both.
+ * - The Settings tab is dialer configuration (cool-off, data centre) and
+ *   call forwarding. "Edit settings" is web app only on the sheet even for
+ *   Lite, and forwarding is calling, so every control there locks for both.
+ *   Logout stays open.
+ * - An opened call reads for both. Notes, disposition and rating edit the
+ *   record — Lite keeps them, as on the JustCall app; View-only doesn't.
+ */
+export function salesDialerAppLocks(license?: License) {
+  const both = forBoth(license);
+  return {
+    runCampaign: both,
+    campaignSettings: both,
+    contactLists: both,
+    archiveCampaign: both,
+    settings: both,
+    logDetails: forViewOnly(license),
+  };
+}
+
+export type SalesDialerAppLocks = ReturnType<typeof salesDialerAppLocks>;
