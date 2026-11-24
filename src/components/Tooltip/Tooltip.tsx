@@ -386,6 +386,14 @@ const VIEWPORT_MARGIN_PX = 8;
  */
 export const TOOLTIP_BOUNDARY_ATTR = "data-tooltip-boundary";
 
+/**
+ * Mark a container with this attribute and tooltips inside it ignore hover
+ * and focus: a touch screen has no hover, so in a phone-frame prototype a
+ * bubble appearing as the cursor drifts past reads as desktop behaviour.
+ * Only a tap opens one — LockedControl's click, or any controlled `open`.
+ */
+export const TOOLTIP_TAP_ONLY_ATTR = "data-tooltip-tap-only";
+
 function getFixedStyle(
   placement: TriggerPlacement,
   trigger: DOMRect
@@ -497,6 +505,7 @@ export function TooltipTrigger({
 
   const scheduleOpen = () => {
     if (disabled) return;
+    if (triggerRef.current?.closest(`[${TOOLTIP_TAP_ONLY_ATTR}]`)) return;
     clearTimer();
     timerRef.current = setTimeout(() => setOpen(true), delay);
   };
