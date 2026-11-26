@@ -149,6 +149,8 @@ export const USED_ICON_ALIASES = {
   IconAgentUnavailability: "Agent unavailability",
   // Status / chrome
   IconAlertCircleFilled: "alert-circle-filled",
+  IconWorld: "world",
+  IconExternalLink: "external-link",
   IconAlertTriangleFilled: "alert-triangle-filled",
   IconInfoCircleFilled: "info-circle-filled",
   IconCircleXFilled: "circle-x-filled",
