@@ -1,8 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { IconAlertTriangleFilled } from "@/components/Icon";
 import { Modal } from "@/components/Modal";
-import { WebOnlyNotice, type LoginBlockStyle } from "./WebOnlyNotice";
+import { WebOnlyNotice } from "./WebOnlyNotice";
 import justcallMark from "./assets/justcall-mark.svg";
 import googleLogo from "./assets/google-logo.svg";
 import microsoftLogo from "./assets/microsoft-logo.svg";
@@ -91,22 +90,18 @@ function WindowTitleBar({ title, onClose }: { title: string; onClose: () => void
 
 /**
  * Every way in — password, Google, Microsoft — ends at the same refusal,
- * because it's the license that's turned away, not the credentials. The
- * banner says so and points to the web app, which is where both
- * licenses actually live, so the member isn't left guessing whether a
- * different password would have worked.
+ * because it's the license that's turned away, not the credentials. A
+ * modal says so and hands off to the web app, which is where both licenses
+ * actually live, so the member isn't left guessing whether a different
+ * password would have worked.
  */
-function LoginCard({ blockStyle }: { blockStyle: LoginBlockStyle }) {
+function LoginCard() {
   const [refused, setRefused] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
   const refuse = (event?: React.FormEvent) => {
     event?.preventDefault();
     setRefused(true);
   };
-  // Switching style mid-demo starts the comparison clean rather than
-  // carrying a refusal drawn in the other style.
-  React.useEffect(() => setRefused(false), [blockStyle]);
-
   // A different account is a fresh attempt: clear the form and put the
   // caret back where it starts.
   const tryAnotherAccount = () => {
@@ -132,17 +127,6 @@ function LoginCard({ blockStyle }: { blockStyle: LoginBlockStyle }) {
           aria-label="Password"
           className={cn(FIELD, "mt-6")}
         />
-        {/* Between the fields and Login, where a sign-in error is read —
-            even when it was Google or Microsoft that was clicked. */}
-        {refused && blockStyle === "inline" ? (
-          <div role="alert" className="mt-6 flex items-start gap-3 rounded-md border border-error-border bg-error-secondary px-3 py-3">
-            <IconAlertTriangleFilled size={20} className="mt-0.5 shrink-0 text-error" />
-            <p className="text-paragraph-md text-foreground">
-              Your current license doesn’t include access to the desktop app. Please sign in
-              to JustCall on the web instead.
-            </p>
-          </div>
-        ) : null}
         <button
           type="submit"
           className="mt-6 h-12 rounded-[4px] bg-legacy-login text-paragraph-lg text-foreground outline-none transition-[filter] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-brand/40"
@@ -182,7 +166,7 @@ function LoginCard({ blockStyle }: { blockStyle: LoginBlockStyle }) {
           that gives the same answer, so it isn't offered as an action. A
           click outside or Escape still dismisses, as on any dialog. */}
       <Modal
-        open={refused && blockStyle === "modal"}
+        open={refused}
         onClose={() => setRefused(false)}
         size="sm"
         showCloseButton={false}
@@ -200,18 +184,12 @@ function LoginCard({ blockStyle }: { blockStyle: LoginBlockStyle }) {
 }
 
 /** The window's close button is the way home; a reload works too. */
-export function DesktopAppPrototype({
-  onHome,
-  blockStyle,
-}: {
-  onHome: () => void;
-  blockStyle: LoginBlockStyle;
-}) {
+export function DesktopAppPrototype({ onHome }: { onHome: () => void }) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-secondary-bg">
       <WindowTitleBar title="JustCall" onClose={onHome} />
       <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto px-6 py-10">
-        <LoginCard blockStyle={blockStyle} />
+        <LoginCard />
       </div>
     </div>
   );

@@ -170,6 +170,17 @@
   --color-promo-grid: color-mix(in srgb, var(--color-brand) 3.2%, transparent);
 
   /* ---------------------------------------------------------------- */
+  /* WEB HAND-OFF ILLUSTRATION TOKENS                                  */
+  /* The phone-to-browser drawing on the "continue on the web" refusal. */
+  /* Indigo rather than brand blue for the line work, so the one brand  */
+  /* mark in it — the globe — is what the eye lands on.                 */
+  /* ---------------------------------------------------------------- */
+  --color-handoff-wash: var(--color-indigo-50);
+  --color-handoff-panel: var(--color-indigo-25);
+  --color-handoff-shadow: var(--color-indigo-100);
+  --color-handoff-outline: var(--color-indigo-300);
+
+  /* ---------------------------------------------------------------- */
   /* IN-CALL SURFACE TOKENS                                            */
   /* Dark surfaces used by the dialer and the notes formatting bar.     */
   /* ---------------------------------------------------------------- */

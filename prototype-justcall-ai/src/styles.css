@@ -2143,3 +2143,62 @@ button.call-bar-control[data-help="active"] {
     translate: none;
   }
 }
+
+/* Sales Dialer's full-page refusal sheet. It crosses the whole screen, so
+   it rises at `slow` and drops away at `moderate` — the sidesheet's pair,
+   turned to the vertical. Keyframes rather than a transition because the
+   sheet mounts already open; a transition would have no start to leave. */
+@keyframes phone-sheet-in {
+  from {
+    translate: 0 100%;
+  }
+  to {
+    translate: 0 0;
+  }
+}
+
+@keyframes phone-sheet-out {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 100%;
+  }
+}
+
+@keyframes phone-sheet-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes phone-sheet-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.phone-sheet[data-state="open"] {
+  animation: phone-sheet-in var(--duration-slow) var(--ease-entrance) both;
+}
+
+.phone-sheet[data-state="closed"] {
+  animation: phone-sheet-out var(--duration-moderate) var(--ease-exit) both;
+}
+
+/* Travel becomes a fade, on the same clocks, so the sheet still leaves in
+   step with `usePresence` unmounting it. */
+@media (prefers-reduced-motion: reduce) {
+  .phone-sheet[data-state="open"] {
+    animation-name: phone-sheet-fade-in;
+  }
+  .phone-sheet[data-state="closed"] {
+    animation-name: phone-sheet-fade-out;
+  }
+}
