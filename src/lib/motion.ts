@@ -17,6 +17,7 @@ export const DURATION = {
   base: 150,
   moderate: 200,
   slow: 240,
+  extended: 360,
   emphasis: 600,
   settle: 1600,
 } as const;

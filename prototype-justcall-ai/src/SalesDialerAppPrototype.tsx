@@ -55,8 +55,8 @@ function StatusBar({ time }: { time: string }) {
  * and would land outside the device frame.
  */
 function PhoneSheet({ open, children }: { open: boolean; children: React.ReactNode }) {
-  // Matches `.phone-sheet[data-state="closed"]` in styles.css.
-  const { mounted, state } = usePresence(open, DURATION.moderate);
+  // Matches `.refusal-sheet[data-state="closed"]` in styles.css.
+  const { mounted, state } = usePresence(open, DURATION.slow);
   const sheetRef = React.useRef<HTMLDivElement>(null);
   // Focus lands on the way out, as the DS Modal does on open.
   React.useEffect(() => {
@@ -70,7 +70,7 @@ function PhoneSheet({ open, children }: { open: boolean; children: React.ReactNo
       aria-modal="true"
       aria-labelledby="sales-dialer-web-only-title"
       data-state={state}
-      className="phone-sheet absolute inset-0 z-20 bg-white pt-11"
+      className="refusal-sheet absolute inset-0 z-20 bg-white pt-11"
     >
       {children}
     </div>
