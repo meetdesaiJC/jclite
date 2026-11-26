@@ -140,7 +140,6 @@ function LoginScreen() {
           titleId="sales-dialer-web-only-title"
           ctaClassName="rounded-full bg-sales-dialer-bar text-white hover:bg-sales-dialer-bar/90 focus-visible:ring-2 focus-visible:ring-sales-dialer-bar/40"
           onDifferentAccount={tryAnotherAccount}
-          onClose={() => setRefused(false)}
           layout="page"
         />
       </PhoneSheet>

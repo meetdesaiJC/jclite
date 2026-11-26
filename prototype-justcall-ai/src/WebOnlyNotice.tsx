@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { IconClose, IconExternalLink } from "@/components/Icon";
+import { IconExternalLink } from "@/components/Icon";
 
 /**
  * Where both licenses actually live. The sign-in page rather than the
@@ -75,9 +75,8 @@ export function WebOnlyNotice({
   onDifferentAccount,
   titleId,
   layout = "dialog",
-  onClose,
 }: {
-  /** "desktop app", "Sales Dialer app" — completes "access to the …". */
+  /** "desktop app", "Sales Dialer app" — completes "your license type on the …". */
   appName: string;
   ctaClassName: string;
   onDifferentAccount: () => void;
@@ -89,39 +88,23 @@ export function WebOnlyNotice({
    * column, compact.
    */
   layout?: "dialog" | "page";
-  /**
-   * The cross at the top of a `page`. A full-screen sheet has no scrim to
-   * click away, so it needs its own way back to the login.
-   */
-  onClose?: () => void;
 }) {
   const page = layout === "page";
   return (
     <div
       className={cn(
-        "relative flex flex-col items-center px-8 text-center",
+        "flex flex-col items-center px-8 text-center",
         page ? "h-full justify-center py-12" : "pt-8 pb-6"
       )}
     >
-      {page && onClose ? (
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute top-2 right-3 flex size-10 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/40"
-        >
-          <IconClose size={24} />
-        </button>
-      ) : null}
-
       <WebHandoffIllustration className="h-auto w-52" />
 
       <h2 id={titleId} className="mt-6 text-heading-lg text-foreground">
         Use JustCall on the web
       </h2>
       <p className="mt-3 text-paragraph-md text-muted-foreground">
-        Your current license doesn’t include access to the {appName}. You can continue
-        using JustCall on the web.
+        We don’t support your license type on the {appName}. You can continue using
+        JustCall on the web.
       </p>
 
       <div className="flex w-full flex-col items-center">
