@@ -1,5 +1,8 @@
 import * as React from "react";
 import { IconAlertTriangleFilled } from "@/components/Icon";
+import { DURATION } from "@/lib/motion";
+import { usePresence } from "@/lib/usePresence";
+import { WebOnlyNotice, type LoginBlockStyle } from "./WebOnlyNotice";
 import salesDialerMark from "./assets/dialer-favicon.svg";
 import googleLogo from "./assets/google-logo.svg";
 import microsoftLogo from "./assets/microsoft-logo.svg";
@@ -46,11 +49,52 @@ function StatusBar({ time }: { time: string }) {
  * banner says so and points to the web app, so the member isn't
  * left guessing whether a different password would have worked.
  */
-function LoginScreen() {
+/**
+ * The modal variant, held inside the phone frame. The DS Modal portals to
+ * the page and covers the browser, which on a phone mock would put the
+ * dialog outside the device — so this draws the same scrim and panel, on
+ * the same `.modal-*` motion, scoped to the screen.
+ */
+function PhoneModal({ open, children }: { open: boolean; children: React.ReactNode }) {
+  // Matches `.modal-panel[data-state="closed"]` in base.css.
+  const { mounted, state } = usePresence(open, DURATION.base);
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  // Focus lands on the way out, as the DS Modal does on open.
+  React.useEffect(() => {
+    if (open && mounted) panelRef.current?.querySelector<HTMLElement>("a,button")?.focus();
+  }, [open, mounted]);
+  if (!mounted) return null;
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center p-4">
+      <div aria-hidden data-state={state} className="modal-scrim absolute inset-0 bg-foreground/50" />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sales-dialer-web-only-title"
+        data-state={state}
+        className="modal-panel relative w-full overflow-hidden rounded-[20px] bg-white shadow-600"
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function LoginScreen({ blockStyle }: { blockStyle: LoginBlockStyle }) {
   const [refused, setRefused] = React.useState(false);
+  const formRef = React.useRef<HTMLFormElement>(null);
   const refuse = (event?: React.FormEvent) => {
     event?.preventDefault();
     setRefused(true);
+  };
+  // Switching style mid-demo starts the comparison clean.
+  React.useEffect(() => setRefused(false), [blockStyle]);
+
+  const tryAnotherAccount = () => {
+    setRefused(false);
+    formRef.current?.reset();
+    formRef.current?.querySelector<HTMLInputElement>("input")?.focus();
   };
 
   return (
@@ -63,12 +107,12 @@ function LoginScreen() {
         </div>
       </div>
 
-      <form onSubmit={refuse} className="flex flex-col gap-2">
+      <form ref={formRef} onSubmit={refuse} className="flex flex-col gap-2">
         <input type="email" placeholder="Email" aria-label="Email" className={FIELD} />
         <input type="password" placeholder="Password" aria-label="Password" className={FIELD} />
         {/* Between the fields and Login, where a sign-in error is read —
             even when it was Google or Microsoft that was tapped. */}
-        {refused ? (
+        {refused && blockStyle === "inline" ? (
           <div role="alert" className="mt-3 flex items-start gap-3 rounded-md border border-error-border bg-error-secondary px-3 py-3">
             <IconAlertTriangleFilled size={20} className="mt-0.5 shrink-0 text-error" />
             <p className="text-paragraph-md text-foreground">
@@ -101,17 +145,26 @@ function LoginScreen() {
           Continue with Microsoft
         </button>
       </div>
+
+      <PhoneModal open={refused && blockStyle === "modal"}>
+        <WebOnlyNotice
+          appName="Sales Dialer app"
+          titleId="sales-dialer-web-only-title"
+          ctaClassName="rounded-full bg-sales-dialer-bar text-white hover:bg-sales-dialer-bar/90 focus-visible:ring-2 focus-visible:ring-sales-dialer-bar/40"
+          onDifferentAccount={tryAnotherAccount}
+        />
+      </PhoneModal>
     </div>
   );
 }
 
 /** A reload returns to the launcher; there is no window chrome to close. */
-export function SalesDialerAppPrototype() {
+export function SalesDialerAppPrototype({ blockStyle }: { blockStyle: LoginBlockStyle }) {
   return (
     <div className="flex h-screen items-center justify-center overflow-hidden bg-secondary-bg p-6">
       <div className="relative flex h-[812px] max-h-full w-[375px] shrink-0 flex-col overflow-hidden rounded-[44px] border-[6px] border-foreground bg-muted shadow-600">
         <StatusBar time="18:00" />
-        <LoginScreen />
+        <LoginScreen blockStyle={blockStyle} />
       </div>
     </div>
   );

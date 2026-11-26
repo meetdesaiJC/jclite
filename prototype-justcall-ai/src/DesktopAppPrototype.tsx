@@ -1,6 +1,8 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { IconAlertTriangleFilled } from "@/components/Icon";
+import { Modal } from "@/components/Modal";
+import { WebOnlyNotice, type LoginBlockStyle } from "./WebOnlyNotice";
 import justcallMark from "./assets/justcall-mark.svg";
 import googleLogo from "./assets/google-logo.svg";
 import microsoftLogo from "./assets/microsoft-logo.svg";
@@ -94,11 +96,23 @@ function WindowTitleBar({ title, onClose }: { title: string; onClose: () => void
  * licenses actually live, so the member isn't left guessing whether a
  * different password would have worked.
  */
-function LoginCard() {
+function LoginCard({ blockStyle }: { blockStyle: LoginBlockStyle }) {
   const [refused, setRefused] = React.useState(false);
+  const formRef = React.useRef<HTMLFormElement>(null);
   const refuse = (event?: React.FormEvent) => {
     event?.preventDefault();
     setRefused(true);
+  };
+  // Switching style mid-demo starts the comparison clean rather than
+  // carrying a refusal drawn in the other style.
+  React.useEffect(() => setRefused(false), [blockStyle]);
+
+  // A different account is a fresh attempt: clear the form and put the
+  // caret back where it starts.
+  const tryAnotherAccount = () => {
+    setRefused(false);
+    formRef.current?.reset();
+    formRef.current?.querySelector<HTMLInputElement>("input")?.focus();
   };
 
   return (
@@ -110,7 +124,7 @@ function LoginCard() {
         </span>
       </div>
 
-      <form onSubmit={refuse} className="flex flex-col">
+      <form ref={formRef} onSubmit={refuse} className="flex flex-col">
         <input type="email" placeholder="Business email" aria-label="Business email" className={FIELD} />
         <input
           type="password"
@@ -120,7 +134,7 @@ function LoginCard() {
         />
         {/* Between the fields and Login, where a sign-in error is read —
             even when it was Google or Microsoft that was clicked. */}
-        {refused ? (
+        {refused && blockStyle === "inline" ? (
           <div role="alert" className="mt-6 flex items-start gap-3 rounded-md border border-error-border bg-error-secondary px-3 py-3">
             <IconAlertTriangleFilled size={20} className="mt-0.5 shrink-0 text-error" />
             <p className="text-paragraph-md text-foreground">
@@ -163,17 +177,41 @@ function LoginCard() {
       <p className="mt-4 text-center text-paragraph-md text-info">
         Terms &amp; conditions <span className="text-foreground">•</span> Privacy Policy
       </p>
+
+      {/* No close button — closing only lands the member back on a form
+          that gives the same answer, so it isn't offered as an action. A
+          click outside or Escape still dismisses, as on any dialog. */}
+      <Modal
+        open={refused && blockStyle === "modal"}
+        onClose={() => setRefused(false)}
+        size="sm"
+        showCloseButton={false}
+        bodyClassName="p-0"
+      >
+        <WebOnlyNotice
+          appName="desktop app"
+          titleId="desktop-web-only-title"
+          ctaClassName="rounded-[4px] bg-legacy-login text-foreground transition-[filter] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-brand/40"
+          onDifferentAccount={tryAnotherAccount}
+        />
+      </Modal>
     </div>
   );
 }
 
 /** The window's close button is the way home; a reload works too. */
-export function DesktopAppPrototype({ onHome }: { onHome: () => void }) {
+export function DesktopAppPrototype({
+  onHome,
+  blockStyle,
+}: {
+  onHome: () => void;
+  blockStyle: LoginBlockStyle;
+}) {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-secondary-bg">
       <WindowTitleBar title="JustCall" onClose={onHome} />
       <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto px-6 py-10">
-        <LoginCard />
+        <LoginCard blockStyle={blockStyle} />
       </div>
     </div>
   );

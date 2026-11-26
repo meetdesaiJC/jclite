@@ -2943,6 +2943,51 @@ export function IconEditCircle({ size = 16, ...props }: IconProps) {
   );
 }
 
+export function IconExternalLink({ size = 24, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g transform="scale(0.666667)" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6"/><path d="M11 13l9 -9"/><path d="M15 4h5v5"/></g>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <g transform="scale(0.833333)" stroke="currentColor" strokeWidth="1.44" strokeLinecap="round" strokeLinejoin="round"><path d="M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6"/><path d="M11 13l9 -9"/><path d="M15 4h5v5"/></g>
+          </>
+        );
+      case 24:
+        return (
+          <>
+          <g transform="scale(1)" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6"/><path d="M11 13l9 -9"/><path d="M15 4h5v5"/></g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g transform="scale(1)" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6"/><path d="M11 13l9 -9"/><path d="M15 4h5v5"/></g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
 export function IconEye({ size = 24, ...props }: IconProps) {
   const paths = (() => {
     switch (size as IconSize) {
@@ -6650,6 +6695,51 @@ export function IconWorkingHours({ size = 24, ...props }: IconProps) {
             <path d="M53 15V17C53 17.2652 53.1054 17.5196 53.2929 17.7071C53.4804 17.8946 53.7348 18 54 18H55" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M56 15V21" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </g>
+          </>
+        );
+    }
+  })();
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      {...props}
+    >
+      {paths}
+    </svg>
+  );
+}
+
+export function IconWorld({ size = 24, ...props }: IconProps) {
+  const paths = (() => {
+    switch (size as IconSize) {
+      case 16:
+        return (
+          <>
+          <g transform="scale(0.666667)" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M3.6 9h16.8"/><path d="M3.6 15h16.8"/><path d="M11.5 3a17 17 0 0 0 0 18"/><path d="M12.5 3a17 17 0 0 1 0 18"/></g>
+          </>
+        );
+      case 20:
+        return (
+          <>
+          <g transform="scale(0.833333)" stroke="currentColor" strokeWidth="1.44" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M3.6 9h16.8"/><path d="M3.6 15h16.8"/><path d="M11.5 3a17 17 0 0 0 0 18"/><path d="M12.5 3a17 17 0 0 1 0 18"/></g>
+          </>
+        );
+      case 24:
+        return (
+          <>
+          <g transform="scale(1)" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M3.6 9h16.8"/><path d="M3.6 15h16.8"/><path d="M11.5 3a17 17 0 0 0 0 18"/><path d="M12.5 3a17 17 0 0 1 0 18"/></g>
+          </>
+        );
+      default:
+        return (
+          <>
+            <g transform="scale(1)" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M3.6 9h16.8"/><path d="M3.6 15h16.8"/><path d="M11.5 3a17 17 0 0 0 0 18"/><path d="M12.5 3a17 17 0 0 1 0 18"/></g>
           </>
         );
     }
