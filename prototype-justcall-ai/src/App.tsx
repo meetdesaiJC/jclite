@@ -15,7 +15,6 @@ import { PrototypeLauncher } from "./PrototypeLauncher";
 import { DesktopAppPrototype } from "./DesktopAppPrototype";
 import { MobileAppPrototype } from "./MobileAppPrototype";
 import { SalesDialerAppPrototype } from "./SalesDialerAppPrototype";
-import { type LoginBlockStyle } from "./WebOnlyNotice";
 import { TeamMembersPage } from "./TeamMembersPage";
 import { RolesPage } from "./RolesPage";
 import { BillingPage, BILLING_NAV_ITEMS } from "./BillingPage";
@@ -310,33 +309,13 @@ function readSwitchPosition(key: string): { x: number; y: number } | null {
   }
 }
 
-const LICENSE_OPTIONS: { key: License; label: string }[] = [
-  { key: "lite", label: "Lite" },
-  { key: "view-only", label: "View-only" },
-];
-
-/** The two ways the desktop and Sales Dialer sign-ins can turn a member away. */
-const LOGIN_BLOCK_OPTIONS: { key: LoginBlockStyle; label: string }[] = [
-  { key: "inline", label: "Login error" },
-  { key: "modal", label: "Modal" },
-];
-
-/**
- * Generic over what it switches: the license on most views, the refusal
- * style on the sign-in-only ones. Same control either way, so a reviewer
- * only ever learns one.
- */
-function LicenseSwitch<T extends string = License>({
+function LicenseSwitch({
   value,
   onChange,
-  options = LICENSE_OPTIONS as { key: T; label: string }[],
-  label = "License",
   anchor = "top",
 }: {
-  value: T;
-  onChange: (next: T) => void;
-  options?: { key: T; label: string }[];
-  label?: string;
+  value: License;
+  onChange: (license: License) => void;
   /**
    * Where it starts. The desktop prototype has a menu bar and a title bar up
    * top, so it starts bottom-centre there instead — and remembers its own
@@ -380,10 +359,15 @@ function LicenseSwitch<T extends string = License>({
     window.addEventListener("pointerup", up);
   };
 
+  const options: { key: License; label: string }[] = [
+    { key: "lite", label: "Lite" },
+    { key: "view-only", label: "View-only" },
+  ];
+
   // One thumb that slides between the options, rather than each button
   // painting its own background — that swap is what made the switch blink.
   // The labels differ in width, so the thumb is measured, not a fixed half.
-  const optionRefs = useRef(new Map<T, HTMLButtonElement>());
+  const optionRefs = useRef(new Map<License, HTMLButtonElement>());
   const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
   // No slide on first paint: the thumb should only move between options,
   // never fly in from the panel's edge.
@@ -408,7 +392,7 @@ function LicenseSwitch<T extends string = License>({
       ref={panelRef}
       onPointerDown={startDrag}
       role="radiogroup"
-      aria-label={label}
+      aria-label="License"
       style={position ? { left: position.x, top: position.y } : undefined}
       className={cn(
         "fixed z-50 isolate flex cursor-grab touch-none items-center gap-0.5 rounded-full bg-tooltip-dark-bg p-1 shadow-400 select-none active:cursor-grabbing",
@@ -744,18 +728,6 @@ const DIALER_WINDOW = readDialerWindowParams(window.location.search);
 
 export default function App() {
   const [view, setView] = useState<AppView>(viewFromHash);
-  // Lives here rather than in either prototype so the choice carries from
-  // the desktop app to Sales Dialer — the two are compared as a pair.
-  const [loginBlockStyle, setLoginBlockStyle] = useState<LoginBlockStyle>("inline");
-  const loginBlockSwitch = (
-    <LicenseSwitch
-      anchor="bottom"
-      label="Sign-in refusal"
-      options={LOGIN_BLOCK_OPTIONS}
-      value={loginBlockStyle}
-      onChange={setLoginBlockStyle}
-    />
-  );
 
   useEffect(() => {
     const sync = () => setView(viewFromHash());
@@ -814,15 +786,9 @@ export default function App() {
   }
 
   // No license switch: Lite and View-only meet the same refusal at sign-in,
-  // so there is nothing for it to change. Both hashes still resolve. The
-  // switch here flips how that refusal is drawn instead.
+  // so there is nothing for it to change. Both hashes still resolve.
   if (view === "desktop-lite" || view === "desktop-view-only") {
-    return (
-      <>
-        <DesktopAppPrototype onHome={goHome} blockStyle={loginBlockStyle} />
-        {loginBlockSwitch}
-      </>
-    );
+    return <DesktopAppPrototype onHome={goHome} />;
   }
 
   if (view === "mobile-lite" || view === "mobile-view-only") {
@@ -844,12 +810,7 @@ export default function App() {
   }
 
   if (view === "sales-dialer-lite" || view === "sales-dialer-view-only") {
-    return (
-      <>
-        <SalesDialerAppPrototype blockStyle={loginBlockStyle} />
-        {loginBlockSwitch}
-      </>
-    );
+    return <SalesDialerAppPrototype />;
   }
 
   if (view === "in-call" || view === "v1-in-call") {
