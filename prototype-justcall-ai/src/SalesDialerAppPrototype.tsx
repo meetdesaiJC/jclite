@@ -90,7 +90,9 @@ function LoginScreen() {
     event?.preventDefault();
     setRefused(true);
   };
-  const tryAnotherAccount = () => {
+  // Closing is a fresh attempt: clear the form and put the caret back
+  // where it starts.
+  const backToLogin = () => {
     setRefused(false);
     formRef.current?.reset();
     formRef.current?.querySelector<HTMLInputElement>("input")?.focus();
@@ -139,7 +141,7 @@ function LoginScreen() {
           appName="Sales Dialer app"
           titleId="sales-dialer-web-only-title"
           ctaClassName="rounded-full bg-sales-dialer-bar text-white hover:bg-sales-dialer-bar/90 focus-visible:ring-2 focus-visible:ring-sales-dialer-bar/40"
-          onDifferentAccount={tryAnotherAccount}
+          onClose={backToLogin}
           layout="page"
         />
       </PhoneSheet>

@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { IconExternalLink } from "@/components/Icon";
+import { IconClose, IconExternalLink, IconWorld } from "@/components/Icon";
 
 /**
  * Where both licenses actually live. The sign-in page rather than the
@@ -18,7 +18,9 @@ export const WEB_APP_URL = "https://app.justcall.io/login";
 function WebHandoffIllustration({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 240 184" fill="none" aria-hidden className={className}>
-      <circle cx="132" cy="92" r="82" className="fill-handoff-wash" />
+      {/* Centred on the whole drawing (phone's left edge to the window's
+          shadow), not on the browser, so the wash doesn't pull it off-axis. */}
+      <circle cx="120" cy="92" r="82" className="fill-handoff-wash" />
 
       {/* Browser window, with a flat offset shadow rather than a blur. */}
       <rect x="60" y="30" width="160" height="116" rx="10" className="fill-handoff-shadow" />
@@ -72,14 +74,19 @@ function WebHandoffIllustration({ className }: { className?: string }) {
 export function WebOnlyNotice({
   appName,
   ctaClassName,
-  onDifferentAccount,
+  onClose,
   titleId,
   layout = "dialog",
 }: {
   /** "desktop app", "Sales Dialer app" — completes "your license type on the …". */
   appName: string;
   ctaClassName: string;
-  onDifferentAccount: () => void;
+  /**
+   * The cross in the top corner: back to the login, cleared for a fresh
+   * attempt. It is the one way out other than the web app — a second,
+   * "different account" action said the same thing in more words.
+   */
+  onClose: () => void;
   titleId: string;
   /**
    * `page` fills its container, with the whole column — message and
@@ -93,42 +100,53 @@ export function WebOnlyNotice({
   return (
     <div
       className={cn(
-        "flex flex-col items-center px-8 text-center",
+        "relative flex flex-col items-center px-8 text-center",
         page ? "h-full justify-center py-12" : "pt-8 pb-6"
       )}
     >
-      <WebHandoffIllustration className="h-auto w-52" />
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute top-3 right-3 flex size-10 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/40"
+      >
+        <IconClose size={24} />
+      </button>
+
+      {/* The phone-to-web drawing is a phone's story, so it stays on Sales
+          Dialer. The desktop modal keeps the plain globe — a compact dialog
+          reads better with one quiet mark than with a scene. */}
+      {page ? (
+        <WebHandoffIllustration className="h-auto w-52" />
+      ) : (
+        <span className="flex size-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          {/* The 24 drawing scaled to 32 by CSS: the viewBox stretches it, and
+              there is no 32 drawing to pass as `size`. */}
+          <IconWorld size={24} className="size-8" />
+        </span>
+      )}
 
       <h2 id={titleId} className="mt-6 text-heading-lg text-foreground">
         Use JustCall on the web
       </h2>
-      <p className="mt-3 text-paragraph-md text-muted-foreground">
+      <p className="mt-1 text-paragraph-md text-muted-foreground">
         We don’t support your license type on the {appName}. You can continue using
         JustCall on the web.
       </p>
 
-      <div className="flex w-full flex-col items-center">
-        <a
-          href={WEB_APP_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={cn(
-            "mt-8 flex h-12 w-full items-center justify-center gap-2 text-paragraph-lg outline-none transition-colors",
-            ctaClassName
-          )}
-        >
-          Open web app
-          <IconExternalLink size={16} />
-          <span className="sr-only">(opens in your browser)</span>
-        </a>
-        <button
-          type="button"
-          onClick={onDifferentAccount}
-          className="mt-4 rounded-sm px-2 py-1 text-paragraph-md text-brand outline-none transition-colors hover:text-brand-hover focus-visible:ring-2 focus-visible:ring-brand/40"
-        >
-          Sign in with a different account
-        </button>
-      </div>
+      <a
+        href={WEB_APP_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={cn(
+          "mt-8 flex h-12 w-full items-center justify-center gap-2 text-paragraph-lg outline-none transition-colors",
+          ctaClassName
+        )}
+      >
+        Open web app
+        <IconExternalLink size={16} />
+        <span className="sr-only">(opens in your browser)</span>
+      </a>
     </div>
   );
 }
