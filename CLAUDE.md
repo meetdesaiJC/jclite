@@ -158,6 +158,7 @@ almost none.
 | `duration-base` | 150ms | **Default.** Colour state, indicators, small enters |
 | `duration-moderate` | 200ms | Content swaps, panel-internal movement |
 | `duration-slow` | 240ms | Large travel — sidesheet, drawer |
+| `duration-extended` | 360ms | Screen-crossing travel — a full-screen sheet. Exits at `slow`. |
 | `duration-emphasis` | 600ms | **Not a transition.** A one-shot attention pulse that plays once and is gone — the coaching wash. Never for an enter or an exit. |
 | `--duration-settle` | 1600ms | **Not a transition, and no `duration-*` class.** The same one-shot idea over a longer arc: a card arriving in a live feed holds its highlight ~400ms and releases over ~1200ms, so it stays findable while the agent finishes the sentence they were on. Consume as `var()` from a rule — see the guidance card wash. |
 

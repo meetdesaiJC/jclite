@@ -2144,29 +2144,39 @@ button.call-bar-control[data-help="active"] {
   }
 }
 
-/* Sales Dialer's full-page refusal sheet. It crosses the whole screen, so
-   it rises at `slow` and drops away at `moderate` — the sidesheet's pair,
-   turned to the vertical. Keyframes rather than a transition because the
-   sheet mounts already open; a transition would have no start to leave. */
-@keyframes phone-sheet-in {
+/* Sales Dialer's full-page refusal sheet. Its own name, not `.phone-sheet`:
+   that one is the in-call card's keypad / transfer layer, and redeclaring it
+   here silently gave those panels this screen-sized move.
+
+   It covers the whole screen, so it enters at `extended` and leaves at
+   `slow`. It lifts a quarter of the way while it fades rather than crossing
+   the full height: on a curve that starts at full speed, a whole-screen
+   slide lands as one jolt, while a short lift under a fade reads as the
+   screen settling into place. Keyframes rather than a transition because
+   the sheet mounts already open; a transition would have no start to leave. */
+@keyframes refusal-sheet-in {
   from {
-    translate: 0 100%;
+    opacity: 0;
+    translate: 0 24%;
   }
   to {
+    opacity: 1;
     translate: 0 0;
   }
 }
 
-@keyframes phone-sheet-out {
+@keyframes refusal-sheet-out {
   from {
+    opacity: 1;
     translate: 0 0;
   }
   to {
-    translate: 0 100%;
+    opacity: 0;
+    translate: 0 12%;
   }
 }
 
-@keyframes phone-sheet-fade-in {
+@keyframes refusal-sheet-fade-in {
   from {
     opacity: 0;
   }
@@ -2175,7 +2185,7 @@ button.call-bar-control[data-help="active"] {
   }
 }
 
-@keyframes phone-sheet-fade-out {
+@keyframes refusal-sheet-fade-out {
   from {
     opacity: 1;
   }
@@ -2184,21 +2194,22 @@ button.call-bar-control[data-help="active"] {
   }
 }
 
-.phone-sheet[data-state="open"] {
-  animation: phone-sheet-in var(--duration-slow) var(--ease-entrance) both;
+.refusal-sheet[data-state="open"] {
+  animation: refusal-sheet-in var(--duration-extended) var(--ease-entrance) both;
 }
 
-.phone-sheet[data-state="closed"] {
-  animation: phone-sheet-out var(--duration-moderate) var(--ease-exit) both;
+.refusal-sheet[data-state="closed"] {
+  animation: refusal-sheet-out var(--duration-slow) var(--ease-exit) both;
+  pointer-events: none;
 }
 
 /* Travel becomes a fade, on the same clocks, so the sheet still leaves in
    step with `usePresence` unmounting it. */
 @media (prefers-reduced-motion: reduce) {
-  .phone-sheet[data-state="open"] {
-    animation-name: phone-sheet-fade-in;
+  .refusal-sheet[data-state="open"] {
+    animation-name: refusal-sheet-fade-in;
   }
-  .phone-sheet[data-state="closed"] {
-    animation-name: phone-sheet-fade-out;
+  .refusal-sheet[data-state="closed"] {
+    animation-name: refusal-sheet-fade-out;
   }
 }

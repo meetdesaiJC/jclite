@@ -17,6 +17,7 @@ const SCALE: { name: DurationName; use: string }[] = [
   { name: "base", use: "Default — colour state, indicators, small enters" },
   { name: "moderate", use: "Content swaps, panel-internal movement" },
   { name: "slow", use: "Large travel — sidesheet, drawer" },
+  { name: "extended", use: "Screen-crossing travel — a full-screen sheet" },
   { name: "emphasis", use: "One-shot attention pulse — not a transition" },
   {
     name: "settle",
@@ -48,6 +49,7 @@ const PAIRS = [
   { what: "Dropdown, popover", enter: "base", exit: "fast" },
   { what: "Toast, inline banner", enter: "moderate", exit: "base" },
   { what: "Sidesheet, drawer", enter: "slow", exit: "moderate" },
+  { what: "Full-screen sheet", enter: "extended", exit: "slow" },
 ] as const;
 
 function Ruler({

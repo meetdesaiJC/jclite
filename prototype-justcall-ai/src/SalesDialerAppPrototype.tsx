@@ -55,8 +55,8 @@ function StatusBar({ time }: { time: string }) {
  * and would land outside the device frame.
  */
 function PhoneSheet({ open, children }: { open: boolean; children: React.ReactNode }) {
-  // Matches `.phone-sheet[data-state="closed"]` in styles.css.
-  const { mounted, state } = usePresence(open, DURATION.moderate);
+  // Matches `.refusal-sheet[data-state="closed"]` in styles.css.
+  const { mounted, state } = usePresence(open, DURATION.slow);
   const sheetRef = React.useRef<HTMLDivElement>(null);
   // Focus lands on the way out, as the DS Modal does on open.
   React.useEffect(() => {
@@ -70,7 +70,7 @@ function PhoneSheet({ open, children }: { open: boolean; children: React.ReactNo
       aria-modal="true"
       aria-labelledby="sales-dialer-web-only-title"
       data-state={state}
-      className="phone-sheet absolute inset-0 z-20 bg-white pt-11"
+      className="refusal-sheet absolute inset-0 z-20 bg-white pt-11"
     >
       {children}
     </div>
@@ -90,7 +90,9 @@ function LoginScreen() {
     event?.preventDefault();
     setRefused(true);
   };
-  const tryAnotherAccount = () => {
+  // Closing is a fresh attempt: clear the form and put the caret back
+  // where it starts.
+  const backToLogin = () => {
     setRefused(false);
     formRef.current?.reset();
     formRef.current?.querySelector<HTMLInputElement>("input")?.focus();
@@ -139,8 +141,7 @@ function LoginScreen() {
           appName="Sales Dialer app"
           titleId="sales-dialer-web-only-title"
           ctaClassName="rounded-full bg-sales-dialer-bar text-white hover:bg-sales-dialer-bar/90 focus-visible:ring-2 focus-visible:ring-sales-dialer-bar/40"
-          onDifferentAccount={tryAnotherAccount}
-          onClose={() => setRefused(false)}
+          onClose={backToLogin}
           layout="page"
         />
       </PhoneSheet>

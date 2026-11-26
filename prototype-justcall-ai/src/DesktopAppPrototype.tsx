@@ -102,9 +102,9 @@ function LoginCard() {
     event?.preventDefault();
     setRefused(true);
   };
-  // A different account is a fresh attempt: clear the form and put the
-  // caret back where it starts.
-  const tryAnotherAccount = () => {
+  // Closing is a fresh attempt: clear the form and put the caret back
+  // where it starts.
+  const backToLogin = () => {
     setRefused(false);
     formRef.current?.reset();
     formRef.current?.querySelector<HTMLInputElement>("input")?.focus();
@@ -162,12 +162,11 @@ function LoginCard() {
         Terms &amp; conditions <span className="text-foreground">•</span> Privacy Policy
       </p>
 
-      {/* No close button — closing only lands the member back on a form
-          that gives the same answer, so it isn't offered as an action. A
-          click outside or Escape still dismisses, as on any dialog. */}
+      {/* The notice draws its own cross rather than the DS header row, so
+          the illustration can sit right at the top of the dialog. */}
       <Modal
         open={refused}
-        onClose={() => setRefused(false)}
+        onClose={backToLogin}
         size="sm"
         showCloseButton={false}
         bodyClassName="p-0"
@@ -176,7 +175,7 @@ function LoginCard() {
           appName="desktop app"
           titleId="desktop-web-only-title"
           ctaClassName="rounded-[4px] bg-legacy-login text-foreground transition-[filter] hover:brightness-95 focus-visible:ring-2 focus-visible:ring-brand/40"
-          onDifferentAccount={tryAnotherAccount}
+          onClose={backToLogin}
         />
       </Modal>
     </div>
